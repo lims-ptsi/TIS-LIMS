@@ -342,7 +342,7 @@ function MainLimsContent() {
 
       const dbById = new Map(rows.map((row) => [row.requisitionId, row]));
 
-      const applyRow = <T,>(prev: Record<string, T>, pick: (row: (typeof rows)[number]) => T) => {
+      const applyRow = <T,>(prev: Record<string, T>, pick: (row: NonNullable<typeof rows>[number]) => T) => {
         const next = { ...prev };
         rows.forEach((row) => {
           const localStamp = local.updatedAt[row.requisitionId] || '';

@@ -23,7 +23,7 @@ import type { AuthUser } from '../../types/auth';
 
 interface SubmissionsViewProps {
   requisitions: LabTestRequisition[];
-  onOpenNewRequisition: () => void;
+  onOpenNewRequisition?: () => void;
   onSelectRequisition?: (req: LabTestRequisition) => void;
   onReceiveAndAccession: (
     req: LabTestRequisition,

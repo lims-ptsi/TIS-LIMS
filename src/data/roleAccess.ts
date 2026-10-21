@@ -122,7 +122,7 @@ export function defaultTabForRole(role: UserRoleType | string | undefined): stri
 
 export function canOpenTab(role: UserRoleType | string | undefined, tab: string): boolean {
   if (!isAppRole(role)) return false;
-  if (tab === 'sample-detail') return permissionsForRole(role).canViewSamples;
+  if (tab === 'sample-detail') return permissionsForRole(role).canViewSamples === true;
   if (tabsForRole(role).some((item) => item.id === tab)) return true;
   if (role === 'ADMIN') {
     return [

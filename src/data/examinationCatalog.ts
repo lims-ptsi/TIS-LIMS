@@ -97,7 +97,8 @@ export type AssignedFormType =
   | 'Form 8'
   | 'Form 9'
   | 'Form 10'
-  | 'Send Out';
+  | 'Send Out'
+  | 'Unassigned';
 
 export interface FormOptionMeta {
   id: AssignedFormType;

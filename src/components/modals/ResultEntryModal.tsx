@@ -252,12 +252,12 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
 
       const existing = updatedParams[paramId];
       updatedParams[paramId] = {
-        paramId: paramDef?.id || paramId,
-        paramCode: paramDef?.code || paramId,
-        paramName: paramDef?.name || paramId,
-        unit: paramDef?.unit || '',
-        isCalculated: paramDef?.dataType === 'CALCULATED',
         ...existing,
+        paramId: existing?.paramId || paramDef?.id || paramId,
+        paramCode: existing?.paramCode || paramDef?.code || paramId,
+        paramName: existing?.paramName || paramDef?.name || paramId,
+        unit: existing?.unit || paramDef?.unit || '',
+        isCalculated: existing?.isCalculated ?? paramDef?.dataType === 'CALCULATED',
         value: newValue,
         flag: paramDef ? calculateFlag(paramDef, newValue) : 'NORMAL',
       };
