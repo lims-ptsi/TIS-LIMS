@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { LabTestRequisition, Sample, AuditEntry } from '../types/lims';
 import { ExaminationItem, AssignedFormType } from '../data/examinationCatalog';
+import { splitPatientName } from '../data/patientDirectory';
 
 function examinationToRow(item: ExaminationItem) {
   return {
@@ -50,6 +51,11 @@ function rowToExamination(row: Record<string, any>): ExaminationItem {
   };
 }
 
+function isUuid(val?: string): boolean {
+  if (!val) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val.trim());
+}
+
 export const limsService = {
   // Check if Supabase live sync is enabled
   isLive: isSupabaseConfigured && !!supabase,
@@ -69,16 +75,25 @@ export const limsService = {
       }
 
       // Map Supabase DB columns to frontend LabTestRequisition model
-      return (data || []).map((row) => ({
-        id: row.id,
-        requisitionNumber: row.requisition_number,
-        requestDate: row.request_date || new Date().toISOString().split('T')[0],
-        patientOrSubjectName: row.patient_name,
-        patientId: row.patient_record_id || undefined,
-        firstName: row.first_name || undefined,
-        middleName: row.middle_name || undefined,
-        lastName: row.last_name || undefined,
-        suffix: row.suffix || undefined,
+      return (data || []).map((row) => {
+        const rawFirst = (row.first_name || '').trim();
+        const rawLast = (row.last_name || '').trim();
+        const parsed = (!rawFirst || !rawLast) ? splitPatientName(row.patient_name || '') : null;
+        const firstName = rawFirst || parsed?.firstName || undefined;
+        const middleName = (row.middle_name || '').trim() || parsed?.middleName || undefined;
+        const lastName = rawLast || parsed?.lastName || undefined;
+        const suffix = (row.suffix || '').trim() || parsed?.suffix || undefined;
+
+        return {
+          id: row.id,
+          requisitionNumber: row.requisition_number,
+          requestDate: row.request_date || new Date().toISOString().split('T')[0],
+          patientOrSubjectName: row.patient_name,
+          patientId: row.patient_record_id || undefined,
+          firstName,
+          middleName,
+          lastName,
+          suffix,
         patientDob: row.birthday || '',
         patientAddress: row.address || '',
         caseNo: row.case_no || '',
@@ -100,14 +115,15 @@ export const limsService = {
         clinicalNotes: row.clinical_notes || '',
         status: row.status || 'SUBMITTED',
         tatDeadline: row.tat_deadline || new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-      }));
+      };
+    });
     } catch (err) {
       console.warn('[Supabase] Error connecting to requisitions:', err);
       return null;
     }
   },
 
-  async createRequisition(req: LabTestRequisition): Promise<{ success: boolean; error?: string; isOffline?: boolean }> {
+  async createRequisition(req: LabTestRequisition): Promise<{ success: boolean; error?: string; isOffline?: boolean; createdId?: string }> {
     if (!supabase || !isSupabaseConfigured) {
       return { success: true, isOffline: true };
     }
@@ -150,8 +166,11 @@ export const limsService = {
       ];
       let currentPayload = { ...payload };
       for (let attempt = 0; attempt < optionalColumns.length + 1; attempt += 1) {
-        const { error } = await supabase.from('requisitions').insert([currentPayload]);
-        if (!error) return { success: true };
+        const { data, error } = await supabase
+          .from('requisitions')
+          .insert([currentPayload])
+          .select('id, requisition_number');
+        if (!error) return { success: true, createdId: data?.[0]?.id };
         const missing = optionalColumns.find((column) => error.message.includes(column) && column in currentPayload);
         if (!missing) {
           console.error('[Supabase] createRequisition error:', error.message);
@@ -169,14 +188,81 @@ export const limsService = {
     }
   },
 
-  async updateRequisitionStatus(id: string, status: string): Promise<boolean> {
+  async updateRequisition(req: LabTestRequisition): Promise<{ success: boolean; error?: string; isOffline?: boolean }> {
+    if (!supabase || !isSupabaseConfigured) {
+      return { success: true, isOffline: true };
+    }
+    try {
+      const payload: Record<string, any> = {
+        request_date: req.requestDate,
+        patient_name: req.patientOrSubjectName,
+        patient_record_id: req.patientId || null,
+        first_name: req.firstName || null,
+        middle_name: req.middleName || null,
+        last_name: req.lastName || null,
+        suffix: req.suffix || null,
+        birthday: req.patientDob || null,
+        age: req.patientAge,
+        sex: req.patientGender,
+        civil_status: req.civilStatus,
+        address: req.patientAddress,
+        case_no: req.caseNo,
+        requesting_physician: req.orderingPhysicianOrPI,
+        kind_of_examination: req.kindOfExamination,
+        or_number: req.orNumber,
+        charge_slip_number: req.chargeSlipNumber,
+        organization_client: req.organizationOrClient,
+        priority: req.priority,
+        specimen_types: req.specimenTypes,
+        tube_count: req.tubeCount,
+        patient_category: req.patientCategory || 'OPD',
+        clinical_notes: req.clinicalNotes,
+        status: req.status,
+      };
+      const optionalColumns = [
+        'patient_record_id',
+        'first_name',
+        'middle_name',
+        'last_name',
+        'suffix',
+        'patient_category',
+      ];
+      let currentPayload = { ...payload };
+      for (let attempt = 0; attempt < optionalColumns.length + 1; attempt += 1) {
+        const { error } = await supabase
+          .from('requisitions')
+          .update(currentPayload)
+          .eq('requisition_number', req.requisitionNumber);
+        if (!error) return { success: true };
+        const missing = optionalColumns.find((column) => error.message.includes(column) && column in currentPayload);
+        if (!missing) {
+          console.error('[Supabase] updateRequisition error:', error.message);
+          return { success: false, error: error.message };
+        }
+        const nextPayload = { ...currentPayload };
+        delete nextPayload[missing];
+        currentPayload = nextPayload;
+      }
+      return { success: false, error: 'Could not update the requisition.' };
+    } catch (err: any) {
+      console.error('[Supabase] updateRequisition exception:', err);
+      return { success: false, error: err?.message || 'Database network error' };
+    }
+  },
+
+  async updateRequisitionStatus(id: string, status: string, requisitionNumber?: string): Promise<boolean> {
     if (!supabase || !isSupabaseConfigured) return false;
     try {
-      const { error } = await supabase
-        .from('requisitions')
-        .update({ status })
-        .eq('id', id);
+      let query = supabase.from('requisitions').update({ status });
+      if (requisitionNumber) {
+        query = query.eq('requisition_number', requisitionNumber);
+      } else if (isUuid(id)) {
+        query = query.eq('id', id);
+      } else {
+        query = query.eq('requisition_number', id);
+      }
 
+      const { error } = await query;
       if (error) {
         console.error('[Supabase] updateRequisitionStatus error:', error.message);
         return false;
@@ -188,14 +274,19 @@ export const limsService = {
     }
   },
 
-  async updateRequisitionCategory(id: string, category: string): Promise<boolean> {
+  async updateRequisitionCategory(id: string, category: string, requisitionNumber?: string): Promise<boolean> {
     if (!supabase || !isSupabaseConfigured) return false;
     try {
-      const { error } = await supabase
-        .from('requisitions')
-        .update({ patient_category: category })
-        .eq('id', id);
+      let query = supabase.from('requisitions').update({ patient_category: category });
+      if (requisitionNumber) {
+        query = query.eq('requisition_number', requisitionNumber);
+      } else if (isUuid(id)) {
+        query = query.eq('id', id);
+      } else {
+        query = query.eq('requisition_number', id);
+      }
 
+      const { error } = await query;
       if (error) {
         if (error.message.includes('patient_category') || error.message.includes('schema cache')) {
           console.warn('[Supabase] patient_category column not yet in DB schema. Category stored in frontend state.');
@@ -207,6 +298,30 @@ export const limsService = {
       return true;
     } catch (err) {
       console.error('[Supabase] updateRequisitionCategory exception:', err);
+      return false;
+    }
+  },
+
+  async updateRequisitionOrNumber(id: string, orNumber: string, requisitionNumber?: string): Promise<boolean> {
+    if (!supabase || !isSupabaseConfigured) return false;
+    try {
+      let query = supabase.from('requisitions').update({ or_number: orNumber });
+      if (requisitionNumber) {
+        query = query.eq('requisition_number', requisitionNumber);
+      } else if (isUuid(id)) {
+        query = query.eq('id', id);
+      } else {
+        query = query.eq('requisition_number', id);
+      }
+
+      const { error } = await query;
+      if (error) {
+        console.error('[Supabase] updateRequisitionOrNumber error:', error.message);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('[Supabase] updateRequisitionOrNumber exception:', err);
       return false;
     }
   },

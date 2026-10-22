@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { limsService } from './services/limsService';
+import { canReviseRequest } from './data/requestDesk';
 import { TopNavbar } from './components/layout/TopNavbar';
 import { HomeDashboardView } from './components/views/HomeDashboardView';
 import { SamplesListView } from './components/views/SamplesListView';
@@ -16,6 +16,8 @@ import { InstrumentsView } from './components/views/InstrumentsView';
 import { SubmissionsView } from './components/views/SubmissionsView';
 import { CreateRequisitionView } from './components/views/CreateRequisitionView';
 import { ExaminationsView } from './components/views/ExaminationsView';
+import { PatientRecordsView } from './components/views/PatientRecordsView';
+import { findSampleForRequisition } from './data/patientDirectory';
 import { ResultTemplatesView } from './components/views/ResultTemplatesView';
 import { ResultFormsView } from './components/views/ResultFormsView';
 import { NewSampleModal } from './components/modals/NewSampleModal';
@@ -23,6 +25,9 @@ import { NewRequisitionModal, LabTestRequisition } from './components/modals/New
 import { OrderOfPaymentModal } from './components/modals/OrderOfPaymentModal';
 import { ResultEntryModal, ExamResultGroup } from './components/modals/ResultEntryModal';
 import { CoAReportModal } from './components/modals/CoAReportModal';
+import { RequisitionSlipModal } from './components/modals/RequisitionSlipModal';
+import { ReceiveAccessionModal } from './components/modals/ReceiveAccessionModal';
+import { limsService } from './services/limsService';
 import { LoginPage } from './components/auth/LoginPage';
 import { LockScreenModal } from './components/auth/LockScreenModal';
 import { ToastAlert, ToastMessage } from './components/common/ToastAlert';
@@ -79,28 +84,29 @@ import {
   AuditEntry,
   PatientCategory,
   PriorityLevel,
-  LimsNotification
+  LimsNotification,
+  CustodyRecord
 } from './types/lims';
 import { playNotificationChime, triggerDesktopNotification } from './utils/notificationSound';
 import { hasPermission, permissionDeniedMessage } from './utils/permissions';
 import { canOpenTab, defaultTabForRole, tabsForRole } from './data/roleAccess';
+import { readAppNav, writeAppNav } from './utils/appNavigation';
 
 function MainLimsContent() {
   const { isAuthenticated, user, terminalInfo } = useAuth();
-  const [currentTab, setCurrentTab] = useState<string>('submissions');
-
-  useEffect(() => {
-    if (!user) return;
-    if (!canOpenTab(user.roleType, currentTab)) {
-      setCurrentTab(defaultTabForRole(user.roleType));
-    }
-  }, [user, currentTab]);
+  const [currentTab, setCurrentTab] = useState<string>(() => readAppNav()?.tab || 'home');
   const [selectedSample, setSelectedSample] = useState<Sample | null>(null);
+  const navRestoredRef = useRef(false);
+  const pendingSampleIdRef = useRef<string | null>(null);
+  const [activeBoxId, setActiveBoxId] = useState<string>('BX000026');
+  const [activeBoxWell, setActiveBoxWell] = useState<string | undefined>('A01');
   const [isNewSampleModalOpen, setIsNewSampleModalOpen] = useState(false);
   const [isNewRequisitionModalOpen, setIsNewRequisitionModalOpen] = useState(false);
   const [opdPaymentModalReq, setOpdPaymentModalReq] = useState<LabTestRequisition | null>(null);
   const [detailResultModalReq, setDetailResultModalReq] = useState<LabTestRequisition | null>(null);
   const [detailCoAModalReq, setDetailCoAModalReq] = useState<LabTestRequisition | null>(null);
+  const [slipModalReq, setSlipModalReq] = useState<LabTestRequisition | null>(null);
+  const [receiveModalReq, setReceiveModalReq] = useState<LabTestRequisition | null>(null);
   const [storedResults, setStoredResults] = useState<Record<string, Record<string, ExamResultGroup>>>(
     () => loadStoredTestResults().results
   );
@@ -173,6 +179,50 @@ function MainLimsContent() {
 
   // Core State
   const [samples, setSamples] = useState<Sample[]>(() => loadStoredSamples());
+
+  useEffect(() => {
+    if (!user) {
+      navRestoredRef.current = false;
+      pendingSampleIdRef.current = null;
+      return;
+    }
+    if (!navRestoredRef.current) {
+      navRestoredRef.current = true;
+      const nav = readAppNav();
+      if (
+        nav?.userId === user.id &&
+        nav.tab &&
+        canOpenTab(user.roleType, nav.tab)
+      ) {
+        setCurrentTab(nav.tab);
+        if (nav.tab === 'sample-detail' && nav.sampleId) {
+          pendingSampleIdRef.current = nav.sampleId;
+        }
+      }
+    }
+    if (!canOpenTab(user.roleType, currentTab)) {
+      setCurrentTab(defaultTabForRole(user.roleType));
+    }
+  }, [user, currentTab]);
+
+  useEffect(() => {
+    const pendingId = pendingSampleIdRef.current;
+    if (!pendingId || currentTab !== 'sample-detail') return;
+    const found = samples.find((s) => s.id === pendingId);
+    if (found) {
+      setSelectedSample(found);
+      pendingSampleIdRef.current = null;
+    }
+  }, [samples, currentTab]);
+
+  useEffect(() => {
+    if (!user) return;
+    writeAppNav({
+      userId: user.id,
+      tab: currentTab,
+      sampleId: currentTab === 'sample-detail' ? selectedSample?.id : undefined,
+    });
+  }, [user, currentTab, selectedSample?.id]);
 
   useEffect(() => {
     saveStoredSamples(samples);
@@ -253,14 +303,9 @@ function MainLimsContent() {
         const merged = applyOfficialTariffPrices(remote);
         saveStoredExaminations(merged);
         setExaminations(merged);
-        await limsService.upsertExaminations(merged);
-        if (!cancelled) {
-          addToast({
-            type: 'success',
-            title: 'EXAMINATION TARIFF UPDATED',
-            message: `Applied OPD/PhilHealth/Indigent/Employee/Projects + Corporate HIS tariffs (${merged.length} exams) and synced to Supabase.`,
-            duration: 5500,
-          });
+        const hasChanges = JSON.stringify(remote) !== JSON.stringify(merged);
+        if (hasChanges) {
+          await limsService.upsertExaminations(merged);
         }
         return;
       }
@@ -270,20 +315,8 @@ function MainLimsContent() {
       saveStoredExaminations(local);
       setExaminations(local);
       const seed = await limsService.upsertExaminations(local);
-      if (!cancelled && seed.success) {
-        addToast({
-          type: 'info',
-          title: 'EXAMINATIONS SYNCED TO DATABASE',
-          message: `Seeded ${local.length} examinations with official tariff into Supabase.`,
-          duration: 5000,
-        });
-      } else if (!cancelled && seed.error) {
-        addToast({
-          type: 'warning',
-          title: 'EXAMINATIONS TABLE MISSING?',
-          message: `Could not sync catalog: ${seed.error}. Run supabase_examinations.sql in the SQL Editor.`,
-          duration: 8000,
-        });
+      if (seed.error) {
+        console.warn('[Supabase] Could not seed examination catalog:', seed.error);
       }
     })();
 
@@ -312,6 +345,7 @@ function MainLimsContent() {
 
   // Requisitions / Lab Test Requests State with LocalStorage Persistence
   const [requisitions, setRequisitions] = useState<LabTestRequisition[]>(() => loadStoredRequisitions());
+  const [editingRequest, setEditingRequest] = useState<LabTestRequisition | null>(null);
 
   useEffect(() => {
     saveStoredRequisitions(requisitions);
@@ -321,7 +355,35 @@ function MainLimsContent() {
   useEffect(() => {
     limsService.fetchRequisitions().then((data) => {
       if (data && data.length > 0) {
-        setRequisitions(data);
+        setRequisitions((prev) => {
+          const prevMap = new Map(prev.map((r) => [r.id, r]));
+          const prevByNum = new Map(prev.map((r) => [r.requisitionNumber, r]));
+
+          const merged = data.map((remote) => {
+            const local = prevMap.get(remote.id) || prevByNum.get(remote.requisitionNumber);
+            if (local) {
+              const localOr = (local.orNumber || '').trim();
+              const hasLocalOr = localOr.length > 0 && localOr.toUpperCase() !== 'N/A';
+              const remoteOr = (remote.orNumber || '').trim();
+              const hasRemoteOr = remoteOr.length > 0 && remoteOr.toUpperCase() !== 'N/A';
+
+              return {
+                ...remote,
+                patientCategory: remote.patientCategory || local.patientCategory || 'OPD',
+                orNumber: hasLocalOr && !hasRemoteOr ? local.orNumber : (hasRemoteOr ? remote.orNumber : (local.orNumber || remote.orNumber)),
+                status: (local.status !== 'SUBMITTED' && remote.status === 'SUBMITTED') ? local.status : remote.status,
+              };
+            }
+            return remote;
+          });
+
+          // Also retain any local-only requisitions not present in remote
+          const remoteIds = new Set(data.map((r) => r.id));
+          const remoteNums = new Set(data.map((r) => r.requisitionNumber));
+          const localOnly = prev.filter((r) => !remoteIds.has(r.id) && !remoteNums.has(r.requisitionNumber));
+
+          return [...localOnly, ...merged];
+        });
       }
     });
   }, []);
@@ -412,10 +474,17 @@ function MainLimsContent() {
       const res = await limsService.createRequisition(newReq);
 
       if (res.success) {
+        if (res.createdId) {
+          setRequisitions((prev) =>
+            prev.map((r) => (r.requisitionNumber === newReq.requisitionNumber ? { ...r, id: res.createdId! } : r))
+          );
+        }
         addToast({
           type: 'success',
           title: 'SUCCESSFULLY SUBMITTED',
-          message: `Laboratory Test Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.caseNo}) has been successfully saved.`,
+          message: newReq.patientCategory === 'OPD'
+            ? `Laboratory Test Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.caseNo}) is saved. Send the patient to the cashier.`
+            : `Laboratory Test Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.caseNo}) is saved. Send the patient to the laboratory.`,
           duration: 5000,
         });
       } else {
@@ -431,13 +500,13 @@ function MainLimsContent() {
       const examCount = (newReq.kindOfExamination || newReq.selectedTestNames || []).length;
       addNotification({
         type: 'NEW_REQUEST',
-        title: 'NEW LAB REQUEST SUBMITTED',
-        message: `Requisition ${newReq.requisitionNumber} created for ${newReq.patientOrSubjectName} (${newReq.caseNo || 'No Case#'}) with ${examCount} test${examCount > 1 ? 's' : ''} requested.`,
+        title: 'New Lab Request Submitted',
+        message: `Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} with ${examCount} test${examCount > 1 ? 's' : ''} requested.`,
         priority: newReq.priority,
         reqId: newReq.id,
         caseNo: newReq.caseNo,
         patientName: newReq.patientOrSubjectName,
-        targetTab: 'submissions',
+        targetTab: newReq.patientCategory === 'OPD' ? 'payments' : 'submissions',
       });
 
       // If patient is OPD, automatically generate and open the Order of Payment / Partial Receipt Modal
@@ -445,7 +514,7 @@ function MainLimsContent() {
         setOpdPaymentModalReq(newReq);
       }
 
-      setCurrentTab('submissions');
+      setCurrentTab(canOpenTab(user.roleType, 'submissions') ? 'submissions' : 'home');
     } catch (err: any) {
       addToast({
         type: 'error',
@@ -457,14 +526,69 @@ function MainLimsContent() {
     }
   };
 
+  const handleUpdateRequisition = async (updated: LabTestRequisition) => {
+    const previous = requisitions.find((item) => item.id === updated.id);
+    if (previous && !canReviseRequest(previous)) {
+      const receipt = (previous.orNumber || '').trim();
+      const cashierTookIt = (!previous.patientCategory || previous.patientCategory === 'OPD') && receipt.length > 0 && receipt.toUpperCase() !== 'N/A';
+      addToast({
+        type: 'error',
+        title: cashierTookIt ? 'RECEIPT ALREADY ASSIGNED' : 'REQUEST ALREADY RECEIVED',
+        message: cashierTookIt
+          ? 'The cashier already assigned the official receipt, so this request was not changed.'
+          : 'The laboratory already has this request, so it was not changed.',
+        duration: 5000,
+      });
+      setEditingRequest(null);
+      setCurrentTab('home');
+      return;
+    }
+
+    try {
+      setRequisitions((prev) => prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
+      handleAppendAuditLog({
+        tableName: 'requisitions',
+        recordId: updated.id,
+        action: 'UPDATE',
+        user: `${user.name} (${user.role})`,
+        userRole: user.role,
+        ipAddress: '10.0.14.88',
+        reasonForChange: `Corrected requisition ${updated.requisitionNumber} for ${updated.patientOrSubjectName} before the next desk took it`,
+      });
+      const res = await limsService.updateRequisition(updated);
+      addToast({
+        type: res.success ? 'success' : 'warning',
+        title: res.success ? 'REQUEST UPDATED' : 'SAVED LOCALLY (DATABASE SYNC WARNING)',
+        message: res.success
+          ? updated.patientCategory === 'OPD'
+            ? `${updated.patientOrSubjectName} (${updated.caseNo}) was updated. The cashier still has this request.`
+            : `${updated.patientOrSubjectName} (${updated.caseNo}) was updated. The laboratory still has not received it.`
+          : `The correction is saved in this browser. Database sync returned: ${res.error || 'Check the network connection'}.`,
+        duration: 5000,
+      });
+      setEditingRequest(null);
+      setCurrentTab('home');
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        title: 'UPDATE ERROR',
+        message: err?.message || 'Could not save the correction.',
+        duration: 6000,
+      });
+      throw err;
+    }
+  };
+
   // Handler: Update Patient Category directly
   const handleUpdateRequisitionCategory = async (reqId: string, category: PatientCategory) => {
+    const foundReq = requisitions.find((r) => r.id === reqId || r.requisitionNumber === reqId);
+    const targetReqNum = foundReq?.requisitionNumber;
+
     // 1. Update requisition in state
     setRequisitions((prev) =>
-      prev.map((r) => (r.id === reqId ? { ...r, patientCategory: category } : r))
+      prev.map((r) => (r.id === reqId || (targetReqNum && r.requisitionNumber === targetReqNum) ? { ...r, patientCategory: category } : r))
     );
 
-    const foundReq = requisitions.find((r) => r.id === reqId);
     const patientName = foundReq ? foundReq.patientOrSubjectName : 'Patient';
     const caseRef = foundReq?.caseNo || foundReq?.externalRef;
 
@@ -476,7 +600,7 @@ function MainLimsContent() {
     }
 
     // 3. Sync to Supabase
-    limsService.updateRequisitionCategory(reqId, category);
+    limsService.updateRequisitionCategory(reqId, category, targetReqNum);
     if (caseRef) {
       limsService.updateSampleCategory(caseRef, category);
     }
@@ -491,7 +615,7 @@ function MainLimsContent() {
   };
 
   // Handler: Settle OPD Cashier Payment & Assign Official Receipt (OR#)
-  const handleSettlePayment = (reqId: string, orNumber: string) => {
+  const handleSettlePayment = (reqId: string, orNumber: string, reqNumber?: string) => {
     if (!hasPermission(user, 'canAssignOrNumber')) {
       addToast({
         type: 'error',
@@ -501,17 +625,29 @@ function MainLimsContent() {
       });
       return;
     }
+
+    const foundReq = requisitions.find(
+      (r) => r.id === reqId || (reqNumber && r.requisitionNumber === reqNumber) || r.requisitionNumber === reqId
+    );
+    const targetReqNum = reqNumber || foundReq?.requisitionNumber;
+
     // 1. Update requisitions state
     setRequisitions((prev) =>
-      prev.map((r) => (r.id === reqId ? { ...r, orNumber } : r))
+      prev.map((r) =>
+        r.id === reqId || (targetReqNum && r.requisitionNumber === targetReqNum)
+          ? { ...r, orNumber }
+          : r
+      )
     );
 
+    // Sync OR# update to Supabase
+    limsService.updateRequisitionOrNumber(reqId, orNumber, targetReqNum);
+
     // 2. Update active modal if open
-    if (opdPaymentModalReq && opdPaymentModalReq.id === reqId) {
+    if (opdPaymentModalReq && (opdPaymentModalReq.id === reqId || (targetReqNum && opdPaymentModalReq.requisitionNumber === targetReqNum))) {
       setOpdPaymentModalReq((prev) => (prev ? { ...prev, orNumber } : null));
     }
 
-    const foundReq = requisitions.find((r) => r.id === reqId);
     const patientName = foundReq ? foundReq.patientOrSubjectName : 'Patient';
 
     // 3. Log Audit Trail
@@ -538,10 +674,11 @@ function MainLimsContent() {
 
     addNotification({
       type: 'PAYMENT_SETTLED',
-      title: 'CASHIER PAYMENT RECORDED (OR#)',
+      title: 'Cashier Payment Recorded (OR#)',
       message: `Official Receipt ${orNumber} recorded for ${patientName}. Status updated to Settled.`,
       priority: 'ROUTINE',
       reqId: reqId,
+      caseNo: targetReqNum,
       patientName: patientName,
       targetTab: 'submissions',
     });
@@ -693,7 +830,7 @@ function MainLimsContent() {
         ? `Validated official laboratory diagnostic results & released CoA for ${patientName} (${foundReq?.requisitionNumber}) with 21 CFR Part 11 Electronic Dual-Authentication`
         : `Saved in-testing parameter draft for ${patientName} (${foundReq?.requisitionNumber})`,
     });
-    limsService.updateRequisitionStatus(reqId, newStatus);
+    limsService.updateRequisitionStatus(reqId, newStatus, foundReq?.requisitionNumber);
 
     // 6. User Alert Notification & Audio Chime
     addToast({
@@ -708,8 +845,8 @@ function MainLimsContent() {
     if (isFinalize) {
       addNotification({
         type: 'RESULTS_READY',
-        title: 'ANALYTICAL RESULTS COMPLETED (CoA RELEASE)',
-        message: `Validated test results & released official Certificate of Analysis for ${patientName} (${caseRef || reqId}).`,
+        title: 'Analytical Results Completed (CoA Release)',
+        message: `Validated test results & released official Certificate of Analysis for ${patientName}.`,
         priority: 'ROUTINE',
         reqId: reqId,
         caseNo: caseRef,
@@ -1037,9 +1174,12 @@ function MainLimsContent() {
       matrix: string;
       tubeCount: number;
       priority: PriorityLevel;
-      storageFacility: string;
-      storageRoom: string;
-      storageTemp: string;
+      sampleName?: string;
+      boxId?: string;
+      boxPosition?: string;
+      storageFacility?: string;
+      storageRoom?: string;
+      storageTemp?: string;
       notes: string;
       orNumber?: string;
     }
@@ -1061,7 +1201,7 @@ function MainLimsContent() {
     // If requisition is ALREADY received, update category without duplicating sample
     if (req.status === 'RECEIVED') {
       setRequisitions((prev) =>
-        prev.map((r) => (r.id === req.id ? { ...r, patientCategory: category } : r))
+        prev.map((r) => (r.id === req.id || r.requisitionNumber === req.requisitionNumber ? { ...r, patientCategory: category } : r))
       );
 
       if (caseRef) {
@@ -1071,7 +1211,7 @@ function MainLimsContent() {
         limsService.updateSampleCategory(caseRef, category);
       }
 
-      limsService.updateRequisitionCategory(req.id, category);
+      limsService.updateRequisitionCategory(req.id, category, req.requisitionNumber);
 
       addToast({
         type: 'success',
@@ -1091,6 +1231,7 @@ function MainLimsContent() {
       id: `smp-${Date.now()}`,
       barcode,
       externalId: req.caseNo || req.externalRef,
+      sampleName: accessionData?.sampleName || `${(req.patientOrSubjectName || 'SAMPLE').split(' ')[0]}_${req.caseNo || barcode}`,
       sampleType: sampleType,
       matrix: accessionData?.matrix || req.specimenTypes?.[0] || 'K2-EDTA Anticoagulated Whole Blood',
       patientOrSourceName: `${req.patientOrSubjectName} (${category})`,
@@ -1105,8 +1246,8 @@ function MainLimsContent() {
         room: accessionData?.storageRoom || 'Rm 102 - Cold Vault',
         unit: 'Main Freezer',
         rack: 'RK000001',
-        box: 'BX000026',
-        well: `A0${Math.floor(1 + Math.random() * 8)}`,
+        box: accessionData?.boxId || 'BX000026',
+        well: accessionData?.boxPosition || 'A01',
         temperature: accessionData?.storageTemp || '+4°C',
       },
       preservationStatus: 'Cold Chain Validated & Inspected',
@@ -1133,12 +1274,12 @@ function MainLimsContent() {
 
     // Sync to Supabase
     limsService.createSample(newSample);
-    limsService.updateRequisitionStatus(req.id, 'RECEIVED');
-    limsService.updateRequisitionCategory(req.id, category);
+    limsService.updateRequisitionStatus(req.id, 'RECEIVED', req.requisitionNumber);
+    limsService.updateRequisitionCategory(req.id, category, req.requisitionNumber);
 
     // Update Requisition Status to RECEIVED with Patient Category and OR#
     setRequisitions((prev) =>
-      prev.map((r) => (r.id === req.id ? { ...r, status: 'RECEIVED', patientCategory: category, orNumber: effectiveOr || r.orNumber } : r))
+      prev.map((r) => (r.id === req.id || r.requisitionNumber === req.requisitionNumber ? { ...r, status: 'RECEIVED', patientCategory: category, orNumber: effectiveOr || r.orNumber } : r))
     );
 
     // Create Test Orders
@@ -1173,8 +1314,8 @@ function MainLimsContent() {
 
     addNotification({
       type: 'ACCESSIONED',
-      title: 'SPECIMEN ACCESSIONED & BARCODED',
-      message: `Specimen for ${req.patientOrSubjectName} received as [${category}]. Barcode ${barcode} assigned to Cold Vault (${accessionData?.storageTemp || '+4°C'}).`,
+      title: 'Specimen Accessioned & Barcoded',
+      message: `Specimen for ${req.patientOrSubjectName} received as [${category}]. Barcode ${barcode} assigned.`,
       priority: accessionData?.priority || req.priority || 'ROUTINE',
       reqId: req.id,
       caseNo: req.caseNo || req.externalRef,
@@ -1189,6 +1330,136 @@ function MainLimsContent() {
     setSamples((prev) => [newSample, ...prev]);
     setSelectedSample(newSample);
     setCurrentTab('sample-detail');
+  };
+
+  const handleUpdateSample = (updatedSample: Sample) => {
+    setSamples((prev) =>
+      prev.map((s) => (s.id === updatedSample.id ? updatedSample : s))
+    );
+    if (selectedSample && selectedSample.id === updatedSample.id) {
+      setSelectedSample(updatedSample);
+    }
+    handleAppendAuditLog({
+      tableName: 'samples',
+      recordId: updatedSample.barcode || updatedSample.id,
+      action: 'UPDATE',
+      user: `${user.name} (${user.role})`,
+      userRole: user.role,
+      ipAddress: '10.0.14.88',
+      reasonForChange: `Updated storage location for sample ${updatedSample.barcode}: Sample Name "${updatedSample.sampleName}", Box ${updatedSample.storageLocation?.box}, Well ${updatedSample.storageLocation?.well}`,
+    });
+    addToast({
+      type: 'success',
+      title: 'SAMPLE LOCATION UPDATED',
+      message: `Sample "${updatedSample.sampleName || updatedSample.barcode}" assigned to Box ${updatedSample.storageLocation?.box}, Position ${updatedSample.storageLocation?.well}.`,
+      duration: 4000,
+    });
+  };
+
+  const handleFreezeSamples = (selectedIds: string[]) => {
+    if (!selectedIds.length) return;
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    setSamples((prev) => {
+      const updated = prev.map((s) => {
+        if (!selectedIds.includes(s.id)) return s;
+        const newCoc: CustodyRecord = {
+          id: `coc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          timestamp: now,
+          fromUser: user.name,
+          toUser: 'Cryo-Vault Ultra-Low -80°C',
+          action: 'Specimen Freeze Cycle (-80°C Transfer)',
+          reason: 'Deep Vault Archiving & Long-Term Preservation',
+          signatureHash: computeAuditHash('FREEZE', `${s.barcode}|${now}|${user.name}`),
+          temperatureAtTransfer: '-80°C',
+        };
+        return {
+          ...s,
+          preservationStatus: 'Cryo-Preserved (-80°C Deep Vault)',
+          storageLocation: {
+            ...s.storageLocation,
+            temperature: '-80°C',
+            unit: 'Cryo-Vault Ultra-Low -80°C',
+          },
+          chainOfCustody: [...(s.chainOfCustody || []), newCoc],
+        };
+      });
+      saveStoredSamples(updated);
+      return updated;
+    });
+
+    selectedIds.forEach((id) => {
+      const target = samples.find((s) => s.id === id);
+      handleAppendAuditLog({
+        tableName: 'samples',
+        recordId: target?.barcode || id,
+        action: 'UPDATE',
+        user: `${user.name} (${user.role})`,
+        userRole: user.role,
+        ipAddress: '10.0.14.88',
+        reasonForChange: `Cryo-Freeze Cycle: Specimen ${target?.barcode} placed into -80°C Deep Vault preservation.`,
+      });
+    });
+
+    addToast({
+      type: 'success',
+      title: 'SAMPLES FROZEN',
+      message: `Successfully transferred ${selectedIds.length} specimen(s) into -80°C Cryo-Vault storage.`,
+      duration: 4500,
+    });
+  };
+
+  const handleThawSamples = (selectedIds: string[]) => {
+    if (!selectedIds.length) return;
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    setSamples((prev) => {
+      const updated = prev.map((s) => {
+        if (!selectedIds.includes(s.id)) return s;
+        const newCoc: CustodyRecord = {
+          id: `coc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          timestamp: now,
+          fromUser: user.name,
+          toUser: 'Testing Benchtop / Cold Storage',
+          action: 'Controlled Thaw Cycle Initiated',
+          reason: 'Pre-Analytical Testing Preparation (Water Bath Thaw)',
+          signatureHash: computeAuditHash('THAW', `${s.barcode}|${now}|${user.name}`),
+          temperatureAtTransfer: '+4°C',
+        };
+        return {
+          ...s,
+          preservationStatus: 'Thawed (Controlled Water Bath Cycle)',
+          storageLocation: {
+            ...s.storageLocation,
+            temperature: '+4°C',
+            unit: 'Testing Benchtop / Cold Storage',
+          },
+          chainOfCustody: [...(s.chainOfCustody || []), newCoc],
+        };
+      });
+      saveStoredSamples(updated);
+      return updated;
+    });
+
+    selectedIds.forEach((id) => {
+      const target = samples.find((s) => s.id === id);
+      handleAppendAuditLog({
+        tableName: 'samples',
+        recordId: target?.barcode || id,
+        action: 'UPDATE',
+        user: `${user.name} (${user.role})`,
+        userRole: user.role,
+        ipAddress: '10.0.14.88',
+        reasonForChange: `Controlled Thaw: Specimen ${target?.barcode} thawed to +4°C for testing.`,
+      });
+    });
+
+    addToast({
+      type: 'info',
+      title: 'THAW CYCLE STARTED',
+      message: `Initiated controlled water-bath thaw cycle (+4°C) for ${selectedIds.length} specimen(s).`,
+      duration: 4500,
+    });
   };
 
   const handleDepleteReagent = (reagentId: string, volumeUsedMl: number) => {
@@ -1226,6 +1497,11 @@ function MainLimsContent() {
         onOpenNewModal={() => {
           if (hasPermission(user, 'canCreateRequest')) setIsNewRequisitionModalOpen(true);
         }}
+        instruments={INITIAL_INSTRUMENTS}
+        samples={samples}
+        onOpenInstruments={
+          canOpenTab(user.roleType, 'instruments') ? () => setCurrentTab('instruments') : undefined
+        }
         globalSearch={globalSearch}
         onGlobalSearchChange={setGlobalSearch}
         notifications={notifications}
@@ -1234,9 +1510,7 @@ function MainLimsContent() {
         onClearAllNotifications={handleClearAllNotifications}
         onDeleteNotification={handleDeleteNotification}
         onSelectNotification={(notif) => {
-          if (notif.targetTab === 'submissions' && user.roleType === 'CASHIER') {
-            setCurrentTab('payments');
-          } else if (notif.targetTab && canOpenTab(user.roleType, notif.targetTab)) {
+          if (notif.targetTab && canOpenTab(user.roleType, notif.targetTab)) {
             setCurrentTab(notif.targetTab);
           }
           if (notif.caseNo) {
@@ -1251,17 +1525,21 @@ function MainLimsContent() {
       />
 
       {/* 2. Main Page View Container */}
-      <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
+      <main className={`flex-1 p-2 lg:p-3 overflow-y-auto ${
+        (detailCoAModalReq || slipModalReq || opdPaymentModalReq || detailResultModalReq || isNewSampleModalOpen || isNewRequisitionModalOpen || receiveModalReq)
+          ? 'print:hidden'
+          : ''
+      }`}>
         {/* Home Overview */}
         {currentTab === 'home' && (
           <HomeDashboardView
-            samples={samples}
-            testOrders={testOrders}
-            instruments={INITIAL_INSTRUMENTS}
-            onNavigate={(tab) => setCurrentTab(tab)}
-            onSelectSample={(sample) => {
-              setSelectedSample(sample);
-              setCurrentTab('sample-detail');
+            requisitions={requisitions}
+            onNavigate={(tab) => {
+              if (tab === 'create-request') setEditingRequest(null);
+              if (canOpenTab(user.roleType, tab)) setCurrentTab(tab);
+            }}
+            onOpenRequest={(req) => {
+              setSlipModalReq(req);
             }}
           />
         )}
@@ -1271,11 +1549,13 @@ function MainLimsContent() {
           <CreateRequisitionView
             testDefinitions={testDefinitions}
             examinationCatalog={examinations}
-            onSubmitRequisition={handleAddRequisition}
+            onSubmitRequisition={editingRequest ? handleUpdateRequisition : handleAddRequisition}
             priorRequisitions={requisitions}
             allowQueueLink={canOpenTab(user.roleType, 'submissions')}
+            editingRequest={editingRequest}
             onCancel={() => {
-              if (canOpenTab(user.roleType, 'submissions')) setCurrentTab('submissions');
+              setEditingRequest(null);
+              setCurrentTab('home');
             }}
           />
         )}
@@ -1289,6 +1569,16 @@ function MainLimsContent() {
               hasPermission(user, 'canCreateRequest') ? () => setCurrentTab('create-request') : undefined
             }
             onSelectRequisition={(req) => {
+              // If requisition has not yet been received by lab, lock sample details
+              if (req.status === 'SUBMITTED') {
+                if (hasPermission(user, 'canAccessionSamples')) {
+                  setReceiveModalReq(req);
+                } else {
+                  setSlipModalReq(req);
+                }
+                return;
+              }
+
               // Find matching sample or synthesize sample from requisition
               const reqCase = (req.caseNo || '').trim().toLowerCase();
               const reqNum = (req.requisitionNumber || '').trim().toLowerCase();
@@ -1427,6 +1717,21 @@ function MainLimsContent() {
         )}
 
         {/* Samples List View (Screenshot 2: Today's Samples) */}
+        {currentTab === 'patient-records' && (
+          <PatientRecordsView
+            requisitions={requisitions}
+            samples={samples}
+            onOpenSpecimen={(sample, req) => {
+              const resolved = samples.find((s) => s.id === sample.id) || findSampleForRequisition(req, samples);
+              if (resolved) {
+                setSelectedSample(resolved);
+                setCurrentTab('sample-detail');
+              }
+            }}
+            onPrintResults={(req) => setDetailCoAModalReq(req)}
+          />
+        )}
+
         {currentTab === 'samples' && (
           <SamplesListView
             samples={samples}
@@ -1434,6 +1739,7 @@ function MainLimsContent() {
               setSelectedSample(sample);
               setCurrentTab('sample-detail');
             }}
+            onUpdateSample={handleUpdateSample}
             onOpenNewModal={() => setIsNewSampleModalOpen(true)}
             onPrintLabels={() => {
               setCurrentTab('sample-detail');
@@ -1444,22 +1750,8 @@ function MainLimsContent() {
                 duration: 3500,
               });
             }}
-            onFreezeSamples={() => {
-              addToast({
-                type: 'success',
-                title: 'SAMPLES FROZEN',
-                message: 'Moved selected samples into -80°C Cryo-Freezer vault.',
-                duration: 4000,
-              });
-            }}
-            onThawSamples={() => {
-              addToast({
-                type: 'info',
-                title: 'THAW CYCLE STARTED',
-                message: 'Initiated controlled water-bath thaw cycle for testing.',
-                duration: 4000,
-              });
-            }}
+            onFreezeSamples={handleFreezeSamples}
+            onThawSamples={handleThawSamples}
             onImportSamples={() => {
               addToast({
                 type: 'info',
@@ -1467,6 +1759,11 @@ function MainLimsContent() {
                 message: 'CSV/Excel sample manifest import is not enabled in this build.',
                 duration: 4000,
               });
+            }}
+            onNavigateToBox={(boxId, well) => {
+              setActiveBoxId(boxId);
+              if (well) setActiveBoxWell(well);
+              setCurrentTab('boxes');
             }}
           />
         )}
@@ -1504,12 +1801,21 @@ function MainLimsContent() {
                     : undefined
                 }
                 onBack={() => setCurrentTab('submissions')}
+                onReceiveSpecimen={(req) => setReceiveModalReq(req)}
+                onViewSlip={(req) => setSlipModalReq(req)}
+                canAccession={hasPermission(user, 'canAccessionSamples')}
+                onEditSample={handleUpdateSample}
                 onDeleteSample={(id) => {
                   setSamples((prev) => prev.filter((s) => s.id !== id));
                   setCurrentTab('samples');
                 }}
                 onSelectProtocol={() => setCurrentTab('protocols')}
-                onNavigateToBox={() => setCurrentTab('boxes')}
+                onNavigateToBox={(boxId, well) => {
+                  setActiveBoxId(boxId);
+                  if (well) setActiveBoxWell(well);
+                  setCurrentTab('boxes');
+                }}
+                allSamples={samples}
                 onNavigateToSample={(id) => {
                   const found = samples.find((s) => s.id === id);
                   if (found) setSelectedSample(found);
@@ -1593,10 +1899,13 @@ function MainLimsContent() {
         {currentTab === 'boxes' && (
           <BoxesView
             samples={samples}
+            initialBoxId={activeBoxId}
+            initialWell={activeBoxWell}
             onSelectSample={(sample) => {
               setSelectedSample(sample);
               setCurrentTab('sample-detail');
             }}
+            onBackToSamples={() => setCurrentTab('samples')}
           />
         )}
 
@@ -1717,6 +2026,32 @@ function MainLimsContent() {
             ? lookupStoredRecord(storedMedTechInfo, detailCoAModalReq.id, detailCoAModalReq.requisitionNumber)
             : undefined
         }
+      />
+
+      {/* Official Requisition Slip Modal */}
+      <RequisitionSlipModal
+        isOpen={Boolean(slipModalReq)}
+        onClose={() => setSlipModalReq(null)}
+        requisition={slipModalReq}
+        canEdit={hasPermission(user, 'canCreateRequest')}
+        onEditRequisition={(req) => {
+          setSlipModalReq(null);
+          setEditingRequest(req);
+          setCurrentTab('create-request');
+        }}
+      />
+
+      {/* Receive & Specimen Accessioning Modal */}
+      <ReceiveAccessionModal
+        isOpen={Boolean(receiveModalReq)}
+        onClose={() => setReceiveModalReq(null)}
+        requisition={receiveModalReq}
+        onConfirmAccession={(req, data) => {
+          handleReceiveAndAccession(req, data);
+          setReceiveModalReq(null);
+        }}
+        currentUserName={user?.name || 'Dr. Katherine Zhang, MD'}
+        existingSamples={samples}
       />
 
       {/* 6. Screen Lock / Workstation Security Modal */}

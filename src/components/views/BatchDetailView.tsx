@@ -45,7 +45,7 @@ export const BatchDetailView: React.FC<BatchDetailViewProps> = ({
   ];
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-12">
+    <div className="lims-page-shell">
       {/* 1. Lifecycle Chevron Bar */}
       <LifecycleChevronBar
         currentStage="Quality Control Testing Complete"

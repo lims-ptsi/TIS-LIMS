@@ -10,12 +10,12 @@ export const APP_ROLES: {
   {
     id: 'STAFF',
     label: 'Staff',
-    description: 'Information desk. Create a lab test request and nothing else.',
+    description: 'Information desk. Create a lab test request, and correct it before the cashier or the laboratory takes it.',
   },
   {
     id: 'CASHIER',
     label: 'Cashier',
-    description: 'Payment desk. See requests waiting for payment and assign the official receipt number.',
+    description: 'Payment desk for OPD. Assign the official receipt. Other categories go to the laboratory.',
   },
   {
     id: 'LAB_STAFF',
@@ -95,11 +95,12 @@ export interface NavTab {
 }
 
 const NAV: { id: string; label: string; roles: AppRole[] }[] = [
-  { id: 'home', label: 'Home', roles: ['LAB_STAFF', 'ADMIN'] },
+  { id: 'home', label: 'Home', roles: ['STAFF', 'CASHIER', 'LAB_STAFF', 'ADMIN'] },
   { id: 'create-request', label: 'Create Lab Test Request', roles: ['STAFF', 'LAB_STAFF', 'ADMIN'] },
   { id: 'submissions', label: 'Submissions', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'payments', label: 'Payments', roles: ['CASHIER', 'ADMIN'] },
   { id: 'samples', label: 'Samples', roles: ['LAB_STAFF', 'ADMIN'] },
+  { id: 'patient-records', label: 'Patients', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'result-forms', label: 'Result Forms', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'coa-reports', label: 'Results', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'examinations', label: 'Examinations', roles: ['ADMIN'] },
@@ -112,19 +113,15 @@ export function tabsForRole(role: UserRoleType | string | undefined): NavTab[] {
   return NAV.filter((tab) => tab.roles.includes(role)).map(({ id, label }) => ({ id, label }));
 }
 
-export function defaultTabForRole(role: UserRoleType | string | undefined): string {
-  if (role === 'STAFF') return 'create-request';
-  if (role === 'CASHIER') return 'payments';
-  if (role === 'ADMIN') return 'submissions';
-  if (role === 'LAB_STAFF') return 'submissions';
-  return 'create-request';
+export function defaultTabForRole(_role: UserRoleType | string | undefined): string {
+  return 'home';
 }
 
 export function canOpenTab(role: UserRoleType | string | undefined, tab: string): boolean {
   if (!isAppRole(role)) return false;
-  if (tab === 'sample-detail') return permissionsForRole(role).canViewSamples === true;
+  if (tab === 'sample-detail' || tab === 'boxes') return permissionsForRole(role).canViewSamples === true;
   if (tabsForRole(role).some((item) => item.id === tab)) return true;
-  if (role === 'ADMIN') {
+  if (role === 'ADMIN' || role === 'LAB_STAFF') {
     return [
       'batches',
       'projects',

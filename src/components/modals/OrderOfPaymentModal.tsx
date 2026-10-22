@@ -27,7 +27,7 @@ interface OrderOfPaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   requisition: LabTestRequisition | null;
-  onSettlePayment?: (reqId: string, orNumber: string) => void;
+  onSettlePayment?: (reqId: string, orNumber: string, reqNumber?: string) => void;
 }
 
 // Crisp Simulated Barcode Component for Payment Slips
@@ -88,7 +88,7 @@ export const OrderOfPaymentModal: React.FC<OrderOfPaymentModalProps> = ({
     e.preventDefault();
     const effectiveOr = inputOr.trim().toUpperCase() || `OR-${Date.now().toString().slice(-6)}`;
     if (onSettlePayment) {
-      onSettlePayment(requisition.id, effectiveOr);
+      onSettlePayment(requisition.id, effectiveOr, requisition.requisitionNumber);
     }
     setShowOrInput(false);
   };

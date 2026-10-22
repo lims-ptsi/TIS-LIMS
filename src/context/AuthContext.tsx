@@ -68,7 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const terminalInfo = {
     terminalId: 'WS-LAB-CHEM-04',
     ipAddress: '10.0.14.88 (Subnet LAB-VLAN-2)',
-    systemVersion: 'AegisLIMS Enterprise v4.2.1-PROD',
+    systemVersion: 'LAB-TIS',
     complianceStandard: 'FDA 21 CFR Part 11 / ISO 15189 / CLIA',
     lastSecurityCheck: '2026-10-07 08:00:00 (PASSED)',
   };

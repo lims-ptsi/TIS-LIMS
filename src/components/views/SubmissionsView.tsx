@@ -5,8 +5,6 @@ import {
   Search, 
   Printer, 
   CheckCircle2, 
-  ChevronDown, 
-  BadgePercent,
   Receipt,
   FlaskConical,
   FileCheck
@@ -20,6 +18,8 @@ import { ResultEntryModal, ExamResultGroup } from '../modals/ResultEntryModal';
 import { CoAReportModal } from '../modals/CoAReportModal';
 import { PatientCategory, Sample, PriorityLevel } from '../../types/lims';
 import type { AuthUser } from '../../types/auth';
+import { EXAMINATION_CATALOG, formatCurrency, getExaminationPrice } from '../../data/examinationCatalog';
+import { hasOfficialReceipt, readyForLaboratory, requiresCashier } from '../../data/requestDesk';
 
 interface SubmissionsViewProps {
   requisitions: LabTestRequisition[];
@@ -33,17 +33,20 @@ interface SubmissionsViewProps {
       matrix: string;
       tubeCount: number;
       priority: PriorityLevel;
-      storageFacility: string;
-      storageRoom: string;
-      storageTemp: string;
+      storageFacility?: string;
+      storageRoom?: string;
+      storageTemp?: string;
       notes: string;
       orNumber?: string;
+      sampleName?: string;
+      boxId?: string;
+      boxPosition?: string;
     }
   ) => void;
   onUpdatePatientCategory?: (reqId: string, category: PatientCategory) => void;
   onViewRequisitionSlip?: (req: LabTestRequisition) => void;
   onViewPaymentSlip?: (req: LabTestRequisition) => void;
-  onSettlePayment?: (reqId: string, orNumber: string) => void;
+  onSettlePayment?: (reqId: string, orNumber: string, reqNumber?: string) => void;
   onSaveResults?: (
     reqId: string, 
     resultsData: Record<string, ExamResultGroup>, 
@@ -63,6 +66,45 @@ interface SubmissionsViewProps {
   currentUserName?: string;
   permissions?: AuthUser['permissions'];
   variant?: 'queue' | 'payments';
+}
+
+function examinationNames(req: LabTestRequisition): string[] {
+  if (req.selectedTestNames?.length) return req.selectedTestNames;
+  if (Array.isArray(req.kindOfExamination) && req.kindOfExamination.length) return req.kindOfExamination;
+  return [];
+}
+
+function matchExamination(name: string) {
+  const clean = name.trim().toUpperCase();
+  const exact = EXAMINATION_CATALOG.find((item) => item.name.trim().toUpperCase() === clean);
+  if (exact) return exact;
+  return EXAMINATION_CATALOG
+    .filter((item) => {
+      const catalogName = item.name.trim().toUpperCase();
+      return clean.includes(catalogName) || catalogName.includes(clean);
+    })
+    .sort((a, b) => b.name.length - a.name.length)[0];
+}
+
+function requestTotal(req: LabTestRequisition): number {
+  return examinationNames(req).reduce((sum, name) => {
+    const item = matchExamination(name);
+    return sum + (item ? getExaminationPrice(item, req.patientCategory) : 0);
+  }, 0);
+}
+
+function examinationSummary(req: LabTestRequisition): string {
+  const names = examinationNames(req);
+  if (!names.length) return '—';
+  if (names.length <= 2) return names.join(', ');
+  return `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+}
+
+function requestDay(value?: string): string {
+  const day = (value || '').slice(0, 10);
+  const [year, month, date] = day.split('-').map(Number);
+  if (!year || !month || !date) return day || '—';
+  return new Date(year, month - 1, date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
@@ -95,7 +137,11 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
   const [selectedResultReq, setSelectedResultReq] = useState<LabTestRequisition | null>(null);
   const [selectedCoAReq, setSelectedCoAReq] = useState<LabTestRequisition | null>(null);
 
-  const filtered = requisitions.filter((r) => {
+  const deskRequests = requisitions.filter((r) =>
+    isPayments ? requiresCashier(r.patientCategory) : readyForLaboratory(r)
+  );
+
+  const filtered = deskRequests.filter((r) => {
     const query = searchQuery.toLowerCase();
     const matchesSearch =
       (r.requisitionNumber && r.requisitionNumber.toLowerCase().includes(query)) ||
@@ -107,7 +153,7 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
       (r.kindOfExamination && Array.isArray(r.kindOfExamination) && r.kindOfExamination.some((k) => k && k.toLowerCase().includes(query)));
 
     const matchesStatus = isPayments
-      ? statusFilter === 'ALL' || (statusFilter === 'PAID' ? Boolean(r.orNumber) : !r.orNumber)
+      ? statusFilter === 'ALL' || (statusFilter === 'PAID' ? hasOfficialReceipt(r.orNumber) : !hasOfficialReceipt(r.orNumber))
       : statusFilter === 'ALL' || r.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -119,53 +165,49 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
     }
   };
 
-  const handleInlineCategoryChange = (reqId: string, category: PatientCategory) => {
-    if (onUpdatePatientCategory) {
-      onUpdatePatientCategory(reqId, category);
-    }
-  };
-
   const counts = {
-    all: requisitions.length,
-    submitted: requisitions.filter(r => r.status === 'SUBMITTED').length,
-    received: requisitions.filter(r => r.status === 'RECEIVED').length,
-    inTesting: requisitions.filter(r => r.status === 'IN_TESTING').length,
-    completed: requisitions.filter(r => r.status === 'COMPLETED').length,
+    all: deskRequests.length,
+    submitted: deskRequests.filter(r => r.status === 'SUBMITTED').length,
+    received: deskRequests.filter(r => r.status === 'RECEIVED').length,
+    inTesting: deskRequests.filter(r => r.status === 'IN_TESTING').length,
+    completed: deskRequests.filter(r => r.status === 'COMPLETED').length,
   };
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-12">
+    <div className="lims-page-shell">
       {/* Printable page background content wrapper (Hidden in Print Mode) */}
-      <div className="print:hidden space-y-4">
+      <div className="print:hidden space-y-2">
         {/* 1. Chevron Pipeline Workflow */}
+        {!isPayments && (
         <LifecycleChevronBar
           currentStage="Electronic Test Requisition & Intake"
           entityType="Sample"
           onCompleteStage={onOpenNewRequisition}
         />
+        )}
 
       {/* 2. Record Header Card */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-[#0176d3] shadow-2xs shrink-0">
-            <FileText className="w-5 h-5" />
+      <div className="bg-white border border-slate-200 rounded-md p-3 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-md bg-blue-50 border border-blue-100 flex items-center justify-center text-[#0176d3] shrink-0">
+            <FileText className="w-4 h-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 Requisition &amp; Order Management
               </span>
-              <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-blue-50 text-[#0176d3] border border-blue-200">
-                {requisitions.length} Total
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-[#0176d3] border border-blue-200">
+                {deskRequests.length} Total
               </span>
             </div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight leading-tight">
+            <h1 className="text-base font-semibold text-slate-900 tracking-tight leading-tight">
               {isPayments ? 'Payment Desk' : 'Lab Test Requests & Submissions'}
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
               {isPayments
-                ? 'Assign the official receipt number after the patient pays.'
-                : 'Receive specimens, enter results, and print the laboratory report.'}
+                ? 'OPD only. Assign the official receipt after the patient pays. Other categories go to the laboratory.'
+                : 'PhilHealth, Indigent, Corporate, Employee, and Projects arrive here. OPD arrives after the cashier assigns the receipt.'}
             </p>
           </div>
         </div>
@@ -175,7 +217,7 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={onOpenNewRequisition}
-              className="flex items-center gap-2 px-4 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white text-xs font-bold rounded-lg shadow-2xs transition-all active:scale-98 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0176d3] hover:bg-[#0060b2] text-white text-[11px] font-semibold rounded-md shadow-sm transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Create Lab Test Request</span>
@@ -185,10 +227,10 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
       </div>
 
       {/* 3. Requisitions Table Card */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+      <div className="bg-white border border-slate-200 rounded-md overflow-hidden shadow-sm">
         
         {/* Search & Filter Bar */}
-        <div className="p-3.5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/70">
+        <div className="p-2 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50/70">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
             <input
@@ -204,9 +246,9 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
             {(isPayments
               ? [
-                  { key: 'UNPAID', label: 'Unpaid', count: requisitions.filter((r) => !r.orNumber).length },
-                  { key: 'PAID', label: 'Paid', count: requisitions.filter((r) => Boolean(r.orNumber)).length },
-                  { key: 'ALL', label: 'All', count: requisitions.length },
+                  { key: 'UNPAID', label: 'Unpaid', count: deskRequests.filter((r) => !hasOfficialReceipt(r.orNumber)).length },
+                  { key: 'PAID', label: 'Paid', count: deskRequests.filter((r) => hasOfficialReceipt(r.orNumber)).length },
+                  { key: 'ALL', label: 'All', count: deskRequests.length },
                 ]
               : [
                   { key: 'ALL', label: 'All', count: counts.all },
@@ -237,282 +279,246 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
         </div>
 
         {/* Table Container */}
+        {isPayments ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-5 py-2.5 font-semibold">Patient</th>
+                  <th className="px-3 py-2.5 font-semibold">Case</th>
+                  <th className="px-3 py-2.5 font-semibold">Examinations</th>
+                  <th className="px-3 py-2.5 font-semibold">Category</th>
+                  <th className="px-3 py-2.5 font-semibold text-right">Amount</th>
+                  <th className="px-5 py-2.5 font-semibold text-right">Receipt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-14 text-center">
+                      <p className="text-sm font-medium text-slate-700">
+                        {statusFilter === 'UNPAID' ? 'No requests are waiting for a receipt.' : 'No requests in this list.'}
+                      </p>
+                      {statusFilter === 'UNPAID' && (
+                        <p className="text-xs text-slate-500 mt-1">Only OPD requests are listed. Other categories go straight to the laboratory.</p>
+                      )}
+                    </td>
+                  </tr>
+                ) : filtered.map((req) => {
+                  const paid = hasOfficialReceipt(req.orNumber);
+                  return (
+                    <tr
+                      key={req.id}
+                      onClick={() => {
+                        if (onViewPaymentSlip) onViewPaymentSlip(req);
+                        else setSelectedPaymentSlipReq(req);
+                      }}
+                      className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
+                    >
+                      <td className="px-5 py-3 align-middle">
+                        <div className="text-xs font-medium text-slate-900">{req.patientOrSubjectName || 'Patient'}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          {req.patientAge || 0} yrs · {req.patientGender || '—'}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 align-middle whitespace-nowrap">
+                        <div className="text-xs font-medium text-slate-800 tabular-nums">{req.caseNo || req.requisitionNumber}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">{requestDay(req.requestDate)}</div>
+                      </td>
+                      <td className="px-3 py-3 align-middle text-xs text-slate-600 max-w-[280px] truncate">{examinationSummary(req)}</td>
+                      <td className="px-3 py-3 align-middle text-xs text-slate-600 whitespace-nowrap">{req.patientCategory || '—'}</td>
+                      <td className="px-3 py-3 align-middle text-right text-sm font-medium text-slate-900 tabular-nums whitespace-nowrap">{formatCurrency(requestTotal(req))}</td>
+                      <td className="px-5 py-3 align-middle text-right" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onViewPaymentSlip) onViewPaymentSlip(req);
+                            else setSelectedPaymentSlipReq(req);
+                          }}
+                          disabled={!canAssignOr}
+                          className={`inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-md cursor-pointer disabled:opacity-60 ${
+                            paid
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              : 'bg-[#0176d3] text-white hover:bg-[#0060b2]'
+                          }`}
+                        >
+                          <Receipt className="w-3.5 h-3.5" />
+                          <span>{paid ? req.orNumber : 'Assign receipt'}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold text-[10px] uppercase tracking-wider">
-                <th className="py-3 px-6 w-[22%] whitespace-nowrap text-left align-middle">Case &amp; Requisition</th>
-                <th className="py-3 px-6 w-[32%] text-left align-middle">Patient &amp; Demographics</th>
-                <th className="py-3 px-6 w-[18%] whitespace-nowrap text-left align-middle">Patient Category</th>
-                <th className="py-3 px-6 w-[14%] whitespace-nowrap text-center align-middle">Status</th>
-                <th className="py-3 px-6 w-[14%] text-right whitespace-nowrap align-middle">Actions</th>
+              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <th className="px-5 py-2.5 font-semibold">Patient</th>
+                <th className="px-3 py-2.5 font-semibold">Case</th>
+                <th className="px-3 py-2.5 font-semibold">Examinations</th>
+                <th className="px-3 py-2.5 font-semibold">Category</th>
+                <th className="px-3 py-2.5 font-semibold">Status</th>
+                <th className="px-5 py-2.5 font-semibold text-right">Next step</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-16 text-center text-slate-400">
-                    <FileText className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-                    <p className="text-sm font-bold text-slate-700">No Lab Test Requests Found</p>
-                    <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                      {requisitions.length === 0 
-                        ? 'No active patient test submissions in the queue. Click the button below to register a new laboratory requisition.'
-                        : 'No records matched your search or status filter criteria.'}
+                  <td colSpan={6} className="px-5 py-14 text-center">
+                    <p className="text-sm font-medium text-slate-700">No requests in this list.</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {deskRequests.length === 0
+                        ? 'Requests appear here when they are ready for the laboratory.'
+                        : 'Nothing matches this search or status.'}
                     </p>
-                    {requisitions.length === 0 && canCreate && (
-                      <button
-                        onClick={onOpenNewRequisition}
-                        className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Create Lab Test Request
-                      </button>
-                    )}
                   </td>
                 </tr>
               ) : (
-                filtered.map((req) => (
-                  <tr 
-                    key={req.id} 
-                    onClick={() => {
-                      if (isPayments) {
-                        if (onViewPaymentSlip) onViewPaymentSlip(req);
-                        else setSelectedPaymentSlipReq(req);
-                        return;
+                filtered.map((req) => {
+                  const statusLabel = req.status === 'IN_TESTING' ? 'In testing' : req.status === 'SUBMITTED' ? 'Submitted' : req.status === 'RECEIVED' ? 'Received' : req.status === 'COMPLETED' ? 'Completed' : req.status;
+                  const statusTone = req.status === 'COMPLETED'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : req.status === 'IN_TESTING'
+                    ? 'bg-blue-50 text-[#014486] border-blue-200'
+                    : req.status === 'RECEIVED'
+                    ? 'bg-sky-50 text-sky-800 border-sky-200'
+                    : 'bg-amber-50 text-amber-800 border-amber-200';
+                  return (
+                    <tr
+                      key={req.id}
+                      onClick={() => {
+                        if (req.status === 'SUBMITTED') {
+                          if (canAccession) {
+                            setSelectedReceiveReq(req);
+                          } else {
+                            handleOpenSlip(req);
+                          }
+                          return;
+                        }
+                        if (onSelectRequisition) onSelectRequisition(req);
+                      }}
+                      title={
+                        req.status === 'SUBMITTED'
+                          ? canAccession
+                            ? 'Specimen not yet received — click to receive & accession'
+                            : 'Specimen pending laboratory receiving — click to view request slip'
+                          : 'Click to view specimen details & enter analytical results'
                       }
-                      if (onSelectRequisition) {
-                        onSelectRequisition(req);
-                      } else if (canAccession) {
-                        setSelectedReceiveReq(req);
-                      }
-                    }}
-                    className="hover:bg-blue-50/40 cursor-pointer transition-colors group"
-                    title="Click row to open details page"
-                  >
-                    
-                    {/* 1. Case No & Requisition / Date */}
-                    <td className="py-4 px-6 whitespace-nowrap align-middle">
-                      <div className="font-mono font-bold text-xs text-slate-900 group-hover:text-[#0176d3] transition-colors">
-                        {req.caseNo || req.externalRef || 'CASE-2026-AUTO'}
-                      </div>
-                      <div className="text-[11px] font-mono text-slate-500 mt-0.5 flex items-center gap-1.5">
-                        <span className="text-slate-400">{req.requisitionNumber}</span>
-                        <span>•</span>
-                        <span>{req.requestDate ? req.requestDate.split(' ')[0] : ''}</span>
-                      </div>
-                    </td>
-
-                    {/* 2. Patient Details & Demographics */}
-                    <td className="py-4 px-6 align-middle">
-                      <div className="font-bold text-slate-900 text-xs uppercase tracking-tight group-hover:text-[#0176d3] transition-colors">
-                        {req.patientOrSubjectName || 'Unknown Patient'}
-                      </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold text-slate-700">{req.patientAge || 0} Yrs · {req.patientGender || 'N/A'}</span>
-                        <span>•</span>
-                        <span>{req.civilStatus || 'Single'}</span>
-                        {req.patientAddress && (
-                          <>
-                            <span>•</span>
-                            <span className="text-slate-400 truncate max-w-[200px]">{req.patientAddress}</span>
-                          </>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* 3. Patient Category Pill / Inline Quick Selector */}
-                    <td className="py-4 px-6 whitespace-nowrap align-middle" onClick={(e) => e.stopPropagation()}>
-                      <div className="relative inline-block w-40">
-                        <select
-                          value={req.patientCategory || ''}
-                          onChange={(e) => {
-                            const newCat = e.target.value as PatientCategory;
-                            if (newCat) {
-                              handleInlineCategoryChange(req.id, newCat);
-                            }
-                          }}
-                          className={`w-full h-8 text-xs font-bold font-mono px-3 rounded-full border cursor-pointer transition-all shadow-2xs appearance-none pr-7 focus:outline-none focus:ring-1 focus:ring-[#0176d3] ${
-                            req.patientCategory === 'Corporate' ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100' :
-                            req.patientCategory === 'PhilHealth' ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100' :
-                            req.patientCategory === 'Indigent' ? 'bg-purple-50 text-purple-800 border-purple-300 hover:bg-purple-100' :
-                            req.patientCategory === 'Pre-Employment / Employee' || req.patientCategory === 'Employee' ? 'bg-cyan-50 text-cyan-800 border-cyan-300 hover:bg-cyan-100' :
-                            req.patientCategory === 'Projects' ? 'bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100' :
-                            req.patientCategory === 'OPD' ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100' :
-                            'bg-amber-50 text-amber-900 border-amber-400 font-semibold animate-pulse'
-                          }`}
-                          title="Click to switch patient category"
-                        >
-                          <option value="" disabled>Select Category</option>
-                          <option value="OPD">OPD</option>
-                          <option value="PhilHealth">PhilHealth</option>
-                          <option value="Indigent">Indigent</option>
-                          <option value="Corporate">Corporate</option>
-                          <option value="Pre-Employment / Employee">Pre-Employment / Employee</option>
-                          <option value="Projects">Projects</option>
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
-                      </div>
-                    </td>
-
-                    {/* 4. Status & Priority Flag */}
-                    <td className="py-4 px-6 whitespace-nowrap text-center align-middle">
-                      <div className="inline-flex items-center justify-center gap-1.5">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-tight shadow-2xs ${
-                            req.status === 'COMPLETED'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
-                              : req.status === 'IN_TESTING'
-                              ? 'bg-blue-50 text-blue-700 border border-blue-300'
-                              : req.status === 'RECEIVED'
-                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-300'
-                              : 'bg-amber-50 text-amber-800 border border-amber-300'
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${
-                            req.status === 'COMPLETED'
-                              ? 'bg-emerald-500 ring-2 ring-emerald-200'
-                              : req.status === 'IN_TESTING'
-                              ? 'bg-blue-500 ring-2 ring-blue-200 animate-pulse'
-                              : req.status === 'RECEIVED'
-                              ? 'bg-indigo-500 ring-2 ring-indigo-200'
-                              : 'bg-amber-500 ring-2 ring-amber-200'
-                          }`} />
-                          <span>{req.status.replace('_', ' ')}</span>
-                        </span>
-
-                        {req.priority && req.priority !== 'ROUTINE' && (
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold font-mono border ${
-                              req.priority === 'STAT'
-                                ? 'bg-rose-50 text-rose-800 border-rose-300'
-                                : 'bg-amber-50 text-amber-800 border-amber-300'
-                            }`}
-                          >
-                            {req.priority}
+                      className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
+                    >
+                      <td className="px-5 py-3 align-middle">
+                        <div className="text-xs font-medium text-slate-900">{req.patientOrSubjectName || 'Patient'}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          {req.patientAge || 0} yrs · {req.patientGender || '—'}{req.civilStatus ? ` · ${req.civilStatus}` : ''}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 align-middle whitespace-nowrap">
+                        <div className="text-xs font-medium text-slate-800 tabular-nums">{req.caseNo || req.requisitionNumber}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">{requestDay(req.requestDate)}</div>
+                      </td>
+                      <td className="px-3 py-3 align-middle text-xs text-slate-600 max-w-[280px] truncate">{examinationSummary(req)}</td>
+                      <td className="px-3 py-3 align-middle text-xs text-slate-600 whitespace-nowrap">{req.patientCategory || '—'}</td>
+                      <td className="px-3 py-3 align-middle whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`inline-flex text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded border ${statusTone}`}>
+                            {statusLabel}
                           </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* 5. Action Buttons (Payment Slip + Requisition Slip + Receive / Accession) */}
-                    <td className="py-4 px-6 text-right whitespace-nowrap align-middle" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-2">
-                        {isPayments ? (
+                          {req.priority && req.priority !== 'ROUTINE' && (
+                            <span className={`inline-flex text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded border ${
+                              req.priority === 'STAT' ? 'bg-rose-50 text-rose-800 border-rose-200' : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}>
+                              {req.priority === 'STAT' ? 'Stat' : 'Priority'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 align-middle text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <div className="inline-flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            onClick={() => {
-                              if (onViewPaymentSlip) onViewPaymentSlip(req);
-                              else setSelectedPaymentSlipReq(req);
-                            }}
-                            disabled={!canAssignOr}
-                            className={`h-8 px-3 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer disabled:opacity-60 ${
-                              req.orNumber
-                                ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                                : 'bg-[#0176d3] text-white hover:bg-[#0060b2]'
-                            }`}
+                            onClick={() => handleOpenSlip(req)}
+                            className="inline-flex items-center gap-1 h-7 px-2 text-[11px] font-semibold rounded-md text-slate-600 hover:bg-slate-100 cursor-pointer"
+                            title="Print the laboratory request slip"
                           >
-                            <Receipt className="w-3.5 h-3.5" />
-                            <span>{req.orNumber ? req.orNumber : 'Assign OR'}</span>
+                            <Printer className="w-3.5 h-3.5" />
+                            <span>Slip</span>
                           </button>
-                        ) : null}
-                        {!isPayments && req.patientCategory === 'OPD' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (onViewPaymentSlip) {
-                                onViewPaymentSlip(req);
-                              } else {
-                                setSelectedPaymentSlipReq(req);
-                              }
-                            }}
-                            className="h-8 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 hover:border-amber-400 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
-                            title="Generate & Print OPD Cashier Partial Receipt / Order of Payment"
-                          >
-                            <Receipt className="w-3.5 h-3.5 text-amber-700" />
-                            <span>Payment Slip</span>
-                          </button>
-                        )}
-
-                        {!isPayments && (
-                        <button
-                          type="button"
-                          onClick={() => handleOpenSlip(req)}
-                          className="h-8 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 hover:border-slate-400 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
-                          title="View & Print Official Laboratory Request Slip"
-                        >
-                          <Printer className="w-3.5 h-3.5 text-[#0176d3]" />
-                          <span>Slip</span>
-                        </button>
-                        )}
-
-                        {!isPayments && req.status === 'SUBMITTED' && (
-                          <button
-                            type="button"
-                            disabled={!canAccession}
-                            onClick={() => {
-                              if (!canAccession) return;
-                              setSelectedReceiveReq(req);
-                            }}
-                            className={`h-8 px-3.5 text-white text-xs font-bold rounded-lg shadow-2xs transition-all flex items-center gap-1.5 min-w-[84px] justify-center ${
-                              canAccession
-                                ? 'bg-[#2e844a] hover:bg-[#26713f] cursor-pointer active:scale-95'
-                                : 'bg-slate-300 cursor-not-allowed opacity-70'
-                            }`}
-                            title={canAccession ? 'Physical reception & accessioning of specimen' : 'Your role cannot accession specimens'}
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Receive</span>
-                          </button>
-                        )}
-
-                        {(req.status === 'RECEIVED' || req.status === 'IN_TESTING') && (
-                          <button
-                            type="button"
-                            disabled={!canEnterResults}
-                            onClick={() => {
-                              if (!canEnterResults) return;
-                              setSelectedResultReq(req);
-                            }}
-                            className={`h-8 px-3.5 text-white text-xs font-bold rounded-lg shadow-2xs transition-all flex items-center gap-1.5 min-w-[105px] justify-center ${
-                              canEnterResults
-                                ? 'bg-slate-900 hover:bg-black cursor-pointer active:scale-95'
-                                : 'bg-slate-300 cursor-not-allowed opacity-70'
-                            }`}
-                            title={canEnterResults ? 'Enter laboratory analyte results and clinical flags' : 'Your role cannot enter results'}
-                          >
-                            <FlaskConical className="w-3.5 h-3.5 text-cyan-300" />
-                            <span>Input Results</span>
-                          </button>
-                        )}
-
-                        {req.status === 'COMPLETED' && (
-                          <button
-                            type="button"
-                            disabled={!canViewCoA}
-                            onClick={() => {
-                              if (!canViewCoA) return;
-                              setSelectedCoAReq(req);
-                            }}
-                            className={`h-8 px-3.5 text-white text-xs font-bold rounded-lg shadow-2xs transition-all flex items-center gap-1.5 min-w-[105px] justify-center ${
-                              canViewCoA
-                                ? 'bg-emerald-700 hover:bg-emerald-800 cursor-pointer active:scale-95'
-                                : 'bg-slate-300 cursor-not-allowed opacity-70'
-                            }`}
-                            title={canViewCoA ? 'View & print official validated Certificate of Analysis' : 'Your role cannot view CoA releases'}
-                          >
-                            <FileCheck className="w-3.5 h-3.5 text-white" />
-                            <span>CoA / Results</span>
-                          </button>
-                        )}
-                      </div>
-                    </td>
-
-                  </tr>
-                ))
+                          {requiresCashier(req.patientCategory) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onViewPaymentSlip) onViewPaymentSlip(req);
+                                else setSelectedPaymentSlipReq(req);
+                              }}
+                              className="inline-flex items-center gap-1 h-7 px-2 text-[11px] font-semibold rounded-md text-slate-600 hover:bg-slate-100 cursor-pointer"
+                              title="Print the OPD order of payment"
+                            >
+                              <Receipt className="w-3.5 h-3.5" />
+                              <span>Payment</span>
+                            </button>
+                          )}
+                          {req.status === 'SUBMITTED' && (
+                            <button
+                              type="button"
+                              disabled={!canAccession}
+                              onClick={() => {
+                                if (!canAccession) return;
+                                setSelectedReceiveReq(req);
+                              }}
+                              className={`inline-flex items-center gap-1 h-7 px-2 text-[11px] font-semibold rounded-md text-white ${
+                                canAccession ? 'bg-[#2e844a] hover:bg-[#26713f] cursor-pointer' : 'bg-slate-300 cursor-not-allowed'
+                              }`}
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Receive</span>
+                            </button>
+                          )}
+                          {(req.status === 'RECEIVED' || req.status === 'IN_TESTING') && (
+                            <button
+                              type="button"
+                              disabled={!canEnterResults}
+                              onClick={() => {
+                                if (!canEnterResults) return;
+                                setSelectedResultReq(req);
+                              }}
+                              className={`inline-flex items-center gap-1 h-7 px-2 text-[11px] font-semibold rounded-md text-white ${
+                                canEnterResults ? 'bg-[#0176d3] hover:bg-[#0060b2] cursor-pointer' : 'bg-slate-300 cursor-not-allowed'
+                              }`}
+                            >
+                              <FlaskConical className="w-3.5 h-3.5" />
+                              <span>Enter results</span>
+                            </button>
+                          )}
+                          {req.status === 'COMPLETED' && (
+                            <button
+                              type="button"
+                              disabled={!canViewCoA}
+                              onClick={() => {
+                                if (!canViewCoA) return;
+                                setSelectedCoAReq(req);
+                              }}
+                              className={`inline-flex items-center gap-1 h-7 px-2 text-[11px] font-semibold rounded-md text-white ${
+                                canViewCoA ? 'bg-emerald-700 hover:bg-emerald-800 cursor-pointer' : 'bg-slate-300 cursor-not-allowed'
+                              }`}
+                            >
+                              <FileCheck className="w-3.5 h-3.5" />
+                              <span>Print results</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
+        )}
 
       </div>
       {/* End of print:hidden page wrapper */}

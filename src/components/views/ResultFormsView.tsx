@@ -5,10 +5,10 @@ import {
   RotateCcw,
   ClipboardList,
   CheckCircle2,
-  QrCode,
 } from 'lucide-react';
 import {
   RESULT_FORMS,
+  PTSI_PATIENT_HEADER_FIELDS,
   ResultFormDefinition,
   ResultFormHeaderField,
   ResultFormSpecimenField,
@@ -33,6 +33,10 @@ function blankValues(form: ResultFormDefinition): FormValues {
   const values: FormValues = {};
   const today = new Date().toISOString().split('T')[0];
 
+  PTSI_PATIENT_HEADER_FIELDS.forEach((f) => {
+    values[f.id] = f.type === 'date' ? today : '';
+    if (f.otherSpecifyOption) values[`${f.id}_other`] = '';
+  });
   form.headerFields.forEach((f) => {
     values[f.id] = f.type === 'date' ? today : '';
     if (f.otherSpecifyOption) values[`${f.id}_other`] = '';
@@ -216,7 +220,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
       : 'sm:grid-cols-2';
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-16 text-slate-900">
+    <div className="lims-page-shell text-slate-900">
       {/* Header */}
       <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
         <div className="flex items-center gap-3">
@@ -319,73 +323,44 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
 
         {/* Printable form sheet */}
         <div className="lg:col-span-9">
-          <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm p-5 sm:p-7 max-w-3xl mx-auto print:border-none print:shadow-none print:p-0 print:max-w-none">
+          <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm p-5 sm:p-7 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 print:max-w-none">
             {activeForm.layoutStyle === 'ntp-request' ? (
               <NtpLabRequestForm values={values} onChange={setField} />
             ) : (
             <>
-            {/* Org / PTSI header */}
-            {activeForm.orgHeader ? (
-              <div
-                className={`flex items-start justify-between gap-3 pb-3 mb-4 ${
-                  activeForm.layoutStyle === 'blood-typing' ||
-                  activeForm.layoutStyle === 'pregnancy'
-                    ? 'border border-slate-800 p-2 sm:p-3'
-                    : 'border-b border-slate-300'
-                }`}
-              >
-                <div className="w-12 h-12 rounded-full border-2 border-slate-400 flex items-center justify-center text-[9px] font-bold text-slate-600 shrink-0 print:w-10 print:h-10 overflow-hidden">
+            <div className="border-b-2 border-slate-900 pb-4 mb-4 print:pb-2">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
                   <img
                     src="/ptsilogo.png"
-                    alt="PTSI"
-                    className="w-full h-full object-contain"
+                    alt="PTSI Official Seal"
+                    className="h-20 w-auto print:h-14 object-contain shrink-0"
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = 'none';
-                      (e.target as HTMLImageElement).parentElement!.textContent = 'PTSI';
                     }}
                   />
-                </div>
-                <div className="flex-1 text-center">
-                  <div className="text-sm sm:text-base font-bold tracking-wide text-slate-900 uppercase">
-                    {activeForm.orgHeader.name}
+                  <div className="min-w-0">
+                    <h1 className="text-base sm:text-lg print:text-sm font-black tracking-tight text-slate-900 uppercase font-serif">
+                      Philippine Tuberculosis Society, Inc.
+                    </h1>
+                    <h2 className="text-xs sm:text-sm print:text-[11px] font-bold text-slate-700 uppercase tracking-wide">
+                      Clinical Diagnostic Laboratory &amp; Chest Center
+                    </h2>
+                    <p className="text-[11px] print:text-[9px] text-slate-600">
+                      68 Kalaw Hill, Quirino Highway, Pasong Putik, Quezon City · Tel: (02) 8928-1234
+                    </p>
                   </div>
-                  {activeForm.orgHeader.subtitle ? (
-                    <div className="text-xs sm:text-sm italic font-serif text-slate-800 mt-0.5 uppercase tracking-wide">
-                      {activeForm.orgHeader.subtitle}
-                    </div>
-                  ) : null}
-                  {activeForm.layoutStyle === 'blood-typing' ||
-                  activeForm.layoutStyle === 'pregnancy' ? (
-                    <div className="text-sm text-slate-900 mt-1 font-medium">
-                      {activeForm.title}
-                    </div>
-                  ) : activeForm.orgHeader.address ? (
-                    <div className="text-[10px] text-slate-600 mt-0.5">
-                      {activeForm.orgHeader.address}
-                    </div>
-                  ) : null}
                 </div>
-                {activeForm.orgHeader.showQr ? (
-                  <div className="w-12 h-12 border border-slate-300 rounded flex items-center justify-center shrink-0 print:w-10 print:h-10">
-                    <QrCode className="w-8 h-8 text-slate-700" />
+                <div className="text-right shrink-0">
+                  <div className="inline-block px-3 py-1 bg-slate-900 text-white font-mono font-bold text-xs print:text-[9.5px] rounded uppercase tracking-wider">
+                    OFFICIAL RESULT
                   </div>
-                ) : (
-                  <div className="w-12 shrink-0" />
-                )}
-              </div>
-            ) : (
-              <div className="text-center border-b-2 border-slate-800 pb-3 mb-5">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">
-                  Laboratory Result Report
-                </div>
-                <h2 className="text-lg font-bold text-slate-900 mt-0.5">
-                  {activeForm.title}
-                </h2>
-                <div className="text-[10px] text-slate-500 mt-1 font-mono">
-                  Form No. {String(activeForm.formNumber).padStart(2, '0')} · {activeForm.id}
+                  <div className="text-[10px] print:text-[8px] text-slate-500 font-mono mt-1">
+                    {activeForm.shortName}
+                  </div>
                 </div>
               </div>
-            )}
+            </div>
 
             {activeForm.panelTitle && activeForm.panelTitlePlacement === 'below-org' ? (
               <h2 className="text-center text-sm sm:text-base font-bold tracking-wide text-slate-900 mb-3 uppercase">
@@ -393,10 +368,9 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
               </h2>
             ) : null}
 
-            {/* Patient header — compact PTSI 3-column layout (all forms) */}
             <section className="mb-3 text-[10px] print:text-[8px] leading-tight">
               <div className="grid grid-cols-12 gap-x-2 gap-y-0.5">
-                {activeForm.headerFields.map((field) => {
+                {PTSI_PATIENT_HEADER_FIELDS.map((field) => {
                   const span = field.span ?? 4;
                   return (
                     <div

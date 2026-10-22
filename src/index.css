@@ -22,6 +22,25 @@
   }
 }
 
+@layer components {
+  /* Full-width, compact vertical rhythm — desk / list views */
+  .lims-page-shell {
+    @apply w-full pb-6 font-sans space-y-2 text-[13px] leading-snug;
+  }
+
+  .lims-page-shell table th {
+    padding: 0.35rem 0.65rem !important;
+    font-size: 11px !important;
+    line-height: 1.25;
+  }
+
+  .lims-page-shell table td {
+    padding: 0.35rem 0.65rem !important;
+    font-size: 12px !important;
+    line-height: 1.35;
+  }
+}
+
 /* Chevron Lifecycle Pipeline Bar Styling */
 .chevron-stage {
   position: relative;
@@ -108,16 +127,16 @@
 .lims-table th {
   background-color: #f8fafc;
   color: #515f74;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   border-bottom: 1px solid #d8dde6;
-  padding: 10px 14px;
+  padding: 6px 10px;
   text-align: left;
 }
 
 .lims-table td {
-  padding: 10px 14px;
-  font-size: 13px;
+  padding: 6px 10px;
+  font-size: 12px;
   color: #181b20;
   border-bottom: 1px solid #edf1f7;
 }
@@ -159,6 +178,67 @@
 
 .animate-shake {
   animation: shake 0.35s ease-in-out;
+}
+
+@keyframes patientDrawerBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes patientDrawerPanelIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes patientDrawerBackdropOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes patientDrawerPanelOut {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.patient-drawer-backdrop-in {
+  animation: patientDrawerBackdropIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.patient-drawer-panel-in {
+  animation: patientDrawerPanelIn 0.36s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.patient-drawer-backdrop-out {
+  animation: patientDrawerBackdropOut 0.26s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.patient-drawer-panel-out {
+  animation: patientDrawerPanelOut 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .patient-drawer-backdrop-in,
+  .patient-drawer-panel-in,
+  .patient-drawer-backdrop-out,
+  .patient-drawer-panel-out {
+    animation: none;
+  }
 }
 
 /* ========================================================= */
@@ -228,6 +308,24 @@
   #toast-root,
   .sidebar,
   .navbar {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* When any print modal is open in the DOM, ensure the entire background view is completely hidden */
+  body:has(.print-modal-backdrop) main,
+  #root:has(.print-modal-backdrop) main,
+  div:has(> .print-modal-backdrop) > main,
+  div:has(> .print-modal-backdrop) > header,
+  div:has(> .print-modal-backdrop) > nav,
+  div:has(> .print-modal-backdrop) > aside,
+  div:has(> .print-modal-backdrop) > footer,
+  div:has(> .print-modal-backdrop) > *:not(.print-modal-backdrop) {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;

@@ -14,6 +14,7 @@ export const NewSampleModal: React.FC<NewSampleModalProps> = ({
   onAddSample,
 }) => {
   const [customerName, setCustomerName] = useState('Immunir');
+  const [sampleName, setSampleName] = useState('Lockbox_S000445');
   const [sampleType, setSampleType] = useState<Sample['sampleType']>('Serum');
   const [matrix, setMatrix] = useState('SST Separator Tube');
   const [priority, setPriority] = useState<PriorityLevel>('ROUTINE');
@@ -35,6 +36,7 @@ export const NewSampleModal: React.FC<NewSampleModalProps> = ({
       id: `smp-${Date.now()}`,
       barcode,
       externalId: `S000${Math.floor(100 + Math.random() * 900)}`,
+      sampleName: sampleName.trim() || `${customerName}_${barcode}`,
       sampleType,
       matrix,
       patientOrSourceName: `${customerName}_${barcode}`,
@@ -95,15 +97,26 @@ export const NewSampleModal: React.FC<NewSampleModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="text-slate-600 font-semibold block mb-1">Customer Sample Name *</label>
+              <label className="text-slate-600 font-semibold block mb-1">Customer Name *</label>
               <input
                 type="text"
                 required
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3]"
+              />
+            </div>
+            <div>
+              <label className="text-slate-600 font-semibold block mb-1">Sample Name *</label>
+              <input
+                type="text"
+                required
+                value={sampleName}
+                onChange={(e) => setSampleName(e.target.value)}
+                placeholder="Lockbox_S000445"
+                className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono text-xs focus:outline-none focus:border-[#0176d3]"
               />
             </div>
             <div>

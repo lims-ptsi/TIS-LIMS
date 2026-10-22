@@ -29,6 +29,7 @@ import {
   getExaminationCode,
   getExaminationCategory,
   isCorporateSchemeExam,
+  examinationMatchesSearch,
   isStandardSchemeExam,
 } from '../../data/examinationCatalog';
 
@@ -124,15 +125,10 @@ export const NewRequisitionModal: React.FC<NewRequisitionModalProps> = ({
   const filteredExams = activeCatalog.filter((exam) => {
     const examCategory = getExaminationCategory(exam, patientCategory);
     const matchCategory = selectedDeptTab === 'ALL' || examCategory === selectedDeptTab;
-    const q = examSearch.trim().toLowerCase();
-    const codeToMatch = (isCorporate && exam.corporateCode) ? exam.corporateCode : exam.code;
-    const matchSearch =
-      !q ||
-      exam.name.toLowerCase().includes(q) ||
-      (codeToMatch && codeToMatch.toLowerCase().includes(q)) ||
-      (exam.code && exam.code.toLowerCase().includes(q)) ||
-      examCategory.toLowerCase().includes(q) ||
-      exam.category.toLowerCase().includes(q);
+    const matchSearch = examinationMatchesSearch(exam, examSearch, [
+      examCategory,
+      isCorporate && exam.corporateCode ? exam.corporateCode : exam.code,
+    ]);
     return matchCategory && matchSearch;
   });
 
@@ -215,7 +211,7 @@ export const NewRequisitionModal: React.FC<NewRequisitionModalProps> = ({
     const reqNum = `REQ-2026-${Math.floor(10000 + Math.random() * 90000)}`;
     const effectiveCaseNo = caseNo.trim().toUpperCase() || `CASE-2026-${Math.floor(10000 + Math.random() * 90000)}`;
     const effectiveChargeSlip = chargeSlipNumber.trim().toUpperCase() || (patientCategory === 'OPD' ? `CS-${Math.floor(10000 + Math.random() * 90000)}` : 'N/A');
-    const effectiveOrNumber = orNumber.trim().toUpperCase() || 'N/A';
+    const effectiveOrNumber = patientCategory === 'OPD' ? (orNumber.trim().toUpperCase() || 'N/A') : '';
 
     const tatHours = priority === 'STAT' ? 2 : priority === 'PRIORITY' ? 8 : 24;
     const deadline = new Date(Date.now() + tatHours * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
@@ -558,18 +554,22 @@ export const NewRequisitionModal: React.FC<NewRequisitionModalProps> = ({
             </div>
 
             {/* OPD Patient Cashier Partial Receipt Notice Banner */}
-            {patientCategory === 'OPD' && (
+            {patientCategory === 'OPD' ? (
               <div className="p-3 rounded-lg bg-amber-50/90 border border-amber-300 text-amber-950 flex items-start gap-2.5 shadow-2xs mt-2">
                 <Receipt className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                 <div>
-                  <div className="font-bold text-[11px] uppercase tracking-wide flex items-center gap-1.5">
-                    <span>OPD Cashier Settlement Workflow</span>
-                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 border border-amber-300">
-                      Required Step
-                    </span>
-                  </div>
+                  <div className="font-bold text-[11px] uppercase tracking-wide">OPD goes to the cashier</div>
                   <p className="text-[10px] text-amber-900 mt-0.5 leading-tight">
-                    An <strong>Order of Payment / Partial Receipt</strong> will be generated upon submission for the patient to settle at the cashier before specimen collection.
+                    The cashier assigns the official receipt after the patient pays. The laboratory receives the specimen after that receipt is assigned.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 rounded-lg bg-sky-50 border border-sky-200 text-sky-950 flex items-start gap-2.5 shadow-2xs mt-2">
+                <div>
+                  <div className="font-bold text-[11px] uppercase tracking-wide">This category goes to the laboratory</div>
+                  <p className="text-[10px] text-sky-900 mt-0.5 leading-tight">
+                    {patientCategory} does not stop at the cashier. Send the patient to the laboratory section.
                   </p>
                 </div>
               </div>

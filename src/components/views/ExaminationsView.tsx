@@ -44,6 +44,7 @@ import {
   formatCurrency,
   isStandardSchemeExam,
   isCorporateSchemeExam,
+  examinationMatchesSearch,
   getExaminationCategory 
 } from '../../data/examinationCatalog';
 
@@ -354,20 +355,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
           (priceSchemeFilter === 'STANDARD' && isStandardSchemeExam(item)) ||
           (isCorpScheme && isCorporateSchemeExam(item));
 
-        // Search Query
-        const q = searchQuery.toLowerCase().trim();
-        const matchesQuery = 
-          !q ||
-          item.name.toLowerCase().includes(q) ||
-          item.code.toLowerCase().includes(q) ||
-          (item.corporateCode && item.corporateCode.toLowerCase().includes(q)) ||
-          item.category.toLowerCase().includes(q) ||
-          (item.corporateCategory && item.corporateCategory.toLowerCase().includes(q)) ||
-          itemForm.toLowerCase().includes(q) ||
-          (item.sendOutPlatform && item.sendOutPlatform.toLowerCase().includes(q)) ||
-          (item.specimenType && item.specimenType.toLowerCase().includes(q)) ||
-          (item.methodology && item.methodology.toLowerCase().includes(q)) ||
-          (item.notes && item.notes.toLowerCase().includes(q));
+        const matchesQuery = examinationMatchesSearch(item, searchQuery, [itemForm]);
 
         return matchesCategory && matchesForm && matchesStatus && matchesScheme && matchesQuery;
       })
@@ -482,7 +470,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-16 text-slate-900">
+    <div className="lims-page-shell text-slate-900">
       
       {/* 1. Header Row */}
       <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">

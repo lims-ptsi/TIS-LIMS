@@ -19,14 +19,15 @@ import {
   FlaskConical,
   Clock,
   Phone,
-  Check
+  Check,
+  Edit
 } from 'lucide-react';
 import { LabTestRequisition } from '../../types/lims';
 import { 
   EXAMINATION_CATALOG, 
   formatCurrency, 
   getExaminationPrice, 
-  getExaminationCode,
+  getExaminationCode, 
   getExaminationCategory 
 } from '../../data/examinationCatalog';
 
@@ -34,6 +35,8 @@ interface RequisitionSlipModalProps {
   isOpen: boolean;
   onClose: () => void;
   requisition: LabTestRequisition | null;
+  canEdit?: boolean;
+  onEditRequisition?: (requisition: LabTestRequisition) => void;
 }
 
 // Crisp Simulated Barcode Component for Medical Requisitions
@@ -69,6 +72,8 @@ export const RequisitionSlipModal: React.FC<RequisitionSlipModalProps> = ({
   isOpen,
   onClose,
   requisition,
+  canEdit = false,
+  onEditRequisition,
 }) => {
   if (!isOpen || !requisition) return null;
 
@@ -137,6 +142,20 @@ export const RequisitionSlipModal: React.FC<RequisitionSlipModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {canEdit && onEditRequisition && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onEditRequisition(requisition);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                title="Edit / Correct this request"
+              >
+                <Edit className="w-3.5 h-3.5 text-[#0176d3]" />
+                <span>Edit Request</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={handlePrint}

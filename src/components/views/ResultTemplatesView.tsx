@@ -410,7 +410,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(templates, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `AegisLIMS_Result_Templates_${new Date().toISOString().split('T')[0]}.json`);
+    downloadAnchor.setAttribute("download", `LAB-TIS_Result_Templates_${new Date().toISOString().split('T')[0]}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -489,7 +489,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-20 font-sans text-slate-900 animate-in fade-in duration-200">
+    <div className="lims-page-shell text-slate-900 animate-in fade-in duration-200">
       
       {/* 1. Page Header & Master Action Bar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">

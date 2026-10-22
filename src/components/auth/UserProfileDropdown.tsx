@@ -137,7 +137,7 @@ export const UserProfileDropdown: React.FC<UserProfileDropdownProps> = () => {
                   className="w-full px-3 py-2 rounded-xl text-left text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition-colors"
                 >
                   <LogOut className="w-4 h-4 text-rose-500" />
-                  <span>Sign Out of LIMS Platform</span>
+                  <span>Sign out of LAB-TIS</span>
                 </button>
               </div>
 

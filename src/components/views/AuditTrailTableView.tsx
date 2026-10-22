@@ -236,7 +236,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-16">
+    <div className="lims-page-shell">
       {/* 1. Chevron Pipeline Stage Indicator */}
       <LifecycleChevronBar
         currentStage="21 CFR Part 11 Audit Integrity"

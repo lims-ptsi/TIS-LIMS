@@ -10,6 +10,7 @@ import { LabTestRequisition } from './NewRequisitionModal';
 import { ExamResultGroup, ExamExaminers, DEFAULT_EXAMINERS } from './ResultEntryModal';
 import { getTemplateForExamination, ExaminationTemplate } from '../../data/testParametersCatalog';
 import { getResultFormForExam, getResultFormById, resolveEntryForm } from '../../data/resultFormsCatalog';
+import { isSendOutExamination } from '../../data/examinationCatalog';
 import { NtpLabRequestForm, NTP_FIELD_KEYS } from '../forms/NtpLabRequestForm';
 
 interface CoAReportModalProps {
@@ -613,6 +614,7 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
     examList.forEach((examName, idx) => {
       const template = getTemplateForExamination(examName);
       const examKey = template.examCode || `EXAM-${idx}`;
+      if (isSendOutExamination(examName, template.examCode || examKey)) return;
       const rf = resolveEntryForm(examName, template.examCode, requisition.patientGender);
       if (rf) {
         if (seenFormIds.has(rf.id)) return;
@@ -755,6 +757,11 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
 
         {/* Screen preview: one form at a time */}
         <div className="overflow-y-auto flex-1 print:hidden">
+          {formTotal === 0 && (
+            <p className="p-8 text-sm text-slate-600">
+              Every examination on this request is send-out. There is no in-house result form to print.
+            </p>
+          )}
           {activeSheet && (
             <SingleExamFormSheet
               requisition={requisition}

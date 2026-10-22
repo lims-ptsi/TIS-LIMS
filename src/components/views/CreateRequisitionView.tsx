@@ -20,7 +20,8 @@ import {
   Trash2,
   Layers,
   Sparkles,
-  History
+  History,
+  FlaskConical
 } from 'lucide-react';
 import { TestDefinition, PriorityLevel, LabTestRequisition, CivilStatus, PatientCategory } from '../../types/lims';
 import { LifecycleChevronBar } from '../layout/LifecycleChevronBar';
@@ -38,9 +39,11 @@ import {
   getExaminationCategory,
   getExaminationName,
   isCorporateSchemeExam,
+  examinationMatchesSearch,
   isStandardSchemeExam,
 } from '../../data/examinationCatalog';
-import { buildPatientDirectory, patientRecordIdFor, PatientRecord, searchPatients } from '../../data/patientDirectory';
+import { buildPatientDirectory, patientRecordIdFor, PatientRecord, searchPatients, splitPatientName } from '../../data/patientDirectory';
+import { canReviseRequest, reviseLockReason } from '../../data/requestDesk';
 
 const WIZARD_STEPS: { id: 1 | 2 | 3; label: string; detail: string }[] = [
   { id: 1, label: 'Patient', detail: 'Find a record, or enter a new patient' },
@@ -55,6 +58,7 @@ interface CreateRequisitionViewProps {
   onCancel: () => void;
   allowQueueLink?: boolean;
   priorRequisitions?: LabTestRequisition[];
+  editingRequest?: LabTestRequisition | null;
 }
 
 export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
@@ -64,6 +68,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
   onCancel,
   allowQueueLink = true,
   priorRequisitions = [],
+  editingRequest = null,
 }) => {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -113,6 +118,49 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
   const [specimenType, setSpecimenType] = useState('WHOLE BLOOD (K2-EDTA)');
   const [tubeCount, setTubeCount] = useState(1);
   const [clinicalNotes, setClinicalNotes] = useState('');
+  const revising = Boolean(editingRequest);
+  const readOnly = Boolean(editingRequest && !canReviseRequest(editingRequest));
+
+  useEffect(() => {
+    if (!editingRequest) return;
+    setFormError(null);
+    setStep(1);
+    setRequestDate((editingRequest.requestDate || todayDate).slice(0, 10));
+    setPatientCategory(editingRequest.patientCategory || 'OPD');
+
+    // Automatically split full name so Last Name is never left blank
+    const rawFirst = (editingRequest.firstName || '').trim();
+    const rawLast = (editingRequest.lastName || '').trim();
+    if (rawFirst && rawLast) {
+      setFirstName(rawFirst);
+      setMiddleName((editingRequest.middleName || '').trim());
+      setLastName(rawLast);
+      setSuffix((editingRequest.suffix || '').trim());
+    } else {
+      const textToSplit = rawFirst || (editingRequest.patientOrSubjectName || '').trim();
+      const parsed = splitPatientName(textToSplit);
+      setFirstName(parsed.firstName);
+      setMiddleName((editingRequest.middleName || '').trim() || parsed.middleName);
+      setLastName(rawLast || parsed.lastName);
+      setSuffix((editingRequest.suffix || '').trim() || parsed.suffix);
+    }
+    setPatientRecordId(editingRequest.patientId || null);
+    setBirthday(editingRequest.patientDob || '');
+    setAge(editingRequest.patientAge ?? '');
+    setSex(editingRequest.patientGender || 'Male');
+    setCivilStatus(editingRequest.civilStatus || 'Single');
+    setAddress(editingRequest.patientAddress === 'N/A' ? '' : (editingRequest.patientAddress || ''));
+    setCaseNo(editingRequest.caseNo || '');
+    setRequestingPhysician(editingRequest.orderingPhysicianOrPI || '');
+    setOrNumber(!editingRequest.orNumber || editingRequest.orNumber.toUpperCase() === 'N/A' ? '' : editingRequest.orNumber);
+    setChargeSlipNumber(editingRequest.chargeSlipNumber || '');
+    setSelectedExaminations(editingRequest.kindOfExamination?.length ? editingRequest.kindOfExamination : (editingRequest.selectedTestNames || []));
+    setSelectedTestIds(editingRequest.selectedTestIds || []);
+    setPriority(editingRequest.priority || 'ROUTINE');
+    setSpecimenType(editingRequest.specimenTypes?.[0] || 'WHOLE BLOOD (K2-EDTA)');
+    setTubeCount(editingRequest.tubeCount || 1);
+    setClinicalNotes(editingRequest.clinicalNotes || '');
+  }, [editingRequest, todayDate]);
 
   // Filtered examination items based on patientCategory
   const isCorporate = patientCategory === 'Corporate';
@@ -154,15 +202,10 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
     return activeCatalog.filter((item) => {
       const itemCategory = getExaminationCategory(item, patientCategory);
       const matchesCategory = activeCategoryTab === 'ALL' || itemCategory === activeCategoryTab;
-      const query = searchTestQuery.toLowerCase().trim();
-      const codeToMatch = (isCorporate && item.corporateCode) ? item.corporateCode : item.code;
-      const matchesQuery = 
-        !query ||
-        item.name.toLowerCase().includes(query) ||
-        (codeToMatch && codeToMatch.toLowerCase().includes(query)) ||
-        (item.code && item.code.toLowerCase().includes(query)) ||
-        itemCategory.toLowerCase().includes(query) ||
-        item.category.toLowerCase().includes(query);
+      const matchesQuery = examinationMatchesSearch(item, searchTestQuery, [
+        itemCategory,
+        isCorporate && item.corporateCode ? item.corporateCode : item.code,
+      ]);
 
       return matchesCategory && matchesQuery;
     });
@@ -322,8 +365,11 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
     return parts.join(' ');
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+    }
+    if (readOnly) return;
     if (step < 3) {
       goToStep((step + 1) as 1 | 2 | 3);
       return;
@@ -352,10 +398,12 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
     }
 
     const formattedPhysician = enforceDoctorMDSuffix(requestingPhysician);
-    const reqNum = `REQ-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-    const effectiveCaseNo = caseNo.trim().toUpperCase() || `CASE-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-    const effectiveChargeSlip = chargeSlipNumber.trim().toUpperCase() || (patientCategory === 'OPD' ? `CS-${Math.floor(10000 + Math.random() * 90000)}` : 'N/A');
-    const effectiveOrNumber = orNumber.trim().toUpperCase() || 'N/A';
+    const reqNum = editingRequest?.requisitionNumber || `REQ-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+    const effectiveCaseNo = caseNo.trim().toUpperCase() || editingRequest?.caseNo || `CASE-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+    const effectiveChargeSlip = patientCategory === 'OPD'
+      ? (chargeSlipNumber.trim().toUpperCase() || `CS-${Math.floor(10000 + Math.random() * 90000)}`)
+      : '';
+    const effectiveOrNumber = patientCategory === 'OPD' ? (orNumber.trim().toUpperCase() || 'N/A') : '';
 
     const tatHours = priority === 'STAT' ? 2 : priority === 'PRIORITY' ? 8 : 24;
     const deadline = new Date(Date.now() + tatHours * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
@@ -371,7 +419,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
     });
 
     const newReq: LabTestRequisition = {
-      id: `req-${Date.now()}`,
+      id: editingRequest?.id || `req-${Date.now()}`,
       requisitionNumber: reqNum,
       requestDate: requestDate || todayDate,
       patientOrSubjectName: fullPatientName,
@@ -400,8 +448,8 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
       specimenTypes: [specimenType.toUpperCase()],
       tubeCount,
       clinicalNotes: clinicalNotes.trim().toUpperCase(),
-      status: 'SUBMITTED',
-      tatDeadline: deadline,
+      status: editingRequest?.status || 'SUBMITTED',
+      tatDeadline: editingRequest?.tatDeadline || deadline,
     };
 
     setIsSubmitting(true);
@@ -414,10 +462,56 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
     }
   };
 
+  if (editingRequest && readOnly) {
+    const exams = editingRequest.kindOfExamination?.length
+      ? editingRequest.kindOfExamination
+      : editingRequest.selectedTestNames || [];
+    return (
+      <div className="lims-page-shell">
+        <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="text-xs text-slate-500 font-medium">Requisition &amp; Order Management</div>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Lab Test Request</h1>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {editingRequest.caseNo || editingRequest.requisitionNumber} · {editingRequest.patientOrSubjectName}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-[#d8dde6] text-xs font-semibold rounded shadow-xs cursor-pointer self-start sm:self-auto"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to home</span>
+          </button>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 text-amber-950 rounded-md px-4 py-3 text-sm">
+          {reviseLockReason(editingRequest)}
+        </div>
+        <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm p-5 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-xs">
+          <div><span className="block text-slate-500">Patient</span><span className="font-semibold text-slate-900">{editingRequest.patientOrSubjectName}</span></div>
+          <div><span className="block text-slate-500">Category</span><span className="font-semibold text-slate-900">{editingRequest.patientCategory || 'OPD'}</span></div>
+          <div><span className="block text-slate-500">Age and sex</span><span className="font-semibold text-slate-900">{editingRequest.patientAge} · {editingRequest.patientGender}</span></div>
+          <div><span className="block text-slate-500">Request date</span><span className="font-semibold text-slate-900">{editingRequest.requestDate}</span></div>
+          <div><span className="block text-slate-500">Physician</span><span className="font-semibold text-slate-900">{editingRequest.orderingPhysicianOrPI || '—'}</span></div>
+          <div><span className="block text-slate-500">Official receipt</span><span className="font-semibold text-slate-900">{editingRequest.orNumber || '—'}</span></div>
+          <div className="sm:col-span-2">
+            <span className="block text-slate-500 mb-1">Examinations</span>
+            <ul className="space-y-1">
+              {exams.map((name) => (
+                <li key={name} className="font-semibold text-slate-900">{name}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const currentStep = WIZARD_STEPS[step - 1];
 
   return (
-    <div ref={formTopRef} className="space-y-4 max-w-5xl mx-auto pb-16">
+    <div ref={formTopRef} className="lims-page-shell">
       {/* 1. Chevron Stage Bar */}
       <LifecycleChevronBar
         currentStage="Electronic Test Requisition & Intake"
@@ -426,18 +520,20 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
       />
 
       {/* 2. Header Card */}
-      <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3] shadow-xs">
-            <FileText className="w-6 h-6" />
+      <div className="bg-white border border-[#d8dde6] rounded-md p-3 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3]">
+            <FileText className="w-4 h-4" />
           </div>
           <div>
-            <div className="text-xs text-slate-500 font-medium">Requisition &amp; Order Management</div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              Create Lab Test Request
+            <div className="text-[10px] text-slate-500 font-medium">Requisition &amp; Order Management</div>
+            <h1 className="text-base font-semibold text-slate-900 tracking-tight">
+              {revising ? 'Correct Lab Test Request' : 'Create Lab Test Request'}
             </h1>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Step {step} of 3 — {currentStep.detail}
+              {revising
+                ? `${editingRequest?.caseNo || editingRequest?.requisitionNumber} — change the details, then save the same request.`
+                : `Step ${step} of 3 — ${currentStep.detail}`}
             </p>
           </div>
         </div>
@@ -456,8 +552,16 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
 
       {/* 3. Form Card Container */}
       <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm overflow-hidden">
-        <form onSubmit={handleSubmit} className="text-xs">
-          <div className="px-5 sm:px-6 pt-5 pb-4 border-b border-slate-200 bg-slate-50/70">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (step < 3) {
+              goToStep((step + 1) as 1 | 2 | 3);
+            }
+          }}
+          className="text-xs"
+        >
+          <div className="px-3 sm:px-4 pt-3 pb-2.5 border-b border-slate-200 bg-slate-50/70">
             <div className="flex items-center">
               {WIZARD_STEPS.map((item, index) => {
                 const active = step === item.id;
@@ -470,7 +574,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                       className="flex items-center gap-2.5 min-w-0 text-left cursor-pointer"
                     >
                       <span
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 border ${
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 border ${
                           active
                             ? 'bg-[#0176d3] border-[#0176d3] text-white'
                             : done
@@ -498,7 +602,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
             </div>
           </div>
 
-          <div className="p-5 sm:p-6 space-y-5 min-h-[420px]">
+          <div className="p-3 sm:p-4 space-y-4 min-h-[320px]">
           {/* Validation Error Alert */}
           {formError && (
             <div className="p-3 rounded-lg bg-rose-50 border border-rose-300 text-rose-900 flex items-center gap-2 text-xs font-semibold animate-shake">
@@ -543,7 +647,9 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                 />
               </div>
 
-              {/* OR# */}
+              {patientCategory === 'OPD' && (
+              <>
+              {/* OR# — OPD cashier only */}
               <div>
                 <label className="text-slate-700 font-semibold block mb-1 text-[11px]">
                   OR# (OFFICIAL RECEIPT)
@@ -571,6 +677,8 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   className="w-full px-3 py-1.5 rounded bg-white border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] font-mono text-xs uppercase"
                 />
               </div>
+              </>
+              )}
             </div>
 
             {/* Requesting Physician */}
@@ -842,18 +950,23 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
             </div>
 
             {/* OPD Patient Cashier Partial Receipt Notice Banner */}
-            {patientCategory === 'OPD' && (
+            {patientCategory === 'OPD' ? (
               <div className="p-3.5 rounded-lg bg-amber-50/90 border border-amber-300 text-amber-950 flex items-start gap-3 shadow-2xs mt-2">
                 <Receipt className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
                 <div>
-                  <div className="font-bold text-[11px] uppercase tracking-wide flex items-center gap-1.5">
-                    <span>OPD Cashier Settlement Workflow</span>
-                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 border border-amber-300">
-                      Required Before Extraction
-                    </span>
-                  </div>
+                  <div className="font-bold text-[11px] uppercase tracking-wide">OPD goes to the cashier</div>
                   <p className="text-[11px] text-amber-900 mt-0.5 leading-relaxed">
-                    This OPD request goes to the cashier. The cashier assigns the official receipt number after the patient pays, then the laboratory can receive the specimen.
+                    The cashier assigns the official receipt after the patient pays. The laboratory receives the specimen after that receipt is assigned.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-950 flex items-start gap-3 shadow-2xs mt-2">
+                <FlaskConical className="w-5 h-5 text-sky-700 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-[11px] uppercase tracking-wide">This category goes to the laboratory</div>
+                  <p className="text-[11px] text-sky-900 mt-0.5 leading-relaxed">
+                    {patientCategory} does not stop at the cashier. Send the patient to the laboratory section.
                   </p>
                 </div>
               </div>
@@ -885,9 +998,18 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                 <button type="button" onClick={() => goToStep(2)} className="mt-1.5 text-[11px] font-bold text-[#0176d3] hover:underline cursor-pointer">Edit request</button>
               </div>
               <div>
-                <div className="text-[10px] font-semibold text-slate-400 uppercase">Official receipt</div>
-                <div className="font-bold text-slate-900 mt-0.5">{orNumber || 'Cashier assigns later'}</div>
-                <div className="text-slate-600 mt-0.5">{chargeSlipNumber ? `Charge slip ${chargeSlipNumber}` : 'Charge slip optional'}</div>
+                <div className="text-[10px] font-semibold text-slate-400 uppercase">Next desk</div>
+                {patientCategory === 'OPD' ? (
+                  <>
+                    <div className="font-bold text-slate-900 mt-0.5">Cashier</div>
+                    <div className="text-slate-600 mt-0.5">{orNumber || 'Receipt assigned after payment'}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="font-bold text-slate-900 mt-0.5">Laboratory</div>
+                    <div className="text-slate-600 mt-0.5">{patientCategory} does not pass the cashier</div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1025,7 +1147,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
           )}
           </div>
 
-          <div className="px-5 sm:px-6 py-4 border-t border-slate-200 bg-white flex items-center justify-between gap-3">
+          <div className="px-3 sm:px-4 py-2.5 border-t border-slate-200 bg-white flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -1050,8 +1172,13 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
 
             {step < 3 ? (
               <button
+                key="btn-step-continue"
                 type="button"
-                onClick={() => goToStep((step + 1) as 1 | 2 | 3)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  goToStep((step + 1) as 1 | 2 | 3);
+                }}
                 className="flex items-center gap-2 px-6 py-2.5 bg-[#0176d3] hover:bg-[#0060b2] text-white rounded-md text-xs font-bold shadow-sm transition-colors cursor-pointer"
               >
                 <span>Continue</span>
@@ -1059,8 +1186,14 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
               </button>
             ) : (
               <button
-                type="submit"
+                key="btn-step-submit"
+                type="button"
                 disabled={isSubmitting}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleSubmit(e);
+                }}
                 className="flex items-center gap-2 px-6 py-2.5 bg-[#0176d3] hover:bg-[#0060b2] disabled:opacity-70 text-white rounded-md text-xs font-bold shadow-sm transition-colors cursor-pointer"
               >
                 {isSubmitting ? (
@@ -1071,7 +1204,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                 ) : (
                   <>
                     <Check className="w-4 h-4" />
-                    <span>Submit lab test request</span>
+                    <span>{revising ? 'Save changes' : patientCategory === 'OPD' ? 'Submit and send to the cashier' : 'Submit and send to the laboratory'}</span>
                   </>
                 )}
               </button>

@@ -1416,15 +1416,11 @@ export function getTemplateForExamination(
       if (m) return m;
     }
     if (clean.includes('HIV')) {
-      const m = findByCode('1060');
-      if (m) return m;
-    }
-    if (clean.includes('SYPHILIS') || clean.includes('VDRL') || clean.includes('RPR')) {
-      const m = findByCode('1059');
+      const m = findByCode('1004');
       if (m) return m;
     }
     if (clean.includes('TSH')) {
-      const m = findByCode('1044');
+      const m = findByCode('1020');
       if (m) return m;
     }
     if (clean.includes('THROMBOPLASTIN') || clean.includes('PTT') || clean.includes('APTT')) {

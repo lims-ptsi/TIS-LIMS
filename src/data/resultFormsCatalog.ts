@@ -3,7 +3,11 @@
  * Distinct from Result Templates (analyte / parameter schemas).
  */
 
-import { findCatalogExamination, getDefaultAssignedForm } from './examinationCatalog';
+import {
+  findCatalogExamination,
+  getDefaultAssignedForm,
+  isSendOutExamination,
+} from './examinationCatalog';
 
 export type ResultFormFieldType = 'text' | 'date' | 'time' | 'select' | 'textarea' | 'datetime';
 
@@ -343,7 +347,7 @@ export const RESULT_FORM_4: ResultFormDefinition = {
   title: 'FECALYSIS',
   shortName: 'RF-04 Fecalysis',
   description: 'PTSI fecalysis result report (macroscopic, microscopic, occult blood)',
-  examCodes: ['1019', '1012'],
+  examCodes: ['1019'],
   orgHeader: {
     name: 'PHILIPPINE TUBERCULOSIS SOCIETY, INC.',
     address: 'QUEZON INSTITUTE Q.I. Compound, E. Rodriguez Sr. Avenue, Quezon City',
@@ -984,21 +988,23 @@ export function getResultFormForAssignedForm(
 
 /**
  * Form used for result entry and printing.
- * Catalog assignment wins (all exams set to Form 6 share RF-06), then exam-code links.
+ * The catalog assignment is the paper that opens. An exam with no official
+ * paper stays on its own result template instead of a different form.
  */
 export function resolveEntryForm(
   examName: string,
   examCode: string,
   gender?: string | null
 ): ResultFormDefinition | undefined {
+  if (isSendOutExamination(examName, examCode)) return undefined;
   const item = findCatalogExamination(examName) || findCatalogExamination(examCode);
   const assigned = item
     ? item.assignedForm || getDefaultAssignedForm(item)
     : undefined;
-  return (
-    getResultFormForAssignedForm(assigned, gender) ||
-    getResultFormForExam(examCode, gender)
-  );
+  const byAssignment = getResultFormForAssignedForm(assigned, gender);
+  if (byAssignment) return byAssignment;
+  if (item) return undefined;
+  return getResultFormForExam(examCode, gender);
 }
 
 /** Normalize patient gender string to male | female when recognizable. */

@@ -26,7 +26,7 @@ export const CoAReportsView: React.FC<CoAReportsViewProps> = ({
 
   if (!testOrders || testOrders.length === 0) {
     return (
-      <div className="space-y-4 max-w-7xl mx-auto pb-12">
+      <div className="lims-page-shell">
         <LifecycleChevronBar
           currentStage="Certificate of Analysis Release"
           entityType="Sample"
@@ -48,7 +48,7 @@ export const CoAReportsView: React.FC<CoAReportsViewProps> = ({
   const currentDef = testDefinitions.find((d) => d.id === currentOrder?.testDefinitionId) || testDefinitions[0];
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-12">
+    <div className="lims-page-shell">
       {/* 1. Chevron Pipeline */}
       <LifecycleChevronBar
         currentStage="Certificate of Analysis Release"

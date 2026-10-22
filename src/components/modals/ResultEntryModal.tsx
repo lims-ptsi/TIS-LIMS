@@ -25,6 +25,7 @@ import {
   ParameterDef 
 } from '../../data/testParametersCatalog';
 import { getResultFormForExam, resolveEntryForm } from '../../data/resultFormsCatalog';
+import { isSendOutExamination } from '../../data/examinationCatalog';
 import { NtpLabRequestForm, NTP_FIELD_KEYS } from '../forms/NtpLabRequestForm';
 import { determineResultFlag } from '../../utils/qcCalculations';
 
@@ -133,6 +134,8 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
 
     examList.forEach((examName, idx) => {
       const template: ExaminationTemplate = getTemplateForExamination(examName);
+      const examKey = template.examCode || `EXAM-${idx}`;
+      if (isSendOutExamination(examName, examKey)) return;
       const paramMap: Record<string, ResultParamValue> = {};
 
       template.parameters.forEach((p) => {
@@ -150,7 +153,6 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
         };
       });
 
-      const examKey = template.examCode || `EXAM-${idx}`;
       const saved = savedExamResults?.[examKey];
       if (saved?.parameters) {
         Object.entries(saved.parameters).forEach(([id, val]) => {

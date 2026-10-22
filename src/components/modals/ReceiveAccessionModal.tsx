@@ -6,7 +6,7 @@ import {
   BadgePercent, 
   Barcode,
   Receipt,
-  AlertCircle
+  AlertCircle,
 } from 'lucide-react';
 import { LabTestRequisition, PatientCategory, PriorityLevel, Sample } from '../../types/lims';
 
@@ -22,14 +22,18 @@ interface ReceiveAccessionModalProps {
       matrix: string;
       tubeCount: number;
       priority: PriorityLevel;
-      storageFacility: string;
-      storageRoom: string;
-      storageTemp: string;
+      storageFacility?: string;
+      storageRoom?: string;
+      storageTemp?: string;
       notes: string;
       orNumber?: string;
+      sampleName?: string;
+      boxId?: string;
+      boxPosition?: string;
     }
   ) => void;
   currentUserName: string;
+  existingSamples?: Sample[];
 }
 
 export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
@@ -38,17 +42,19 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
   requisition,
   onConfirmAccession,
   currentUserName,
+  existingSamples: _existingSamples = [],
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<PatientCategory>('OPD');
   const [sampleType, setSampleType] = useState<Sample['sampleType']>('Whole Blood');
   const [matrix, setMatrix] = useState<string>('K2-EDTA Anticoagulated Whole Blood');
   const [tubeCount, setTubeCount] = useState<number>(2);
   const [priority, setPriority] = useState<PriorityLevel>('ROUTINE');
-  const [storageRoom, setStorageRoom] = useState<string>('Rm 102 - Cold Vault');
-  const [storageTemp, setStorageTemp] = useState<string>('+4°C');
+  const [storageRoom] = useState<string>('Clinical Lab');
+  const [storageTemp] = useState<string>('+4°C');
   const [orNumber, setOrNumber] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [formError, setFormError] = useState<string>('');
 
   // Auto-detect intelligent specimen type based on test panel selections
   useEffect(() => {
@@ -59,19 +65,15 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
     if (tests.includes('urinalysis') || tests.includes('urine')) {
       setSampleType('Urine');
       setMatrix('Clean Catch Midstream Urine');
-      setStorageTemp('+4°C');
     } else if (tests.includes('metabolic') || tests.includes('lipid') || tests.includes('glucose') || tests.includes('sugar') || tests.includes('liver') || tests.includes('renal') || tests.includes('thyroid')) {
       setSampleType('Serum');
       setMatrix('Clotted Serum (SST Gel Separator)');
-      setStorageTemp('+4°C');
     } else if (tests.includes('heavy metals') || tests.includes('water')) {
       setSampleType('Drinking Water');
       setMatrix('Nitric Acid (HNO3) Preserved Water');
-      setStorageTemp('+4°C');
     } else {
       setSampleType('Whole Blood');
       setMatrix('K2-EDTA Anticoagulated Whole Blood');
-      setStorageTemp('+4°C');
     }
 
     setPriority(requisition.priority || 'ROUTINE');
@@ -79,12 +81,19 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
     setNotes(requisition.clinicalNotes || '');
     setOrNumber(requisition.orNumber && requisition.orNumber !== 'N/A' ? requisition.orNumber : '');
     setSelectedCategory(requisition.patientCategory || 'OPD');
+    setFormError('');
   }, [requisition]);
 
   if (!isOpen || !requisition) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const receipt = orNumber.trim().toUpperCase();
+    if (selectedCategory === 'OPD' && (!receipt || receipt === 'N/A')) {
+      setFormError('OPD goes to the cashier first. The laboratory can receive this request after the official receipt is assigned.');
+      return;
+    }
+    setFormError('');
     setIsSubmitting(true);
 
     onConfirmAccession(requisition, {
@@ -189,6 +198,13 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
             </div>
           </div>
 
+          {formError && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-950 flex items-start gap-2 text-xs font-semibold">
+              <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <span>{formError}</span>
+            </div>
+          )}
+
           {/* 2. REQUIRED: PATIENT CATEGORY ASSIGNMENT AS DROPDOWN LIST */}
           <div className="p-4 rounded-lg bg-white border border-slate-200 space-y-2 shadow-2xs">
             <div className="flex items-center justify-between mb-1">
@@ -235,7 +251,7 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] font-bold text-amber-950 block mb-1">
-                    OFFICIAL RECEIPT (OR#) NUMBER (OPTIONAL)
+                    OFFICIAL RECEIPT (OR#) NUMBER *
                   </label>
                   <input
                     type="text"

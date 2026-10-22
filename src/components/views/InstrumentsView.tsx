@@ -53,7 +53,7 @@ export const InstrumentsView: React.FC<InstrumentsViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-12">
+    <div className="lims-page-shell">
       {/* 1. Chevron Pipeline */}
       <LifecycleChevronBar
         currentStage="Instrument Telemetry & Ingestion Queue"

@@ -2,16 +2,17 @@ import React, { useState } from 'react';
 import { 
   Grid, 
   Search, 
-  Star, 
   Plus, 
-  HelpCircle, 
   Settings, 
   Edit3,
-  AlertTriangle,
 } from 'lucide-react';
+import { LabTisBrand } from '../brand/LabTisBrand';
 import { UserProfileDropdown } from '../auth/UserProfileDropdown';
+import { FavoritesMenu } from './FavoritesMenu';
+import { HelpMenu } from './HelpMenu';
+import { SystemStatusMenu } from './SystemStatusMenu';
 import { NotificationDropdown } from './NotificationDropdown';
-import { LimsNotification } from '../../types/lims';
+import { LimsNotification, InstrumentDevice, Sample } from '../../types/lims';
 
 interface TopNavbarProps {
   currentTab: string;
@@ -20,6 +21,9 @@ interface TopNavbarProps {
   showAdminTools?: boolean;
   onSelectTab: (tab: string) => void;
   onOpenNewModal: () => void;
+  instruments?: InstrumentDevice[];
+  samples?: Sample[];
+  onOpenInstruments?: () => void;
   globalSearch: string;
   onGlobalSearchChange: (q: string) => void;
   notifications?: LimsNotification[];
@@ -37,6 +41,9 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   showAdminTools = false,
   onSelectTab,
   onOpenNewModal,
+  instruments = [],
+  samples = [],
+  onOpenInstruments,
   globalSearch,
   onGlobalSearchChange,
   notifications = [],
@@ -57,25 +64,20 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         <div className="flex items-center gap-3">
           <button 
             onClick={() => setShowAppLauncher(!showAppLauncher)}
-            className="p-1.5 rounded hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+            className="lg:hidden p-1.5 rounded hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
             title="App Launcher"
           >
             <Grid className="w-5 h-5 text-slate-700" />
           </button>
 
-          {/* 4 Colored Squares Logo */}
-          <div className="grid grid-cols-2 gap-0.5 w-5 h-5">
-            <div className="w-2 h-2 rounded-[2px] bg-[#0176d3]"></div>
-            <div className="w-2 h-2 rounded-[2px] bg-[#00a1e0]"></div>
-            <div className="w-2 h-2 rounded-[2px] bg-[#2e844a]"></div>
-            <div className="w-2 h-2 rounded-[2px] bg-[#4bca81]"></div>
-          </div>
-
-          <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => onSelectTab(tabs[0]?.id || 'home')}>
-            <span className="font-bold text-sm text-slate-900 tracking-tight">
-              Sample Management
-            </span>
-          </div>
+          <button
+            type="button"
+            className="flex items-center cursor-pointer"
+            onClick={() => onSelectTab(tabs[0]?.id || 'home')}
+            title="LAB-TIS"
+          >
+            <LabTisBrand markClassName="h-11 w-auto" showName={false} />
+          </button>
         </div>
 
         {/* Center: Global Search */}
@@ -94,9 +96,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
         {/* Right: Action Utilities */}
         <div className="flex items-center gap-1.5 text-slate-600">
-          <button className="p-1.5 rounded hover:bg-slate-100 cursor-pointer" title="Favorites">
-            <Star className="w-4 h-4 text-slate-500" />
-          </button>
+          <FavoritesMenu currentTab={currentTab} tabs={tabs} onSelectTab={onSelectTab} />
           {showCreate && (
             <button
               onClick={onOpenNewModal}
@@ -106,12 +106,12 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               <Plus className="w-4 h-4 text-slate-700" />
             </button>
           )}
-          <button className="p-1.5 rounded hover:bg-slate-100 cursor-pointer" title="System Status: Normal (+4°C Validated)">
-            <AlertTriangle className="w-4 h-4 text-slate-500" />
-          </button>
-          <button className="p-1.5 rounded hover:bg-slate-100 cursor-pointer" title="Help & ISO 15189 Documentation">
-            <HelpCircle className="w-4 h-4 text-slate-500" />
-          </button>
+          <SystemStatusMenu
+            instruments={instruments}
+            samples={samples}
+            onOpenInstruments={onOpenInstruments}
+          />
+          <HelpMenu currentTab={currentTab} tabs={tabs} onSelectTab={onSelectTab} />
           
           {/* Real-time Interactive Notification Dropdown */}
           <NotificationDropdown

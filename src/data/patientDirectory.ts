@@ -1,4 +1,4 @@
-import { CivilStatus, LabTestRequisition, PatientCategory } from '../types/lims';
+import { CivilStatus, LabTestRequisition, PatientCategory, Sample } from '../types/lims';
 
 export interface PatientVisit {
   id: string;
@@ -8,6 +8,13 @@ export interface PatientVisit {
   status: string;
   examinations: string[];
   physician: string;
+  patientCategory?: PatientCategory;
+  orNumber?: string;
+  chargeSlipNumber?: string;
+  clinicalNotes?: string;
+  sampleId?: string;
+  sampleBarcode?: string;
+  sampleStatus?: string;
 }
 
 export interface PatientRecord {
@@ -112,7 +119,30 @@ export function patientNameKey(req: LabTestRequisition): string {
   return `pat:${name}|${dob}`;
 }
 
-export function buildPatientDirectory(requisitions: LabTestRequisition[]): PatientRecord[] {
+export function findSampleForRequisition(
+  req: LabTestRequisition,
+  samples: Sample[]
+): Sample | undefined {
+  const reqCase = (req.caseNo || req.externalRef || '').trim().toLowerCase();
+  const reqNum = (req.requisitionNumber || '').trim().toLowerCase();
+  const reqPatient = (req.patientOrSubjectName || '').trim().toLowerCase();
+  return samples.find((s) => {
+    const sExt = (s.externalId || '').trim().toLowerCase();
+    const sPatient = (s.patientOrSourceName || '').trim().toLowerCase();
+    return (
+      (reqCase && sExt === reqCase) ||
+      (reqNum && sExt === reqNum) ||
+      (reqPatient &&
+        sPatient &&
+        (sPatient.includes(reqPatient) || reqPatient.includes(sPatient)))
+    );
+  });
+}
+
+export function buildPatientDirectory(
+  requisitions: LabTestRequisition[],
+  samples: Sample[] = []
+): PatientRecord[] {
   const parent = new Map<string, string>();
   const find = (key: string): string => {
     const current = parent.get(key);
@@ -167,15 +197,26 @@ export function buildPatientDirectory(requisitions: LabTestRequisition[]): Patie
       civilStatus: normalizeCivil(latest.civilStatus),
       address: latest.patientAddress && latest.patientAddress !== 'N/A' ? latest.patientAddress.toUpperCase() : '',
       category: normalizeCategory(latest.patientCategory),
-      visits: sorted.map((req) => ({
-        id: req.id,
-        requisitionNumber: req.requisitionNumber,
-        requestDate: (req.requestDate || '').slice(0, 10),
-        caseNo: req.caseNo || '',
-        status: req.status || 'SUBMITTED',
-        examinations: (req.kindOfExamination?.length ? req.kindOfExamination : req.selectedTestNames) || [],
-        physician: req.orderingPhysicianOrPI || '',
-      })),
+      visits: sorted.map((req) => {
+        const matched = findSampleForRequisition(req, samples);
+        return {
+          id: req.id,
+          requisitionNumber: req.requisitionNumber,
+          requestDate: (req.requestDate || '').slice(0, 10),
+          caseNo: req.caseNo || '',
+          status: req.status || 'SUBMITTED',
+          examinations:
+            (req.kindOfExamination?.length ? req.kindOfExamination : req.selectedTestNames) || [],
+          physician: req.orderingPhysicianOrPI || '',
+          patientCategory: req.patientCategory,
+          orNumber: req.orNumber,
+          chargeSlipNumber: req.chargeSlipNumber,
+          clinicalNotes: req.clinicalNotes,
+          sampleId: matched?.id,
+          sampleBarcode: matched?.barcode,
+          sampleStatus: matched?.status,
+        };
+      }),
     });
   });
 
@@ -183,23 +224,92 @@ export function buildPatientDirectory(requisitions: LabTestRequisition[]): Patie
   return records;
 }
 
+function patientSearchBlob(record: PatientRecord): string {
+  return [
+    record.fullName,
+    record.firstName,
+    record.middleName,
+    record.lastName,
+    record.birthday,
+    record.address,
+    record.id,
+    ...record.visits.flatMap((visit) => [
+      visit.caseNo,
+      visit.requisitionNumber,
+      visit.physician,
+      visit.sampleBarcode,
+      visit.orNumber,
+      visit.chargeSlipNumber,
+      ...visit.examinations,
+    ]),
+  ]
+    .join(' ')
+    .toLowerCase();
+}
+
 export function searchPatients(records: PatientRecord[], query: string): PatientRecord[] {
   const q = query.trim().toLowerCase();
   if (!q) return records.slice(0, 5);
   return records
     .filter((record) => {
-      const blob = [
-        record.fullName,
-        record.firstName,
-        record.middleName,
-        record.lastName,
-        record.birthday,
-        record.address,
-        ...record.visits.flatMap((visit) => [visit.caseNo, visit.requisitionNumber, visit.physician]),
-      ].join(' ').toLowerCase();
+      const blob = patientSearchBlob(record);
       return q.split(/\s+/).every((part) => blob.includes(part));
     })
     .slice(0, 8);
+}
+
+export type PatientRecordSort = 'recent' | 'name' | 'visits';
+
+export function filterPatientRecords(
+  records: PatientRecord[],
+  opts: {
+    query?: string;
+    category?: PatientCategory | 'ALL';
+    sex?: 'ALL' | 'Male' | 'Female' | 'Other';
+    sortBy?: PatientRecordSort;
+  }
+): PatientRecord[] {
+  const q = (opts.query || '').trim().toLowerCase();
+  let list = records.filter((record) => {
+    if (opts.category && opts.category !== 'ALL' && record.category !== opts.category) {
+      return false;
+    }
+    if (opts.sex && opts.sex !== 'ALL' && record.sex !== opts.sex) {
+      return false;
+    }
+    if (!q) return true;
+    const blob = patientSearchBlob(record);
+    return q.split(/\s+/).every((part) => blob.includes(part));
+  });
+
+  const sortBy = opts.sortBy || 'recent';
+  list = [...list].sort((a, b) => {
+    if (sortBy === 'name') return a.fullName.localeCompare(b.fullName);
+    if (sortBy === 'visits') return b.visits.length - a.visits.length;
+    return (b.visits[0]?.requestDate || '').localeCompare(a.visits[0]?.requestDate || '');
+  });
+  return list;
+}
+
+export function patientRecordStats(record: PatientRecord) {
+  const completed = record.visits.filter((v) => v.status === 'COMPLETED').length;
+  const inFlight = record.visits.filter((v) =>
+    ['SUBMITTED', 'RECEIVED', 'IN_TESTING'].includes(v.status)
+  ).length;
+  const examSet = new Set<string>();
+  record.visits.forEach((v) => v.examinations.forEach((e) => examSet.add(e)));
+  const categories = new Set(
+    record.visits.map((v) => v.patientCategory).filter(Boolean) as PatientCategory[]
+  );
+  return {
+    totalVisits: record.visits.length,
+    completed,
+    inFlight,
+    uniqueExams: examSet.size,
+    categories: [...categories],
+    lastVisit: record.visits[0]?.requestDate || '',
+    firstVisit: record.visits[record.visits.length - 1]?.requestDate || '',
+  };
 }
 
 export function patientRecordIdFor(parts: {

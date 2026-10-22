@@ -46,6 +46,7 @@ export interface Sample {
   id: string;
   barcode: string;
   externalId: string; // Medical Record No / Client Sample ID
+  sampleName?: string; // e.g. Lockbox_S000445 or custom sample identifier
   sampleType: 'Whole Blood' | 'Serum' | 'Plasma' | 'Urine' | 'Wastewater' | 'Soil' | 'Drinking Water' | 'Biopsy Tissue';
   matrix: string;
   patientOrSourceName: string;

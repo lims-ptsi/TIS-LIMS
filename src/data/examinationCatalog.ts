@@ -39,8 +39,40 @@ export const isCorporateSchemeExam = (item: ExaminationItem): boolean =>
   item.corporateScheme === true;
 
 /**
+ * Search examinations by internal name, corporate tariff name (HIS sheet), codes, etc.
+ * All whitespace-separated tokens must appear somewhere in the combined text.
+ */
+export function examinationMatchesSearch(
+  item: ExaminationItem,
+  query: string,
+  extraFields: (string | undefined | null)[] = []
+): boolean {
+  const q = query.toLowerCase().trim();
+  if (!q) return true;
+  const haystack = [
+    item.name,
+    item.corporateName,
+    item.code,
+    item.corporateCode,
+    item.category,
+    item.corporateCategory,
+    item.specimenType,
+    item.methodology,
+    item.notes,
+    item.sendOutPlatform,
+    ...extraFields,
+  ]
+    .filter((part): part is string => Boolean(part && String(part).trim()))
+    .join(' ')
+    .toLowerCase();
+  const tokens = q.split(/\s+/).filter(Boolean);
+  return tokens.every((token) => haystack.includes(token));
+}
+
+/**
  * Official Corporate HIS sheet product codes (maps to ExaminationItem.code).
- * Source: Corporate Blood Chemistry + Other Laboratory Services tariff.
+ * Exactly 40 HIS tariff lines (25 Blood Chemistry + 15 Other Laboratory Services).
+ * Pregnancy is one line (HIS 1275) — urine product 1042 only; serum 1068 is not on this sheet.
  */
 export const CORPORATE_SHEET_PRODUCT_CODES: readonly string[] = [
   '1010', // CBC — HIS 1274
@@ -60,8 +92,7 @@ export const CORPORATE_SHEET_PRODUCT_CODES: readonly string[] = [
   '1020', // TSH — HIS 1273
   '1029', // Platelet Count — HIS 1029
   '1004', // HIV Rapid — HIS 1004
-  '1068', // Pregnancy (Serum) — HIS 1275
-  '1042', // Pregnancy (Urine) — HIS 1275
+  '1042', // Pregnancy Test — HIS 1275 (single corporate line)
   '1081', // Lipase — HIS 1008
   '1082', // Amylase — HIS 1009
   '1056', // HBsAg Rapid — HIS 1276
@@ -117,90 +148,90 @@ export const ASSIGNED_FORM_OPTIONS: FormOptionMeta[] = [
   {
     id: 'Form 1',
     formNumber: 1,
-    label: 'Form 1 - Hematology',
-    name: 'Form 1 (Hematology Panel)',
+    label: 'Form 1 - HGT',
+    name: 'Form 1 (HGT / Hemoglucotest)',
     shortName: 'Form 1',
     badgeBg: 'bg-purple-50',
     badgeText: 'text-purple-800',
     badgeBorder: 'border-purple-300',
-    description: 'CBC, Platelet Count, ESR, Blood Typing, CT/BT',
+    description: 'Result Form 1. Capillary blood glucose (HGT).',
   },
   {
     id: 'Form 2',
     formNumber: 2,
-    label: 'Form 2 - Clinical Microscopy',
-    name: 'Form 2 (Clinical Microscopy / Urinalysis & Stool)',
+    label: 'Form 2 - KOH',
+    name: 'Form 2 (KOH Mount)',
     shortName: 'Form 2',
     badgeBg: 'bg-amber-50',
     badgeText: 'text-amber-800',
     badgeBorder: 'border-amber-300',
-    description: 'Urinalysis, Fecalysis, Urine Pregnancy Test',
+    description: 'Result Form 2. Potassium hydroxide mount.',
   },
   {
     id: 'Form 3',
     formNumber: 3,
-    label: 'Form 3 - Clinical Chemistry',
-    name: 'Form 3 (Clinical Chemistry Panel)',
+    label: 'Form 3 - Urinalysis',
+    name: 'Form 3 (Urinalysis)',
     shortName: 'Form 3',
     badgeBg: 'bg-blue-50',
     badgeText: 'text-blue-800',
     badgeBorder: 'border-blue-300',
-    description: 'FBS, Lipid Profile, BUA, BUN, Creatinine, SGPT, SGOT, Electrolytes',
+    description: 'Result Form 3. Urinalysis.',
   },
   {
     id: 'Form 4',
     formNumber: 4,
-    label: 'Form 4 - Serology & Immunology',
-    name: 'Form 4 (Serology & Infectious Diseases)',
+    label: 'Form 4 - Fecalysis',
+    name: 'Form 4 (Fecalysis)',
     shortName: 'Form 4',
     badgeBg: 'bg-pink-50',
     badgeText: 'text-pink-800',
     badgeBorder: 'border-pink-300',
-    description: 'HBsAg, Anti-HBs, Anti-HCV, VDRL/RPR, Dengue, HIV, Typhidot, ASO, RF, CRP',
+    description: 'Result Form 4. Fecalysis and occult blood.',
   },
   {
     id: 'Form 5',
     formNumber: 5,
-    label: 'Form 5 - DSSM / TB Bacteriology',
-    name: 'Form 5 (DSSM & TB Sputum Microscopy)',
+    label: 'Form 5 - Blood Typing',
+    name: 'Form 5 (Blood Typing)',
     shortName: 'Form 5',
     badgeBg: 'bg-emerald-50',
     badgeText: 'text-emerald-800',
     badgeBorder: 'border-emerald-300',
-    description: 'Direct Sputum Smear Microscopy (DSSM/AFB), TB Culture, TB LAMP',
+    description: 'Result Form 5. ABO and Rh blood typing.',
   },
   {
     id: 'Form 6',
     formNumber: 6,
-    label: 'Form 6 - Microbiology & Culture',
-    name: 'Form 6 (Microbiology Culture & AST)',
+    label: 'Form 6 - Hematology',
+    name: 'Form 6 (Hematology / CBC)',
     shortName: 'Form 6',
     badgeBg: 'bg-teal-50',
     badgeText: 'text-teal-800',
     badgeBorder: 'border-teal-300',
-    description: 'Culture & Sensitivity for Sputum, Urine, Body Fluids, Gram Stain',
+    description: 'Result Form 6. Complete blood count, with male and female reference ranges.',
   },
   {
     id: 'Form 7',
     formNumber: 7,
-    label: 'Form 7 - Thyroid & Hormones',
-    name: 'Form 7 (Thyroid Function & Endocrine)',
+    label: 'Form 7 - Pregnancy Test',
+    name: 'Form 7 (Urine Pregnancy Test)',
     shortName: 'Form 7',
     badgeBg: 'bg-indigo-50',
     badgeText: 'text-indigo-800',
     badgeBorder: 'border-indigo-300',
-    description: 'TSH, FT3, FT4, Total T3, Total T4 Chemiluminescent Immunoassays',
+    description: 'Result Form 7. Urine pregnancy test.',
   },
   {
     id: 'Form 8',
     formNumber: 8,
-    label: 'Form 8 - Coagulation Studies',
-    name: 'Form 8 (Coagulation & Hemostasis)',
+    label: 'Form 8 - Clinical Chemistry',
+    name: 'Form 8 (Clinical Chemistry)',
     shortName: 'Form 8',
     badgeBg: 'bg-sky-50',
     badgeText: 'text-sky-800',
     badgeBorder: 'border-sky-300',
-    description: 'Prothrombin Time (PT/INR), Partial Thromboplastin Time (APTT/PTT)',
+    description: 'Result Form 8. Electrolytes, kidney function, liver enzymes, and FBS.',
   },
   {
     id: 'Form 9',
@@ -252,41 +283,86 @@ export function getFormMeta(formId?: string): FormOptionMeta {
   };
 }
 
-export function getDefaultAssignedForm(item: Partial<ExaminationItem>): AssignedFormType {
+/** Official paper each product code prints on. Form N is Result Form N. */
+const OFFICIAL_FORM_BY_CODE: Record<string, AssignedFormType> = {
+  '1043': 'Form 1',
+  '1025': 'Form 2',
+  '1041': 'Form 3',
+  '1011': 'Form 3',
+  '1019': 'Form 4',
+  '1006': 'Form 5',
+  '1030': 'Form 5',
+  '1010': 'Form 6',
+  '1185': 'Form 6',
+  '1042': 'Form 7',
+  '1013': 'Form 7',
+  '1044': 'Form 8',
+  '1050': 'Form 8',
+  '1051': 'Form 8',
+  '1045': 'Form 8',
+  '1009': 'Form 8',
+  '6002': 'Form 8',
+  '1023': 'Form 8',
+  '1007': 'Form 8',
+  '1033': 'Form 8',
+  '1034': 'Form 8',
+  '1021': 'Form 8',
+  '1037': 'Form 9',
+  '1087': 'Form 9',
+  '1038': 'Form 9',
+  '1086': 'Form 10',
+  '1017': 'Form 10',
+};
+
+/**
+ * Ordered here, but performed by a referral laboratory. They have no PTSI result
+ * paper, so they must not print as an in-house official form.
+ */
+const SEND_OUT_EXAM_CODES = new Set([
+  '1029', // Platelet Count
+  '1032', // Partial Thromboplastin Time (PTT)
+  '1047', // Lipid Profile
+  '1057', // Total Calcium
+  '1059', // Magnesium
+  '1061', // Bilirubin (Total, Direct, Indirect)
+  '1081', // Lipase
+  '1082', // Amylase
+  '1005', // Lactic Acid
+]);
+
+/**
+ * Older catalog builds stored a department number (Form 1 meant every hematology
+ * exam, Form 3 meant every chemistry exam). Those numbers are not the result forms.
+ * Used only to recognize an automatic assignment that should be corrected.
+ */
+function legacyDepartmentForm(item: Partial<ExaminationItem>): AssignedFormType {
   const cleanName = (item.name || '').toUpperCase();
   const cat = item.category;
 
   if (item.notes?.toLowerCase().includes('send-out') || cleanName.includes('SEND-OUT')) {
     return 'Send Out';
   }
-
   if (cleanName.includes('PROTHROMBIN') || cleanName.includes('PTT') || cleanName.includes('PT/INR')) {
     return 'Form 8';
   }
   if (cleanName.includes('CLOTTING TIME') || cleanName.includes('CT/BT')) {
     return 'Form 1';
   }
-
   if (cleanName.includes('TSH') || cleanName.includes('FT3') || cleanName.includes('FT4') || cleanName.startsWith('T3') || cleanName.startsWith('T4')) {
     return 'Form 7';
   }
-
   if (cleanName.includes('C/S') || (cleanName.includes('CULTURE') && !cleanName.includes('TB')) || cleanName.includes('GRAM STAIN') || cleanName.includes('KOH')) {
     return 'Form 6';
   }
-
   if (cleanName.includes('TB CULTURE') || cleanName.includes('DRUG SENSITIVITY')) {
     return 'Form 9';
   }
-
   if (cleanName.includes('PSA') || cleanName.includes('CA 125') || cleanName.includes('CA 15-3') || cleanName.includes('CA 19-9') || cleanName.includes('CEA') || cleanName.includes('TROPONIN')) {
     return 'Unassigned';
   }
-
   if (cleanName.includes('PAP SMEAR') || cleanName.includes('WIDAL')) {
     return 'Send Out';
   }
-
   if (cat === 'HEMATOLOGY') return 'Form 1';
   if (cat === 'CLINICAL MICROSCOPY') return 'Form 2';
   if (cat === 'CLINICAL CHEMISTRY') return 'Form 3';
@@ -294,8 +370,40 @@ export function getDefaultAssignedForm(item: Partial<ExaminationItem>): Assigned
   if (cat === 'SEROLOGY' || cat === 'IMMUNOLOGY / THYROID') return 'Form 4';
   if (cat === 'MICROBIOLOGY') return 'Form 6';
   if (cat === 'OTHERS') return 'Form 10';
-
   return 'Send Out';
+}
+
+export function getDefaultAssignedForm(item: Partial<ExaminationItem>): AssignedFormType {
+  const cleanName = (item.name || '').toUpperCase();
+  const code = (item.code || '').trim();
+
+  if (item.notes?.toLowerCase().includes('send-out') || cleanName.includes('SEND-OUT') || cleanName.includes('PAP SMEAR') || cleanName.includes('WIDAL')) {
+    return 'Send Out';
+  }
+  if (OFFICIAL_FORM_BY_CODE[code]) return OFFICIAL_FORM_BY_CODE[code];
+  if (SEND_OUT_EXAM_CODES.has(code)) return 'Send Out';
+
+  if (cleanName.includes('HGT') || cleanName.includes('HEMOGLUCOTEST')) return 'Form 1';
+  if (cleanName.includes('KOH') && !cleanName.includes('POTASSIUM')) return 'Form 2';
+  if (cleanName.includes('URINALYSIS')) return 'Form 3';
+  if (cleanName.includes('FECALYSIS') || cleanName.includes('OCCULT BLOOD')) return 'Form 4';
+  if (cleanName.includes('BLOOD TYPING') || cleanName.includes('ABO')) return 'Form 5';
+  if (cleanName.includes('COMPLETE BLOOD') || cleanName.includes('MICROTAINER') || /\bCBC\b/.test(cleanName)) return 'Form 6';
+  if (cleanName.includes('PREGNANCY') && !cleanName.includes('SERUM')) return 'Form 7';
+  if (
+    /\bFBS\b/.test(cleanName) || cleanName.includes('FASTING BLOOD') ||
+    cleanName.includes('SODIUM') || cleanName.includes('POTASSIUM') || cleanName.includes('CHLORIDE') ||
+    cleanName.includes('ELECTROLYTE') || /\bBUN\b/.test(cleanName) || cleanName.includes('CREATININE') ||
+    cleanName.includes('SGPT') || cleanName.includes('SGOT') || cleanName.includes('URIC ACID') || cleanName.includes('(BUA)')
+  ) return 'Form 8';
+  if (cleanName.includes('TB CULTURE') || cleanName.includes('(DST)') || cleanName === 'DST' || (cleanName.includes('DRUG SENSITIVITY') && cleanName.includes('TB'))) {
+    return 'Form 9';
+  }
+  if (cleanName.includes('XPERT') || cleanName.includes('GENEXPERT') || cleanName.includes('DSSM') || cleanName.includes('AFB') || cleanName.includes('TRUENAT') || cleanName.includes('TB LAMP')) {
+    return 'Form 10';
+  }
+
+  return 'Unassigned';
 }
 
 export type ExaminationCategory = 
@@ -530,7 +638,7 @@ export const EXAMINATION_CATALOG: ExaminationItem[] = [
     methodology: 'Automated Real-Time Cartridge Nested PCR',
     notes: 'Rapid molecular detection of M. tuberculosis DNA & Rifampicin resistance (Gene Xpert)',
     isActive: true,
-    assignedForm: 'Form 5',
+    assignedForm: 'Form 10',
     standardScheme: false, // Corporate sheet only
   },
   { 
@@ -547,8 +655,7 @@ export const EXAMINATION_CATALOG: ExaminationItem[] = [
     turnaroundHours: 24,
     methodology: 'Rapid MPT64 Antigen / Molecular Speciation',
     notes: 'Speciation confirmation of M. tuberculosis complex vs NTM (ID only)',
-    isActive: true,
-    assignedForm: 'Form 5'
+    isActive: true
   },
 
   // --- CLINICAL CHEMISTRY & TUMOR MARKERS (29) ---
@@ -878,8 +985,7 @@ export const EXAMINATION_CATALOG: ExaminationItem[] = [
     turnaroundHours: 4,
     methodology: 'Quantitative / Semi-Quantitative Beta-hCG CMIA',
     notes: 'High Precision quantitative Beta-hCG pregnancy confirmation',
-    isActive: true,
-    assignedForm: 'Form 3'
+    isActive: true
   },
   { 
     code: '1069', 
@@ -950,7 +1056,6 @@ export const EXAMINATION_CATALOG: ExaminationItem[] = [
     methodology: 'Enzymatic Colorimetric Assay',
     notes: 'Pancreatic function biomarker (acute pancreatitis evaluation)',
     isActive: true,
-    assignedForm: 'Form 3',
     standardScheme: false, // Corporate sheet only
   },
   { 
@@ -967,7 +1072,6 @@ export const EXAMINATION_CATALOG: ExaminationItem[] = [
     methodology: 'Enzymatic Direct Substrate Cleavage',
     notes: 'Serum alpha-amylase pancreatic & salivary enzyme determination',
     isActive: true,
-    assignedForm: 'Form 3',
     standardScheme: false, // Corporate sheet only
   },
   { 
@@ -984,7 +1088,6 @@ export const EXAMINATION_CATALOG: ExaminationItem[] = [
     methodology: 'Lactate Oxidase Enzymatic Amperometric',
     notes: 'Plasma lactate assessment for tissue hypoperfusion & metabolic acidosis',
     isActive: true,
-    assignedForm: 'Form 3',
     standardScheme: false, // Corporate sheet only
   },
 
@@ -1308,7 +1411,6 @@ export const EXAMINATION_CATALOG: ExaminationItem[] = [
     methodology: 'Rapid 4th Gen Antigen/Antibody Screening',
     notes: 'HIV 1/2 qualitative screening (SACCL Western Blot confirmation required if reactive)',
     isActive: true,
-    assignedForm: 'Form 4',
     standardScheme: false, // Corporate sheet only
   },
   { 
@@ -1325,7 +1427,6 @@ export const EXAMINATION_CATALOG: ExaminationItem[] = [
     methodology: 'High-Sensitivity HBsAg Rapid / Chemiluminescent Panel',
     notes: 'Pre-ART protocol HBV surface antigen baseline screening',
     isActive: true,
-    assignedForm: 'Form 4',
     standardScheme: false, // Corporate sheet only
   },
   { 
@@ -1342,7 +1443,6 @@ export const EXAMINATION_CATALOG: ExaminationItem[] = [
     methodology: 'Multiparameter CMIA Viral Hepatitis Panel',
     notes: 'Comprehensive profile: Anti-HAV IgM, HBsAg, Anti-HBs, Anti-HCV',
     isActive: true,
-    assignedForm: 'Form 4',
     standardScheme: false, // Corporate sheet only
   },
   { 
@@ -1359,7 +1459,6 @@ export const EXAMINATION_CATALOG: ExaminationItem[] = [
     methodology: '5-Parameter CMIA Hepatitis B Suite',
     notes: 'Complete panel: HBsAg, Anti-HBs, HBeAg, Anti-HBe, Anti-HBc Total',
     isActive: true,
-    assignedForm: 'Form 4',
     standardScheme: false, // Corporate sheet only
   },
   { 
@@ -1514,10 +1613,20 @@ function resolveStoredFormFields(
   item: ExaminationItem,
   defaultMatch?: ExaminationItem
 ): Pick<ExaminationItem, 'assignedForm' | 'sendOutPlatform'> {
-  let assignedForm: AssignedFormType =
-    item.assignedForm ??
-    defaultMatch?.assignedForm ??
-    getDefaultAssignedForm({ ...defaultMatch, ...item });
+  const mergedForDefault = { ...defaultMatch, ...item, assignedForm: undefined, sendOutPlatform: undefined };
+  const legacy = legacyDepartmentForm(mergedForDefault);
+  const official = getDefaultAssignedForm(mergedForDefault);
+  const stored = item.assignedForm ?? defaultMatch?.assignedForm;
+  // A saved value that is only the old department number is corrected to the official paper.
+  // A value the user chose, different from that automatic number, is kept.
+  let assignedForm: AssignedFormType = !stored || stored === legacy ? official : stored;
+  // Unassigned was the automatic placeholder for exams with no paper. These are send-out.
+  if (
+    SEND_OUT_EXAM_CODES.has((item.code || '').trim()) &&
+    (!stored || stored === 'Unassigned' || stored === legacy)
+  ) {
+    assignedForm = 'Send Out';
+  }
 
   const examName = (item.name || defaultMatch?.name || '').toUpperCase();
   const tbFormCodes = new Set(['1037', '1087', '1038']);
@@ -1635,6 +1744,13 @@ export const loadStoredExaminations = (): ExaminationItem[] => {
       return { ...item, ...formFields };
     });
 };
+
+/** True when the examination is referred out and has no in-house result paper. */
+export function isSendOutExamination(examName?: string | null, examCode?: string | null): boolean {
+  const item = findCatalogExamination(examName) || findCatalogExamination(examCode);
+  if (!item) return SEND_OUT_EXAM_CODES.has((examCode || '').trim());
+  return (item.assignedForm || getDefaultAssignedForm(item)) === 'Send Out';
+}
 
 /** Look up a catalog exam by code or name, preferring the user's saved list. */
 export function findCatalogExamination(codeOrName?: string | null): ExaminationItem | undefined {
