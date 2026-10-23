@@ -35,7 +35,7 @@ import {
   DEFAULT_EXAMINERS,
 } from '../modals/ResultEntryModal';
 import { getTemplateForExamination, ExaminationTemplate, ParameterDef } from '../../data/testParametersCatalog';
-import { getResultFormForExam, resolveEntryForm } from '../../data/resultFormsCatalog';
+import { getResultFormForExam, resolveEntryForm, type ResultFormAnalyteRow } from '../../data/resultFormsCatalog';
 import { findCatalogExamination, isSendOutExamination } from '../../data/examinationCatalog';
 import { NtpLabRequestForm, NTP_FIELD_KEYS } from '../forms/NtpLabRequestForm';
 import { determineResultFlag } from '../../utils/qcCalculations';
@@ -1830,7 +1830,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                 !isBloodTyping &&
                 !isPregnancy;
               const panelExamCodes = panel.members.map((m) => m.examCode);
-              const filterFormRow = (row: { id: string; examCode?: string; examOptions?: string[]; examChoiceId?: string }) => {
+              const filterFormRow = (row: ResultFormAnalyteRow) => {
                 if (!resultFormRowAppliesToExamCodes(row, panelExamCodes)) return false;
                 if (!examinedResultsOnly) return true;
                 return isResultFormRowExamined(row, readParam);

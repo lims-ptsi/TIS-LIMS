@@ -192,7 +192,7 @@ function MainLimsContent() {
       notif.title,
       notif.message,
       () => {
-        if (notif.targetTab) {
+        if (notif.targetTab && user) {
           const tab = notif.targetTab === 'submissions' ? 'lab-requests' : notif.targetTab;
           if (canOpenTab(user.roleType, tab)) setCurrentTab(tab);
         }
