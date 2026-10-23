@@ -498,23 +498,6 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
           </div>
         </div>
 
-        {isLabRequests && counts.needsExams > 0 && statusFilter !== 'NEEDS_EXAMS' ? (
-          <div className="px-3 py-2 border-b border-violet-200 bg-violet-50/90 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <p className="text-[11px] text-violet-950 leading-relaxed">
-              <strong>{counts.needsExams}</strong>{' '}
-              {counts.needsExams === 1 ? 'request was' : 'requests were'} filed by Information Staff and{' '}
-              <strong>still need examinations</strong> before OPD can go to the cashier or the lab can receive a specimen.
-            </p>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('NEEDS_EXAMS')}
-              className="shrink-0 px-3 py-1.5 rounded-lg bg-violet-700 text-white text-xs font-semibold hover:bg-violet-800 cursor-pointer"
-            >
-              Show Info desk intake
-            </button>
-          </div>
-        ) : null}
-
         {isLabRequests && statusFilter === 'AT_CASHIER' && counts.atCashier > 0 ? (
           <div className="px-3 py-2 border-b border-amber-100 bg-amber-50/60">
             <p className="text-[11px] text-amber-950 leading-relaxed">

@@ -6,7 +6,6 @@ import {
   Receipt, 
   User, 
   Building2, 
-  CreditCard, 
   AlertCircle,
   CheckCircle2,
   Clock,
@@ -277,20 +276,7 @@ export const OrderOfPaymentModal: React.FC<OrderOfPaymentModalProps> = ({
               </div>
             </div>
 
-            {/* 2. Cashier Notice Box (Clean Slate) */}
-            <div className="p-2.5 sm:p-3 bg-slate-50 border border-slate-300 rounded-lg flex items-start gap-2.5 text-xs print:text-[8.5px] print:p-2 text-slate-800 shadow-2xs print:shadow-none print-avoid-break">
-              <CreditCard className="w-4 h-4 text-slate-700 shrink-0 mt-0.5 print:w-3.5 print:h-3.5" />
-              <div>
-                <strong className="font-bold block text-[10.5px] print:text-[9px] uppercase tracking-wide text-slate-900">
-                  Instructions for Patient: Pay to Cashier Before Specimen Extraction
-                </strong>
-                <p className="text-[10.5px] print:text-[8.5px] text-slate-700 mt-0.5 leading-snug">
-                  Please proceed to the <strong>Cashier Window</strong> with this payment order to pay the total examination fee of <strong>{formatCurrency(totalExaminationFee)}</strong>. Once paid and validated with an <strong>Official Receipt (OR#)</strong>, present this stamped slip to the <strong>Laboratory Phlebotomy Section</strong> for specimen collection.
-                </p>
-              </div>
-            </div>
-
-            {/* 3. Patient & Order Demographics Grid */}
+            {/* 2. Patient & Order Demographics Grid */}
             <div className="bg-slate-50/50 print:bg-white border border-slate-300 rounded-lg p-3 sm:p-3.5 print:p-2 print-avoid-break">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 divide-y md:divide-y-0 md:divide-x divide-slate-200 print:divide-slate-300">
                 

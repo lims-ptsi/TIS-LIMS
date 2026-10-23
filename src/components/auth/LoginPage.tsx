@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Lock, User, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { APP_ROLES, AppRole } from '../../data/roleAccess';
-import { APP_NAME, APP_TAGLINE, LabTisBrand } from '../brand/LabTisBrand';
+import { APP_NAME, APP_TAGLINE } from '../brand/LabTisBrand';
 
 const STARTERS: { username: string; password: string; label: string }[] = [
   { username: 'staff', password: 'staff', label: 'Staff' },
@@ -71,24 +71,18 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen w-full bg-[#f3f5f8] text-[#181b20] flex flex-col justify-between font-sans selection:bg-[#0176d3] selection:text-white">
-      <header className="w-full bg-white border-b border-[#d8dde6] px-6 py-3 flex items-center justify-between shadow-xs">
-        <LabTisBrand markClassName="h-10 w-auto" showName={false} />
-      </header>
-
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6">
         <div className="w-full max-w-md bg-white border border-[#d8dde6] rounded-xl shadow-md p-6 sm:p-8">
           <div className="text-center mb-5">
             <img src="/labtis.png" alt={APP_NAME} className="h-16 w-auto mx-auto object-contain" />
-            <div className="mt-3 text-lg font-bold tracking-tight text-slate-900">{APP_NAME}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">{APP_TAGLINE}</div>
-            <h1 className="text-xl font-bold text-slate-900 mt-4">
-              {mode === 'create' ? 'Create account' : 'Sign in'}
-            </h1>
-            <p className="text-xs text-slate-500 mt-1">
-              {mode === 'create'
-                ? 'The role decides which screens this person can open.'
-                : 'Use your desk account. Each role opens only its own work.'}
-            </p>
+            {mode === 'create' ? (
+              <>
+                <h1 className="text-xl font-bold text-slate-900 mt-4">Create account</h1>
+                <p className="text-xs text-slate-500 mt-1">
+                  The role decides which screens this person can open.
+                </p>
+              </>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-2 gap-1 p-1 mb-5 bg-slate-100 rounded-lg">
