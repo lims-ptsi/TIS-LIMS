@@ -97,7 +97,10 @@ export interface NavTab {
 const NAV: { id: string; label: string; roles: AppRole[] }[] = [
   { id: 'home', label: 'Home', roles: ['STAFF', 'CASHIER', 'LAB_STAFF', 'ADMIN'] },
   { id: 'create-request', label: 'Create Lab Test Request', roles: ['STAFF', 'LAB_STAFF', 'ADMIN'] },
-  { id: 'submissions', label: 'Submissions', roles: ['LAB_STAFF', 'ADMIN'] },
+  { id: 'lab-requests', label: 'Request queue', roles: ['LAB_STAFF', 'ADMIN'] },
+  { id: 'testing-queue', label: 'Testing queue', roles: ['LAB_STAFF', 'ADMIN'] },
+  { id: 'all-requests', label: 'All requests', roles: ['LAB_STAFF', 'ADMIN'] },
+  { id: 'analytics-reports', label: 'Analytics & reports', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'payments', label: 'Payments', roles: ['CASHIER', 'ADMIN'] },
   { id: 'samples', label: 'Samples', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'patient-records', label: 'Patients', roles: ['LAB_STAFF', 'ADMIN'] },
@@ -121,6 +124,7 @@ export function canOpenTab(role: UserRoleType | string | undefined, tab: string)
   if (!isAppRole(role)) return false;
   if (tab === 'sample-detail' || tab === 'boxes') return permissionsForRole(role).canViewSamples === true;
   if (tabsForRole(role).some((item) => item.id === tab)) return true;
+  if ((role === 'ADMIN' || role === 'LAB_STAFF') && tab === 'submissions') return true;
   if (role === 'ADMIN' || role === 'LAB_STAFF') {
     return [
       'batches',

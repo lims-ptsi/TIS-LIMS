@@ -28,7 +28,9 @@ interface TopNavbarProps {
   onGlobalSearchChange: (q: string) => void;
   notifications?: LimsNotification[];
   onMarkNotificationAsRead?: (id: string) => void;
+  onMarkNotificationAsUnread?: (id: string) => void;
   onMarkAllNotificationsAsRead?: () => void;
+  onMarkAllNotificationsAsUnread?: () => void;
   onClearAllNotifications?: () => void;
   onDeleteNotification?: (id: string) => void;
   onSelectNotification?: (notif: LimsNotification) => void;
@@ -48,7 +50,9 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onGlobalSearchChange,
   notifications = [],
   onMarkNotificationAsRead = () => {},
+  onMarkNotificationAsUnread = () => {},
   onMarkAllNotificationsAsRead = () => {},
+  onMarkAllNotificationsAsUnread = () => {},
   onClearAllNotifications = () => {},
   onDeleteNotification = () => {},
   onSelectNotification = () => {},
@@ -117,7 +121,9 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           <NotificationDropdown
             notifications={notifications}
             onMarkAsRead={onMarkNotificationAsRead}
+            onMarkAsUnread={onMarkNotificationAsUnread}
             onMarkAllAsRead={onMarkAllNotificationsAsRead}
+            onMarkAllAsUnread={onMarkAllNotificationsAsUnread}
             onClearAll={onClearAllNotifications}
             onDeleteNotification={onDeleteNotification}
             onSelectNotification={onSelectNotification}

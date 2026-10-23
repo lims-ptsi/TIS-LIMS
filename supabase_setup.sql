@@ -41,6 +41,14 @@ ALTER TABLE public.requisitions ADD COLUMN IF NOT EXISTS suffix TEXT;
 CREATE INDEX IF NOT EXISTS requisitions_patient_record_id_idx
   ON public.requisitions (patient_record_id);
 
+-- Patient contact & pickup / notification (run one statement at a time if the editor hangs)
+ALTER TABLE public.requisitions ADD COLUMN IF NOT EXISTS patient_phone TEXT;
+ALTER TABLE public.requisitions ADD COLUMN IF NOT EXISTS patient_email TEXT;
+ALTER TABLE public.requisitions ADD COLUMN IF NOT EXISTS results_picked_up_at TIMESTAMPTZ;
+ALTER TABLE public.requisitions ADD COLUMN IF NOT EXISTS results_picked_up_by TEXT;
+ALTER TABLE public.requisitions ADD COLUMN IF NOT EXISTS results_ready_sms_sent_at TIMESTAMPTZ;
+ALTER TABLE public.requisitions ADD COLUMN IF NOT EXISTS results_ready_email_sent_at TIMESTAMPTZ;
+
 -- 2. Create Samples Table (if not already created)
 CREATE TABLE IF NOT EXISTS public.samples (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

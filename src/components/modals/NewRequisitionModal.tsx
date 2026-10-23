@@ -67,7 +67,7 @@ export const NewRequisitionModal: React.FC<NewRequisitionModalProps> = ({
 
   const [birthday, setBirthday] = useState('');
   const [age, setAge] = useState<number | ''>('');
-  const [sex, setSex] = useState<'Male' | 'Female' | 'Other'>('Male');
+  const [sex, setSex] = useState<'Male' | 'Female'>('Male');
   const [civilStatus, setCivilStatus] = useState<CivilStatus>('Single');
   const [address, setAddress] = useState('');
   const [caseNo, setCaseNo] = useState('');

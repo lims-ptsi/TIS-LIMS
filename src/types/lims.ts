@@ -242,6 +242,10 @@ export interface LabTestRequisition {
   suffix?: string; // Suffix (Jr., Sr., III, etc.)
   patientDob: string; // Birthday
   patientAddress: string; // Address
+  /** Mobile number for SMS pickup alerts (E.164 or local 09… format) */
+  patientPhone?: string;
+  /** Email for results-ready pickup alerts */
+  patientEmail?: string;
   caseNo: string; // Case No
   patientAge: number; // Age
   patientGender: 'Male' | 'Female' | 'Other'; // Sex
@@ -263,6 +267,14 @@ export interface LabTestRequisition {
   clinicalNotes: string;
   status: 'SUBMITTED' | 'RECEIVED' | 'IN_TESTING' | 'COMPLETED' | 'CANCELLED';
   tatDeadline: string;
+  /** When the patient (or representative) collected the printed/released report */
+  resultsPickedUpAt?: string | null;
+  /** Staff member who recorded release to the patient */
+  resultsPickedUpBy?: string | null;
+  /** When an SMS pickup-ready alert was sent */
+  resultsReadySmsSentAt?: string | null;
+  /** When an email pickup-ready alert was sent */
+  resultsReadyEmailSentAt?: string | null;
 }
 
 export type NotificationType = 
@@ -286,4 +298,10 @@ export interface LimsNotification {
   sampleId?: string;
   patientName?: string;
   targetTab?: string;
+  /** Request queue filter to apply when opening targetTab (e.g. NEEDS_EXAMS). */
+  pipelineFilter?: string;
+  /** Dedupe key for pipeline phase (requisitionNumber:NEEDS_EXAMS, etc.). */
+  workflowKey?: string;
+  /** Desks that should see this alert; omit = all roles. */
+  audience?: ('STAFF' | 'CASHIER' | 'LAB_STAFF' | 'ADMIN')[];
 }

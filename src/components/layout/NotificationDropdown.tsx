@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Bell, 
   Check, 
-  CheckCheck, 
+  CheckCheck,
+  Mail,
   Trash2, 
   FileText, 
   Barcode, 
@@ -16,11 +17,16 @@ import {
 } from 'lucide-react';
 import { LimsNotification } from '../../types/lims';
 import { getSoundEnabled, setSoundEnabled } from '../../utils/notificationSound';
+import { useAuth } from '../../context/AuthContext';
+import { isAppRole } from '../../data/roleAccess';
+import { filterNotificationsForRole } from '../../utils/workflowNotifications';
 
 interface NotificationDropdownProps {
   notifications: LimsNotification[];
   onMarkAsRead: (id: string) => void;
+  onMarkAsUnread: (id: string) => void;
   onMarkAllAsRead: () => void;
+  onMarkAllAsUnread: () => void;
   onClearAll: () => void;
   onDeleteNotification: (id: string) => void;
   onSelectNotification: (notif: LimsNotification) => void;
@@ -44,11 +50,17 @@ const formatTitle = (title: string): string => {
 export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
   notifications,
   onMarkAsRead,
+  onMarkAsUnread,
   onMarkAllAsRead,
+  onMarkAllAsUnread,
   onClearAll,
   onDeleteNotification,
   onSelectNotification,
 }) => {
+  const { user } = useAuth();
+  const role = isAppRole(user?.roleType) ? user.roleType : null;
+  const visibleNotifications = filterNotificationsForRole(notifications, role);
+
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState<'ALL' | 'UNREAD' | 'REQUESTS' | 'RESULTS'>('ALL');
   const [soundOn, setSoundOn] = useState(getSoundEnabled());
@@ -58,7 +70,8 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
   );
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = visibleNotifications.filter((n) => !n.read).length;
+  const readCount = visibleNotifications.filter((n) => n.read).length;
 
   // Close on outside click
   useEffect(() => {
@@ -88,7 +101,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
     }
   };
 
-  const filteredNotifications = notifications.filter((n) => {
+  const filteredNotifications = visibleNotifications.filter((n) => {
     if (filter === 'UNREAD') return !n.read;
     if (filter === 'REQUESTS') return n.type === 'NEW_REQUEST' || n.type === 'ACCESSIONED';
     if (filter === 'RESULTS') return n.type === 'RESULTS_READY';
@@ -193,6 +206,16 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
                   <CheckCheck className="w-3.5 h-3.5" />
                 </button>
               )}
+              {readCount > 0 && (
+                <button
+                  type="button"
+                  onClick={onMarkAllAsUnread}
+                  className="p-1.5 rounded-md text-slate-500 hover:text-[#0176d3] hover:bg-blue-50 border border-slate-200 transition-colors cursor-pointer"
+                  title="Mark all as unread"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -234,7 +257,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
                   : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/70'
               }`}
             >
-              All ({notifications.length})
+              All ({visibleNotifications.length})
             </button>
             <button
               type="button"
@@ -320,18 +343,44 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
                     </div>
                   </div>
 
-                  {/* Delete / Dismiss Single item */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteNotification(notif.id);
-                    }}
-                    className="absolute right-2 top-2 p-1 text-slate-300 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-slate-100 cursor-pointer"
-                    title="Dismiss"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {notif.read ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onMarkAsUnread(notif.id);
+                        }}
+                        className="p-1 text-slate-400 hover:text-[#0176d3] rounded hover:bg-blue-50 cursor-pointer"
+                        title="Mark as unread"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onMarkAsRead(notif.id);
+                        }}
+                        className="p-1 text-slate-400 hover:text-emerald-700 rounded hover:bg-emerald-50 cursor-pointer"
+                        title="Mark as read"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteNotification(notif.id);
+                      }}
+                      className="p-1 text-slate-300 hover:text-slate-600 rounded hover:bg-slate-100 cursor-pointer"
+                      title="Dismiss"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))
             ) : (
@@ -348,7 +397,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
           </div>
 
           {/* Clean Footer */}
-          {notifications.length > 0 && (
+          {visibleNotifications.length > 0 && (
             <div className="px-3.5 py-2 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between text-xs">
               <span className="text-slate-400 text-[10.5px]">
                 Audio alerts: <strong className={soundOn ? 'font-medium text-emerald-600' : 'text-slate-400'}>{soundOn ? 'Active' : 'Muted'}</strong>

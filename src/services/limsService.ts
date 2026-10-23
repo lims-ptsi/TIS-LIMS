@@ -96,6 +96,8 @@ export const limsService = {
           suffix,
         patientDob: row.birthday || '',
         patientAddress: row.address || '',
+        patientPhone: row.patient_phone || row.phone || undefined,
+        patientEmail: row.patient_email || row.email || undefined,
         caseNo: row.case_no || '',
         patientAge: Number(row.age) || 0,
         patientGender: row.sex || 'Male',
@@ -107,14 +109,18 @@ export const limsService = {
         organizationOrClient: row.organization_client || '',
         externalRef: row.case_no || row.requisition_number,
         priority: row.priority || 'ROUTINE',
-        selectedTestIds: row.selected_test_ids || ['test-cbc'],
-        selectedTestNames: Array.isArray(row.kind_of_examination) ? row.kind_of_examination : ['CBC'],
+        selectedTestIds: Array.isArray(row.selected_test_ids) ? row.selected_test_ids : [],
+        selectedTestNames: Array.isArray(row.kind_of_examination) ? row.kind_of_examination : [],
         specimenTypes: Array.isArray(row.specimen_types) ? row.specimen_types : ['Whole Blood (K2-EDTA)'],
         tubeCount: Number(row.tube_count) || 1,
         patientCategory: row.patient_category || undefined,
         clinicalNotes: row.clinical_notes || '',
         status: row.status || 'SUBMITTED',
         tatDeadline: row.tat_deadline || new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+        resultsPickedUpAt: row.results_picked_up_at || null,
+        resultsPickedUpBy: row.results_picked_up_by || null,
+        resultsReadySmsSentAt: row.results_ready_sms_sent_at || null,
+        resultsReadyEmailSentAt: row.results_ready_email_sent_at || null,
       };
     });
     } catch (err) {
@@ -142,6 +148,8 @@ export const limsService = {
         sex: req.patientGender,
         civil_status: req.civilStatus,
         address: req.patientAddress,
+        patient_phone: req.patientPhone || null,
+        patient_email: req.patientEmail || null,
         case_no: req.caseNo,
         requesting_physician: req.orderingPhysicianOrPI,
         kind_of_examination: req.kindOfExamination,
@@ -154,6 +162,10 @@ export const limsService = {
         patient_category: req.patientCategory || 'OPD',
         clinical_notes: req.clinicalNotes,
         status: req.status,
+        results_picked_up_at: req.resultsPickedUpAt || null,
+        results_picked_up_by: req.resultsPickedUpBy || null,
+        results_ready_sms_sent_at: req.resultsReadySmsSentAt || null,
+        results_ready_email_sent_at: req.resultsReadyEmailSentAt || null,
       };
 
       const optionalColumns = [
@@ -163,6 +175,12 @@ export const limsService = {
         'last_name',
         'suffix',
         'patient_category',
+        'results_picked_up_at',
+        'results_picked_up_by',
+        'patient_phone',
+        'patient_email',
+        'results_ready_sms_sent_at',
+        'results_ready_email_sent_at',
       ];
       let currentPayload = { ...payload };
       for (let attempt = 0; attempt < optionalColumns.length + 1; attempt += 1) {
@@ -206,6 +224,8 @@ export const limsService = {
         sex: req.patientGender,
         civil_status: req.civilStatus,
         address: req.patientAddress,
+        patient_phone: req.patientPhone || null,
+        patient_email: req.patientEmail || null,
         case_no: req.caseNo,
         requesting_physician: req.orderingPhysicianOrPI,
         kind_of_examination: req.kindOfExamination,
@@ -218,6 +238,10 @@ export const limsService = {
         patient_category: req.patientCategory || 'OPD',
         clinical_notes: req.clinicalNotes,
         status: req.status,
+        results_picked_up_at: req.resultsPickedUpAt || null,
+        results_picked_up_by: req.resultsPickedUpBy || null,
+        results_ready_sms_sent_at: req.resultsReadySmsSentAt || null,
+        results_ready_email_sent_at: req.resultsReadyEmailSentAt || null,
       };
       const optionalColumns = [
         'patient_record_id',
@@ -226,6 +250,12 @@ export const limsService = {
         'last_name',
         'suffix',
         'patient_category',
+        'results_picked_up_at',
+        'results_picked_up_by',
+        'patient_phone',
+        'patient_email',
+        'results_ready_sms_sent_at',
+        'results_ready_email_sent_at',
       ];
       let currentPayload = { ...payload };
       for (let attempt = 0; attempt < optionalColumns.length + 1; attempt += 1) {

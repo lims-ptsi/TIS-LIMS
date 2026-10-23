@@ -39,6 +39,27 @@
     font-size: 12px !important;
     line-height: 1.35;
   }
+
+  /* Printable / preview result form tables — no grid box lines (field underlines unchanged) */
+  .lims-result-form-table {
+    border: none !important;
+  }
+
+  .lims-result-form-table .lims-rf-grid-head,
+  .lims-result-form-table .lims-rf-grid-head > *,
+  .lims-result-form-table .lims-rf-grid-row,
+  .lims-result-form-table .lims-rf-grid-row > *,
+  .lims-result-form-table .lims-rf-section-label {
+    border: none !important;
+  }
+
+  /* Patient header on result forms — labels + values, no field underlines */
+  .lims-result-form-patient input,
+  .lims-result-form-patient select,
+  .lims-result-form-patient textarea {
+    border: none !important;
+    box-shadow: none !important;
+  }
 }
 
 /* Chevron Lifecycle Pipeline Bar Styling */

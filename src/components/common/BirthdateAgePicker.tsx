@@ -293,7 +293,7 @@ export const BirthdateAgePicker: React.FC<BirthdateAgePickerProps> = ({
             <CalendarIcon className="w-3 h-3 text-[#0176d3]" />
             <span>BIRTHDAY {required && '*'}</span>
           </label>
-          <span className="text-[9.5px] text-slate-400 font-mono">MM/DD/YYYY</span>
+          <span className="text-[9.5px] text-slate-400">MM/DD/YYYY</span>
         </div>
 
         <div className="relative">
@@ -301,11 +301,10 @@ export const BirthdateAgePicker: React.FC<BirthdateAgePickerProps> = ({
             type="text"
             required={required}
             disabled={disabled}
-            placeholder="MM/DD/YYYY"
             value={typedText}
             onChange={handleTypedChange}
             onFocus={() => setIsOpen(true)}
-            className={`w-full pl-3 pr-8 py-1.5 rounded border text-xs font-mono transition-all ${
+            className={`w-full pl-3 pr-8 py-1.5 rounded border text-xs transition-all ${
               isOpen 
                 ? 'border-[#0176d3] ring-2 ring-[#0176d3]/20 bg-white' 
                 : birthday 
@@ -328,11 +327,11 @@ export const BirthdateAgePicker: React.FC<BirthdateAgePickerProps> = ({
         {/* Clear / Status Helper Badge */}
         {birthday && (
           <div className="flex items-center justify-between pt-1">
-            <span className="text-[9.5px] text-emerald-700 font-mono font-medium truncate">
+            <span className="text-[9.5px] text-emerald-700 font-medium truncate">
               ✓ {formattedDobSummary}
             </span>
             {isEstimatedFromAge && (
-              <span className="text-[9px] bg-amber-50 text-amber-800 border border-amber-200 px-1 rounded font-mono">
+              <span className="text-[9px] bg-amber-50 text-amber-800 border border-amber-200 px-1 rounded">
                 Est.
               </span>
             )}
@@ -365,7 +364,7 @@ export const BirthdateAgePicker: React.FC<BirthdateAgePickerProps> = ({
                 <select
                   value={viewYear}
                   onChange={(e) => setViewYear(parseInt(e.target.value, 10))}
-                  className="w-full pl-2 pr-6 py-1 bg-blue-50/60 hover:bg-blue-100/60 border border-blue-200 rounded text-xs font-mono font-bold text-blue-900 cursor-pointer focus:outline-none focus:border-[#0176d3]"
+                  className="w-full pl-2 pr-6 py-1 bg-blue-50/60 hover:bg-blue-100/60 border border-blue-200 rounded text-xs font-bold text-blue-900 cursor-pointer focus:outline-none focus:border-[#0176d3]"
                 >
                   {yearOptions.map((y) => (
                     <option key={y} value={y}>
@@ -398,7 +397,7 @@ export const BirthdateAgePicker: React.FC<BirthdateAgePickerProps> = ({
                       key={dec.label}
                       type="button"
                       onClick={() => setViewYear(dec.startYear + 5)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold transition-all cursor-pointer ${
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer ${
                         isActive
                           ? 'bg-[#0176d3] text-white'
                           : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
@@ -425,7 +424,7 @@ export const BirthdateAgePicker: React.FC<BirthdateAgePickerProps> = ({
               </div>
 
               {/* Days grid */}
-              <div className="grid grid-cols-7 gap-1 text-center text-xs font-mono">
+              <div className="grid grid-cols-7 gap-1 text-center text-xs">
                 {/* Blank leading days */}
                 {Array.from({ length: firstDayOffset }).map((_, i) => (
                   <div key={`blank-${i}`} className="h-7" />
@@ -461,7 +460,7 @@ export const BirthdateAgePicker: React.FC<BirthdateAgePickerProps> = ({
             {/* Quick Age Demographic Presets */}
             <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[10px]">
               <span className="font-semibold text-slate-500">Quick Age Presets:</span>
-              <div className="flex items-center gap-1 font-mono">
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => handleSelectQuickAge(25)}
@@ -500,7 +499,7 @@ export const BirthdateAgePicker: React.FC<BirthdateAgePickerProps> = ({
             <Calculator className="w-3 h-3 text-[#0176d3]" />
             <span>AGE {required && '*'}</span>
           </label>
-          <span className="text-[9.5px] text-blue-700 font-mono font-semibold">YEARS</span>
+          <span className="text-[9.5px] text-blue-700 font-semibold">YEARS</span>
         </div>
 
         <div className="relative">
@@ -510,21 +509,20 @@ export const BirthdateAgePicker: React.FC<BirthdateAgePickerProps> = ({
             max="130"
             required={required}
             disabled={disabled}
-            placeholder="0"
             value={age}
             onChange={(e) => handleDirectAgeChange(e.target.value)}
-            className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono text-xs font-bold bg-slate-50 focus:bg-white focus:border-[#0176d3] focus:ring-1 focus:ring-[#0176d3] transition-all"
+            className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 text-xs font-bold bg-slate-50 focus:bg-white focus:border-[#0176d3] focus:ring-1 focus:ring-[#0176d3] transition-all"
             title="Type exact age in years to auto-estimate birth year"
           />
           {age !== '' && typeof age === 'number' && (
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 font-mono pointer-events-none">
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
               YRS
             </span>
           )}
         </div>
 
         {age !== '' && typeof age === 'number' && (
-          <div className="pt-1 text-[9.5px] text-slate-500 font-mono">
+          <div className="pt-1 text-[9.5px] text-slate-500">
             {age === 0 ? 'Infant (< 1 yr)' : age < 18 ? 'Pediatric' : age >= 60 ? 'Senior Citizen' : 'Adult'}
           </div>
         )}

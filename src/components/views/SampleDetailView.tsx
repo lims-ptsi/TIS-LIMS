@@ -21,6 +21,9 @@ import {
   Check,
   ExternalLink,
   AlertCircle,
+  PackageCheck,
+  Mail,
+  MessageSquare,
 } from 'lucide-react';
 import { Sample } from '../../types/lims';
 import { LabTestRequisition } from '../modals/NewRequisitionModal';
@@ -36,7 +39,15 @@ import { getResultFormForExam, resolveEntryForm } from '../../data/resultFormsCa
 import { findCatalogExamination, isSendOutExamination } from '../../data/examinationCatalog';
 import { NtpLabRequestForm, NTP_FIELD_KEYS } from '../forms/NtpLabRequestForm';
 import { determineResultFlag } from '../../utils/qcCalculations';
+import { baselineParameterValue, simulateParameterValue } from '../../utils/resultSimulate';
+import {
+  hasEnteredResult,
+  isResultFormRowExamined,
+  resultFormRowAppliesToExamCodes,
+} from '../../utils/resultDisplay';
 import { Barcode } from '../common/Barcode';
+import { formatResultsPickupWhen, isResultsPickedUp } from '../../utils/resultsPickup';
+import { DocumentSideDrawer } from '../modals/DocumentSideDrawer';
 
 function DetailField({
   label,
@@ -151,6 +162,10 @@ interface SampleDetailViewProps {
   onReceiveSpecimen?: (req: LabTestRequisition) => void;
   onViewSlip?: (req: LabTestRequisition) => void;
   canAccession?: boolean;
+  canRecordResultsPickup?: boolean;
+  onMarkResultsPickedUp?: (req: LabTestRequisition, pickedUp: boolean) => void;
+  canNotifyPatient?: boolean;
+  onNotifyResultsReady?: (req: LabTestRequisition) => void;
 }
 
 export function getExamAbbreviation(name: string): string {
@@ -608,8 +623,13 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
   onReceiveSpecimen,
   onViewSlip,
   canAccession = true,
+  canRecordResultsPickup = false,
+  onMarkResultsPickedUp,
+  canNotifyPatient = false,
+  onNotifyResultsReady,
 }) => {
-  const [activeTab, setActiveTab] = useState<'details' | 'results' | 'print-label'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'results'>('details');
+  const [cryoLabelOpen, setCryoLabelOpen] = useState(false);
   const [selectedContainerIndex, setSelectedContainerIndex] = useState<number>(0);
   const [labelGroupingMode, setLabelGroupingMode] = useState<'container' | 'individual'>('container');
   const [printAllMode, setPrintAllMode] = useState<boolean>(false);
@@ -621,6 +641,8 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
   const [saveToast, setSaveToast] = useState<string | null>(null);
   // Must be declared before any conditional return (rules-of-hooks)
   const [localExamResults, setLocalExamResults] = useState<Record<string, ExamResultGroup>>({});
+  /** When true, hide test rows with no entered result (show examined tests only). */
+  const [examinedResultsOnly, setExaminedResultsOnly] = useState(false);
   const dirtyRef = useRef(false);
   const hydratedFor = useRef('');
   const onSaveRef = useRef(onSaveResults);
@@ -1134,7 +1156,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
 
         paramsList.forEach((p) => {
           if (!p) return;
-          const defaultVal = p.defaultValue || (p.specMin !== undefined && p.specMax !== undefined ? ((p.specMin + p.specMax) / 2).toFixed(2) : 'Normal');
+          const defaultVal = baselineParameterValue(p);
           params[p.id] = {
             paramId: p.id,
             paramCode: p.code || 'PARAM',
@@ -1170,31 +1192,18 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
 
         paramsList.forEach((p) => {
           if (!p) return;
-          if (p.dataType === 'NUMERIC' && p.specMin !== undefined && p.specMax !== undefined) {
-            const mid = (p.specMin + p.specMax) / 2;
-            const range = (p.specMax - p.specMin) * 0.4;
-            const randomVal = (mid + (Math.random() - 0.5) * range).toFixed(2);
-            params[p.id] = {
-              paramId: p.id,
-              paramCode: p.code || 'PARAM',
-              paramName: p.name || 'Parameter',
-              unit: p.unit || '',
-              value: randomVal,
-              flag: calculateFlag(p, randomVal),
-              isCalculated: false,
-            };
-          } else if (p.dataType === 'SELECT' && p.options && p.options.length > 0) {
-            const defaultOpt = p.defaultValue || p.options[0];
-            params[p.id] = {
-              paramId: p.id,
-              paramCode: p.code || 'PARAM',
-              paramName: p.name || 'Parameter',
-              unit: p.unit || '',
-              value: defaultOpt,
-              flag: calculateFlag(p, defaultOpt),
-              isCalculated: false,
-            };
-          }
+          if (p.dataType === 'CALCULATED') return;
+          const simulated = simulateParameterValue(p);
+          if (!simulated) return;
+          params[p.id] = {
+            paramId: p.id,
+            paramCode: p.code || 'PARAM',
+            paramName: p.name || 'Parameter',
+            unit: p.unit || '',
+            value: simulated,
+            flag: calculateFlag(p, simulated),
+            isCalculated: false,
+          };
         });
 
         updated[key] = { ...group, parameters: params };
@@ -1303,6 +1312,40 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                   <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" aria-hidden />
                   {workflowStatusLabel}
                 </span>
+                {isCompleted && requisition ? (
+                  isResultsPickedUp(requisition) ? (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border bg-slate-100 text-slate-700 border-slate-200"
+                      title={
+                        requisition.resultsPickedUpBy
+                          ? `Picked up by ${requisition.resultsPickedUpBy}${formatResultsPickupWhen(requisition.resultsPickedUpAt) ? ` · ${formatResultsPickupWhen(requisition.resultsPickedUpAt)}` : ''}`
+                          : formatResultsPickupWhen(requisition.resultsPickedUpAt) || 'Picked up'
+                      }
+                    >
+                      Picked up
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border bg-violet-50 text-violet-900 border-violet-200">
+                      Awaiting pickup
+                    </span>
+                  )
+                ) : null}
+                {isCompleted && requisition?.resultsReadySmsSentAt ? (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border bg-sky-50 text-sky-800 border-sky-200"
+                    title={`SMS sent ${formatResultsPickupWhen(requisition.resultsReadySmsSentAt) || ''}`}
+                  >
+                    SMS sent
+                  </span>
+                ) : null}
+                {isCompleted && requisition?.resultsReadyEmailSentAt ? (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border bg-sky-50 text-sky-800 border-sky-200"
+                    title={`Email sent ${formatResultsPickupWhen(requisition.resultsReadyEmailSentAt) || ''}`}
+                  >
+                    Email sent
+                  </span>
+                ) : null}
               </div>
 
               <h1 className="text-xl sm:text-[1.35rem] font-semibold text-slate-900 tracking-tight mt-1 leading-tight">
@@ -1376,10 +1419,51 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
               </button>
             )}
 
+            {isCompleted &&
+              requisition &&
+              canNotifyPatient &&
+              onNotifyResultsReady && (
+                <button
+                  type="button"
+                  onClick={() => onNotifyResultsReady(requisition)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-md border border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100 transition-colors cursor-pointer"
+                  title="Review SMS/email preview and send pickup alert"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <Mail className="w-3.5 h-3.5 opacity-70" />
+                  <span>Notify patient</span>
+                </button>
+              )}
+
+            {isCompleted &&
+              requisition &&
+              canRecordResultsPickup &&
+              onMarkResultsPickedUp && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onMarkResultsPickedUp(requisition, !isResultsPickedUp(requisition))
+                  }
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-md border transition-colors cursor-pointer ${
+                    isResultsPickedUp(requisition)
+                      ? 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                      : 'border-violet-300 bg-violet-50 text-violet-900 hover:bg-violet-100'
+                  }`}
+                  title={
+                    isResultsPickedUp(requisition)
+                      ? 'Review and clear pickup record'
+                      : 'Review release checklist and record patient pickup'
+                  }
+                >
+                  <PackageCheck className="w-3.5 h-3.5" />
+                  <span>{isResultsPickedUp(requisition) ? 'Undo pickup' : 'Mark picked up'}</span>
+                </button>
+              )}
+
             <button
               type="button"
               onClick={() => {
-                setActiveTab('print-label');
+                setCryoLabelOpen(true);
                 onPrintLabel?.(sample);
               }}
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-md border border-slate-300 transition-colors cursor-pointer"
@@ -1429,17 +1513,6 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
               </span>
             ) : null}
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('print-label')}
-            className={`py-3 px-3 text-sm font-semibold transition-colors border-b-2 -mb-px whitespace-nowrap cursor-pointer ${
-              activeTab === 'print-label'
-                ? 'text-[#0176d3] border-[#0176d3] bg-white'
-                : 'text-slate-600 border-transparent hover:text-slate-900'
-            }`}
-          >
-            Zebra cryo label
-          </button>
         </div>
 
       {/* 4. Tab 1: DETAILS */}
@@ -1465,6 +1538,14 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                   value={`${requisition?.patientAge || 35} yrs · ${requisition?.patientGender || 'Male'}`}
                 />
                 <DetailField label="Civil status" value={requisition?.civilStatus || 'Single'} />
+                <DetailField
+                  label="Mobile (SMS)"
+                  value={requisition?.patientPhone?.trim() || '—'}
+                />
+                <DetailField
+                  label="Email"
+                  value={requisition?.patientEmail?.trim() || '—'}
+                />
                 <DetailField label="Sample barcode" value={sample.barcode} emphasize="accent" />
                 <DetailField label="Specimen type" value={sample.sampleType} />
                 <DetailField label="Matrix / preservative" value={sample.matrix} />
@@ -1645,6 +1726,23 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
+                onClick={() => setExaminedResultsOnly((v) => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border shadow-2xs transition-all cursor-pointer ${
+                  examinedResultsOnly
+                    ? 'bg-[#0176d3]/10 border-[#0176d3]/40 text-[#014486]'
+                    : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                }`}
+                title={
+                  examinedResultsOnly
+                    ? 'Showing tests with results only — click to show all parameters'
+                    : 'Showing all parameters — click to show examined tests only'
+                }
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{examinedResultsOnly ? 'Examined only' : 'Show all tests'}</span>
+              </button>
+              <button
+                type="button"
                 onClick={handleFillNormalBaseline}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg shadow-2xs transition-all cursor-pointer active:scale-95"
                 title="Fill normal physiological baselines directly on this page"
@@ -1731,6 +1829,12 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                 !useSimpleTestResult &&
                 !isBloodTyping &&
                 !isPregnancy;
+              const panelExamCodes = panel.members.map((m) => m.examCode);
+              const filterFormRow = (row: { id: string; examCode?: string; examOptions?: string[]; examChoiceId?: string }) => {
+                if (!resultFormRowAppliesToExamCodes(row, panelExamCodes)) return false;
+                if (!examinedResultsOnly) return true;
+                return isResultFormRowExamined(row, readParam);
+              };
 
               const renderResultInput = (param: ParameterDef, currentValue: string) => {
                 if (param.dataType === 'SELECT' && param.options) {
@@ -1862,30 +1966,50 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                     </div>
                   ) : useSimpleTestResult && resultForm?.resultSections ? (
                     /* PTSI Form 3/4: TEST|RESULT · Form 6: TEST|RESULT|UNIT|REF */
-                    <div className="border-t border-slate-200">
-                      {resultForm.tableColumns === 'test-result-unit-ref' ? (
-                        <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-300 text-xs font-semibold text-slate-600">
-                          <div className="col-span-4 px-4 py-2 border-r border-slate-300">Test</div>
-                          <div className="col-span-3 px-4 py-2 border-r border-slate-300">Result</div>
-                          <div className="col-span-2 px-4 py-2 border-r border-slate-300">Unit</div>
+                    (() => {
+                      const visibleSectionRows = resultForm.resultSections.map((section) => ({
+                        section,
+                        rows: section.rows.filter(filterFormRow),
+                      }));
+                      const anyVisible = visibleSectionRows.some((s) => s.rows.length > 0);
+                      if (examinedResultsOnly && !anyVisible) {
+                        return (
+                          <p className="px-4 py-6 text-sm text-slate-500 text-center bg-white border-t border-slate-200">
+                            No examined tests on this form yet. Turn off{' '}
+                            <span className="font-semibold">Examined only</span> to enter results, or fill
+                            values on another examination tab.
+                          </p>
+                        );
+                      }
+                      return (
+                    <div className="lims-result-form-table">
+                      {anyVisible ? (
+                      resultForm.tableColumns === 'test-result-unit-ref' ? (
+                        <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-xs font-semibold text-slate-600">
+                          <div className="col-span-4 px-4 py-2">Test</div>
+                          <div className="col-span-3 px-4 py-2">Result</div>
+                          <div className="col-span-2 px-4 py-2">Unit</div>
                           <div className="col-span-3 px-4 py-2">Ref. Range</div>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-2 bg-slate-100 border-b border-slate-300 text-xs font-semibold text-slate-600">
-                          <div className="px-4 py-2 border-r border-slate-300">
+                        <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-xs font-semibold text-slate-600">
+                          <div className="px-4 py-2">
                             {resultForm.testColumnLabel || 'Test'}
                           </div>
                           <div className="px-4 py-2">{resultForm.resultColumnLabel || 'Result'}</div>
                         </div>
-                      )}
-                      {resultForm.resultSections.map((section) => (
+                      )
+                      ) : null}
+                      {visibleSectionRows.map(({ section, rows: sectionRows }) => {
+                        if (sectionRows.length === 0) return null;
+                        return (
                         <div key={section.id}>
                           {section.title ? (
-                            <div className="px-4 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-800 tracking-wide">
+                            <div className="lims-rf-section-label px-4 py-1.5 bg-slate-50 text-[11px] font-bold uppercase text-slate-800 tracking-wide">
                               {section.title}
                             </div>
                           ) : null}
-                          {section.rows.map((row) => {
+                          {sectionRows.map((row) => {
                             const fromTemplate = paramsList.find((p) => p.id === row.id);
                             const param = (
                               fromTemplate
@@ -1914,15 +2038,15 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                               return (
                                 <div
                                   key={row.id}
-                                  className="grid grid-cols-12 border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50"
+                                  className="lims-rf-grid-row grid grid-cols-12 hover:bg-slate-50/50"
                                 >
-                                  <div className="col-span-4 px-4 py-2.5 border-r border-slate-100 text-sm text-slate-800">
+                                  <div className="col-span-4 px-4 py-2.5 text-sm text-slate-800">
                                     {row.label}
                                   </div>
-                                  <div className="col-span-3 px-3 py-1.5 border-r border-slate-100">
+                                  <div className="col-span-3 px-3 py-1.5">
                                     {renderResultInput(param, currentValue)}
                                   </div>
-                                  <div className="col-span-2 px-4 py-2.5 border-r border-slate-100 text-sm tabular-nums text-slate-800">
+                                  <div className="col-span-2 px-4 py-2.5 text-sm tabular-nums text-slate-800">
                                     {row.unit || param.unit || '—'}
                                   </div>
                                   <div className="col-span-3 px-4 py-2.5 text-sm tabular-nums text-slate-800">
@@ -1944,9 +2068,9 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                             return (
                               <div
                                 key={row.id}
-                                className="grid grid-cols-2 border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50"
+                                className="lims-rf-grid-row grid grid-cols-2 hover:bg-slate-50/50"
                               >
-                                <div className="px-4 py-2.5 border-r border-slate-100 text-sm text-slate-800">
+                                <div className="px-4 py-2.5 text-sm text-slate-800">
                                   {row.examOptions ? (
                                     <select
                                       value={methodValue}
@@ -1979,7 +2103,8 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                             );
                           })}
                         </div>
-                      ))}
+                        );
+                      })}
                       {panel.members.map((member) => {
                         const covered = new Set(
                           (resultForm.resultSections || []).flatMap((section) =>
@@ -1995,11 +2120,12 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                         const fourCol = resultForm.tableColumns === 'test-result-unit-ref';
                         return (
                           <div key={`extra-${member.examCode}`}>
-                            <div className="px-4 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-800 tracking-wide">
+                            <div className="lims-rf-section-label px-4 py-1.5 bg-slate-50 text-[11px] font-bold uppercase text-slate-800 tracking-wide">
                               {member.template.examName || member.examName}
                             </div>
                             {extra.map((param) => {
                               const currentValue = readParam(param.id);
+                              if (examinedResultsOnly && !hasEnteredResult(currentValue)) return null;
                               const refText =
                                 param.normalText ||
                                 (param.specMin !== undefined && param.specMax !== undefined
@@ -2009,15 +2135,15 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                                 return (
                                   <div
                                     key={param.id}
-                                    className="grid grid-cols-12 border-b border-slate-100 hover:bg-slate-50/50"
+                                    className="lims-rf-grid-row grid grid-cols-12 hover:bg-slate-50/50"
                                   >
-                                    <div className="col-span-4 px-4 py-2.5 border-r border-slate-100 text-sm text-slate-800">
+                                    <div className="col-span-4 px-4 py-2.5 text-sm text-slate-800">
                                       {param.name}
                                     </div>
-                                    <div className="col-span-3 px-3 py-1.5 border-r border-slate-100">
+                                    <div className="col-span-3 px-3 py-1.5">
                                       {renderResultInput(param, currentValue)}
                                     </div>
-                                    <div className="col-span-2 px-4 py-2.5 border-r border-slate-100 text-sm tabular-nums text-slate-800">
+                                    <div className="col-span-2 px-4 py-2.5 text-sm tabular-nums text-slate-800">
                                       {param.unit || '—'}
                                     </div>
                                     <div className="col-span-3 px-4 py-2.5 text-sm tabular-nums text-slate-800">
@@ -2029,9 +2155,9 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                               return (
                                 <div
                                   key={param.id}
-                                  className="grid grid-cols-2 border-b border-slate-100 hover:bg-slate-50/50"
+                                  className="lims-rf-grid-row grid grid-cols-2 hover:bg-slate-50/50"
                                 >
-                                  <div className="px-4 py-2.5 border-r border-slate-100 text-sm text-slate-800">
+                                  <div className="px-4 py-2.5 text-sm text-slate-800">
                                     {param.name}
                                   </div>
                                   <div className="px-3 py-1.5">
@@ -2044,10 +2170,12 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                         );
                       })}
                     </div>
+                      );
+                    })()
                   ) : useFlatAnalytes && resultForm?.analytes ? (
-                    <div className="border-t border-slate-200">
-                      <div className="grid grid-cols-2 bg-slate-100 border-b border-slate-300 text-xs font-semibold text-slate-600">
-                        <div className="px-4 py-2 border-r border-slate-300">Test</div>
+                    <div className="lims-result-form-table">
+                      <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-xs font-semibold text-slate-600">
+                        <div className="px-4 py-2">Test</div>
                         <div className="px-4 py-2">Result</div>
                       </div>
                       {resultForm.analytes.map((row) => {
@@ -2066,12 +2194,13 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                           } as ParameterDef);
                         const resItem = ({ value: readParam(param.id) });
                         const currentValue = resItem?.value ?? '';
+                        if (examinedResultsOnly && !hasEnteredResult(currentValue)) return null;
                         return (
                           <div
                             key={row.id}
-                            className="grid grid-cols-2 border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50"
+                            className="lims-rf-grid-row grid grid-cols-2 hover:bg-slate-50/50"
                           >
-                            <div className="px-4 py-2.5 border-r border-slate-100 text-sm text-slate-800">
+                            <div className="px-4 py-2.5 text-sm text-slate-800">
                               {row.label}
                             </div>
                             <div className="px-3 py-1.5">
@@ -2083,16 +2212,17 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                     </div>
                   ) : (
                   /* Same TEST | RESULT | UNIT | REF. RANGE layout as the assigned result forms */
-                  <div className="border-t border-slate-200">
-                    <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-300 text-xs font-semibold text-slate-600">
-                      <div className="col-span-4 px-4 py-2 border-r border-slate-300">Test</div>
-                      <div className="col-span-3 px-4 py-2 border-r border-slate-300">Result</div>
-                      <div className="col-span-2 px-4 py-2 border-r border-slate-300">Unit</div>
+                  <div className="lims-result-form-table">
+                    <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-xs font-semibold text-slate-600">
+                      <div className="col-span-4 px-4 py-2">Test</div>
+                      <div className="col-span-3 px-4 py-2">Result</div>
+                      <div className="col-span-2 px-4 py-2">Unit</div>
                       <div className="col-span-3 px-4 py-2">Ref. Range</div>
                     </div>
                     {paramsList.map((param) => {
                       if (!param) return null;
                       const currentValue = readParam(param.id);
+                      if (examinedResultsOnly && !hasEnteredResult(currentValue)) return null;
                       const refText =
                         param.normalText ||
                         (param.specMin !== undefined && param.specMax !== undefined
@@ -2101,15 +2231,15 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                       return (
                         <div
                           key={param.id}
-                          className="grid grid-cols-12 border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50"
+                          className="lims-rf-grid-row grid grid-cols-12 hover:bg-slate-50/50"
                         >
-                          <div className="col-span-4 px-4 py-2.5 border-r border-slate-100 text-sm text-slate-800">
+                          <div className="col-span-4 px-4 py-2.5 text-sm text-slate-800">
                             {param.name}
                           </div>
-                          <div className="col-span-3 px-3 py-1.5 border-r border-slate-100">
+                          <div className="col-span-3 px-3 py-1.5">
                             {renderResultInput(param, currentValue)}
                           </div>
-                          <div className="col-span-2 px-4 py-2.5 border-r border-slate-100 text-sm tabular-nums text-slate-800">
+                          <div className="col-span-2 px-4 py-2.5 text-sm tabular-nums text-slate-800">
                             {param.unit || '—'}
                           </div>
                           <div className="col-span-3 px-4 py-2.5 text-sm tabular-nums text-slate-800">
@@ -2120,6 +2250,19 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                     })}
                   </div>
                   )}
+
+                  {examinedResultsOnly &&
+                  useSimpleTestResult &&
+                  resultForm?.resultSections &&
+                  !resultForm.resultSections.some((section) =>
+                    section.rows.some((row) => hasEnteredResult(readParam(row.id)))
+                  ) &&
+                  !paramsList.some((p) => p && hasEnteredResult(readParam(p.id))) ? (
+                    <p className="px-4 py-6 text-sm text-slate-500 text-center border-t border-slate-200">
+                      No examined tests yet. Turn off <span className="font-semibold">Examined only</span> to enter
+                      results.
+                    </p>
+                  ) : null}
 
                   {/* Per-examination examiners */}
                   {(() => {
@@ -2290,8 +2433,9 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
         </div>
       )}
 
-      {/* 6. Tab 3: PRINT REAL SCANNABLE ZEBRA CRYO LABEL (1 Dedicated Sticker per Specimen Tube / Container) */}
-      {activeTab === 'print-label' && (() => {
+      </div>
+
+      {cryoLabelOpen && (() => {
         const safeExams = requestedExams.length > 0 ? requestedExams : ['CBC WITH PLATELET COUNT'];
         const containers = labelGroupingMode === 'container'
           ? getSpecimenContainersForRequisition(safeExams, sample.barcode)
@@ -2302,19 +2446,19 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
         const activeExamList = activeContainer.exams.join(', ');
 
         return (
-          <div className="p-4 lg:p-5 space-y-6 max-w-3xl mx-auto print:p-0 print-paper-sheet">
-            
-            {/* Header with Title & Mode Toggle */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4 print:hidden">
-              <div>
-                <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-                  <Printer className="w-4 h-4 text-[#0176d3] shrink-0" />
-                  <span>Specimen tube &amp; container labels</span>
-                </h3>
-                <p className="text-sm text-slate-600 mt-1">
-                  One barcode sticker per vacutainer, cup, jar, or swab vial.
-                </p>
-              </div>
+          <DocumentSideDrawer
+            title="Zebra cryo label"
+            subtitle={`${patientDisplayName} · ${sample.barcode} · Case ${caseNumber}`}
+            onClose={() => setCryoLabelOpen(false)}
+            onPrint={() => window.print()}
+            panelClassName="sm:w-[min(100%,480px)]"
+            compactHeader
+          >
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 print:p-0 print-paper-sheet">
+            <div className="flex flex-col gap-3 border-b border-slate-200 pb-3 print:hidden">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Preview tube and cap-dot labels before printing to Zebra.
+              </p>
 
               {/* View & Grouping Controls */}
               <div className="flex items-center gap-2 flex-wrap">
@@ -2407,11 +2551,11 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
 
             {/* Display Mode A: Single Selected Specimen Container Sticker */}
             {!printAllMode && (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 
                 {/* 1. Main 2" x 1" Wrap-Around Test Tube Sticker Mockup */}
-                <div className="p-6 print:p-0 bg-slate-100 print:bg-white rounded-xl border border-slate-300 print:border-none flex items-center justify-center print-avoid-break">
-                  <div className="bg-white border-2 border-dashed border-slate-400 print:border-slate-600 rounded-lg p-4 shadow-sm w-full max-w-md space-y-2 text-slate-900 font-mono">
+                <div className="p-3 print:p-0 bg-slate-100 print:bg-white rounded-lg border border-slate-200 print:border-none flex items-center justify-center print-avoid-break">
+                  <div className="bg-white border-2 border-dashed border-slate-400 print:border-slate-600 rounded-lg p-3 shadow-sm w-full max-w-[320px] space-y-1.5 text-slate-900 font-mono">
                     
                     {/* Header on tube sticker */}
                     <div className="flex items-center justify-between text-[10px] border-b border-slate-300 pb-1">
@@ -2447,16 +2591,16 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                     </div>
 
                     {/* Real Vector Code 128 Barcode with Tube Specific ID */}
-                    <div className="flex flex-col items-center justify-center bg-white py-1">
+                    <div className="flex flex-col items-center justify-center bg-white py-0.5">
                       <Barcode
                         value={activeContainer.tubeBarcode}
                         format="CODE128"
-                        width={1.9}
-                        height={46}
-                        fontSize={12}
+                        width={1.6}
+                        height={38}
+                        fontSize={10}
                         font="monospace"
-                        margin={4}
-                        className="w-full max-w-[280px] h-auto mx-auto"
+                        margin={2}
+                        className="w-full max-w-[260px] h-auto mx-auto"
                       />
                     </div>
 
@@ -2479,25 +2623,25 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                 </div>
 
                 {/* 2. Single 11mm Circular Cap Dot Label */}
-                <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between text-xs print:hidden">
-                  <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 bg-white rounded-full border-2 border-slate-800 flex flex-col items-center justify-center font-mono font-bold text-[8px] text-slate-900 shrink-0 shadow-2xs leading-none">
+                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex items-start justify-between gap-2 text-xs print:hidden">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-9 h-9 bg-white rounded-full border-2 border-slate-800 flex flex-col items-center justify-center font-mono font-bold text-[7px] text-slate-900 shrink-0 shadow-2xs leading-none">
                       <span className="text-[10px] font-black">T{activeContainer.tubeNumber}</span>
                       <span className="text-[7px] text-[#0176d3] font-bold mt-0.5">{activeContainer.primaryAbbr}</span>
                     </div>
                     <div>
-                      <div className="font-bold text-slate-900 flex items-center gap-2">
-                        <span>Cryo-Vial Cap Dot Label (11mm Circular)</span>
-                        <span className="px-1.5 py-0.2 bg-blue-50 text-[#0176d3] rounded text-[10px] font-bold border border-blue-200">
+                      <div className="font-semibold text-slate-900 text-[11px] leading-snug">
+                        Cap dot (11mm)
+                        <span className="ml-1 px-1 py-0.5 bg-blue-50 text-[#0176d3] rounded text-[9px] font-bold border border-blue-200">
                           {activeContainer.primaryAbbr}
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                        {activeContainer.tubeBarcode} · Tube #{activeContainer.tubeNumber} · <strong className="text-slate-800 font-sans">{activeExamList}</strong>
+                      <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
+                        {activeContainer.tubeBarcode} · T{activeContainer.tubeNumber}
                       </div>
                     </div>
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold shrink-0">
                     Ready
                   </span>
                 </div>
@@ -2614,7 +2758,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
             )}
 
             {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 print:hidden">
+            <div className="flex flex-col gap-2 pt-1 print:hidden">
               <button
                 type="button"
                 onClick={() => {
@@ -2622,32 +2766,29 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                   navigator.clipboard.writeText(zpl);
                   alert(`Copied Zebra ZPL thermal code for ${activeContainer.tubeBarcode} (${activeContainer.containerName}) to clipboard!`);
                 }}
-                className="w-full sm:w-auto px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                className="w-full px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-[11px] font-semibold rounded-md shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 title="Copy Zebra Programming Language (ZPL) direct thermal code"
               >
                 <Copy className="w-3.5 h-3.5 text-slate-500" />
-                <span>Copy ZPL Code (Tube {activeContainer.tubeNumber})</span>
+                <span>Copy ZPL (tube {activeContainer.tubeNumber})</span>
               </button>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.print();
-                  }}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-lg shadow-2xs cursor-pointer active:scale-98 transition-all"
-                >
-                  <Printer className="w-4 h-4 text-cyan-300" />
-                  <span>{printAllMode ? `Print All ${containers.length} Specimen Stickers` : `Print Sticker (Tube ${activeContainer.tubeNumber})`}</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  window.print();
+                }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 hover:bg-black text-white text-[11px] font-bold rounded-md shadow-2xs cursor-pointer transition-all"
+              >
+                <Printer className="w-3.5 h-3.5 text-cyan-300" />
+                <span>{printAllMode ? `Print all (${containers.length})` : `Print tube ${activeContainer.tubeNumber}`}</span>
+              </button>
             </div>
 
-          </div>
+            </div>
+          </DocumentSideDrawer>
         );
       })()}
-
-      </div>
 
     </div>
   );

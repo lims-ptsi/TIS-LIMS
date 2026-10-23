@@ -1043,6 +1043,50 @@ export function getResultFormForExam(
   );
 }
 
+/** Pick RF-06 vs RF-06F (or RF-08 vs RF-08F) for patient / header sex. */
+export function resolveResultFormGenderVariant(
+  formIdOrForm: string | ResultFormDefinition,
+  gender?: string | null
+): ResultFormDefinition | undefined {
+  const base =
+    typeof formIdOrForm === 'string' ? getResultFormById(formIdOrForm) : formIdOrForm;
+  if (!base) return undefined;
+
+  const variants = RESULT_FORMS.filter(
+    (f) => f.formNumber === base.formNumber && f.genderVariant
+  );
+  if (variants.length === 0) return base;
+
+  const g = normalizeResultFormGender(gender);
+  if (g) {
+    const matched = variants.find((f) => f.genderVariant === g);
+    if (matched) return matched;
+  }
+
+  return (
+    variants.find((f) => f.genderVariant === 'male') ||
+    variants.find((f) => !f.genderVariant) ||
+    variants[0]
+  );
+}
+
+/** One sidebar row per paper; gendered forms resolve to male/female variant. */
+export function listResultFormsForGender(gender?: string | null): ResultFormDefinition[] {
+  const seenNumbers = new Set<number>();
+  const out: ResultFormDefinition[] = [];
+  for (const form of RESULT_FORMS) {
+    if (form.genderVariant) {
+      if (seenNumbers.has(form.formNumber)) continue;
+      seenNumbers.add(form.formNumber);
+      const resolved = resolveResultFormGenderVariant(form, gender);
+      if (resolved) out.push(resolved);
+    } else {
+      out.push(form);
+    }
+  }
+  return out;
+}
+
 /** Flatten all analyte rows for a form (sections + flat list). */
 export function getAllAnalyteRows(form: ResultFormDefinition): ResultFormAnalyteRow[] {
   const fromSections = (form.resultSections || []).flatMap((s) => s.rows);

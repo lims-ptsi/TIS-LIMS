@@ -8,6 +8,7 @@ import {
   FileText,
   FlaskConical,
   MapPin,
+  PackageCheck,
   Printer,
   Search,
   User,
@@ -23,6 +24,10 @@ import {
   PatientRecord,
   PatientVisit,
 } from '../../data/patientDirectory';
+import {
+  formatResultsPickupWhen,
+  isResultsPickedUp,
+} from '../../utils/resultsPickup';
 
 const PATIENT_SELECT_KEY = 'labtis_selected_patient_id';
 
@@ -97,7 +102,9 @@ function CopyChip({ label, value }: { label: string; value: string }) {
       title={`Copy ${label}`}
     >
       <span className="text-slate-500">{label} </span>
-      <span className={`font-semibold tabular-nums ${label === 'Barcode' ? 'text-[#0176d3]' : 'text-slate-900'}`}>
+      <span
+        className={`font-normal uppercase tabular-nums ${label === 'Barcode' ? 'text-[#0176d3]' : 'text-slate-900'}`}
+      >
         {value}
       </span>
       {copied ? (
@@ -114,6 +121,7 @@ interface PatientRecordsViewProps {
   samples: Sample[];
   onOpenSpecimen?: (sample: Sample, req: LabTestRequisition) => void;
   onPrintResults?: (req: LabTestRequisition) => void;
+  onMarkResultsPickedUp?: (req: LabTestRequisition, pickedUp: boolean) => void;
 }
 
 function VisitTimelineItem({
@@ -122,12 +130,14 @@ function VisitTimelineItem({
   isLast,
   onOpenSpecimen,
   onPrintResults,
+  onMarkResultsPickedUp,
 }: {
   visit: PatientVisit;
   req: LabTestRequisition | undefined;
   isLast: boolean;
   onOpenSpecimen?: (sample: Sample, req: LabTestRequisition) => void;
   onPrintResults?: (req: LabTestRequisition) => void;
+  onMarkResultsPickedUp?: (req: LabTestRequisition, pickedUp: boolean) => void;
 }) {
   const [examsExpanded, setExamsExpanded] = useState(false);
   const tone = STATUS_TONE[visit.status] || STATUS_TONE.SUBMITTED;
@@ -151,18 +161,32 @@ function VisitTimelineItem({
         <div className="px-4 py-3 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/80">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-semibold text-slate-900 tabular-nums">
+              <span className="text-sm font-normal uppercase text-slate-900 tabular-nums">
                 {visit.requestDate || '—'}
               </span>
               <span
-                className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${tone}`}
+                className={`text-[10px] font-normal uppercase tracking-wide px-2 py-0.5 rounded-full border ${tone}`}
               >
                 {label}
               </span>
               {visit.patientCategory ? (
-                <span className="text-[10px] font-medium text-slate-600 px-2 py-0.5 rounded bg-white border border-slate-200">
+                <span className="text-[10px] font-normal uppercase text-slate-600 px-2 py-0.5 rounded bg-white border border-slate-200">
                   {visit.patientCategory}
                 </span>
+              ) : null}
+              {visit.status === 'COMPLETED' ? (
+                isResultsPickedUp(visit) ? (
+                  <span
+                    className="text-[10px] font-normal uppercase tracking-wide px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200"
+                    title={formatResultsPickupWhen(visit.resultsPickedUpAt) || undefined}
+                  >
+                    Picked up
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-normal uppercase tracking-wide px-2 py-0.5 rounded-full border bg-violet-50 text-violet-900 border-violet-200">
+                    Awaiting pickup
+                  </span>
+                )
               ) : null}
             </div>
             <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs">
@@ -179,7 +203,7 @@ function VisitTimelineItem({
                   const sample = { id: visit.sampleId! } as Sample;
                   onOpenSpecimen(sample, req);
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-[#c5daf8] bg-[#eef4ff] hover:bg-[#dde9fc] text-[#014486] cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-normal uppercase rounded-md border border-[#c5daf8] bg-[#eef4ff] hover:bg-[#dde9fc] text-[#014486] cursor-pointer"
               >
                 <FlaskConical className="w-3.5 h-3.5" />
                 Open specimen
@@ -189,16 +213,37 @@ function VisitTimelineItem({
               <button
                 type="button"
                 onClick={() => onPrintResults(req)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-normal uppercase rounded-md bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
                 Print results
+              </button>
+            ) : null}
+            {req && visit.status === 'COMPLETED' && onMarkResultsPickedUp ? (
+              <button
+                type="button"
+                onClick={() => onMarkResultsPickedUp(req, !isResultsPickedUp(visit))}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-normal uppercase rounded-md border cursor-pointer ${
+                  isResultsPickedUp(visit)
+                    ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    : 'border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100'
+                }`}
+              >
+                <PackageCheck className="w-3.5 h-3.5" />
+                {isResultsPickedUp(visit) ? 'Undo pickup' : 'Mark picked up'}
               </button>
             ) : null}
           </div>
         </div>
 
         <div className="px-4 py-3 space-y-2.5 text-sm">
+          {visit.status === 'COMPLETED' && isResultsPickedUp(visit) ? (
+            <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-2">
+              Results picked up
+              {visit.resultsPickedUpBy ? ` by ${visit.resultsPickedUpBy}` : ''}
+              {formatResultsPickupWhen(visit.resultsPickedUpAt) ? ` · ${formatResultsPickupWhen(visit.resultsPickedUpAt)}` : ''}
+            </p>
+          ) : null}
           <div>
             <span className="text-xs font-medium text-slate-500">Requesting physician</span>
             <p className="font-medium text-slate-900">{visit.physician || '—'}</p>
@@ -210,7 +255,7 @@ function VisitTimelineItem({
                 {visibleExams.map((exam) => (
                   <li
                     key={exam}
-                    className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 leading-snug max-w-full"
+                    className="text-[11px] font-normal uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 leading-snug max-w-full"
                   >
                     {exam}
                   </li>
@@ -232,19 +277,19 @@ function VisitTimelineItem({
               {visit.orNumber ? (
                 <div>
                   <dt className="text-slate-500">Official receipt</dt>
-                  <dd className="font-semibold tabular-nums">{visit.orNumber}</dd>
+                  <dd className="font-normal uppercase tabular-nums">{visit.orNumber}</dd>
                 </div>
               ) : null}
               {visit.chargeSlipNumber ? (
                 <div>
                   <dt className="text-slate-500">Charge slip</dt>
-                  <dd className="font-semibold tabular-nums">{visit.chargeSlipNumber}</dd>
+                  <dd className="font-normal uppercase tabular-nums">{visit.chargeSlipNumber}</dd>
                 </div>
               ) : null}
             </dl>
           )}
           {visit.clinicalNotes ? (
-            <p className="text-xs text-slate-600 italic border-t border-slate-100 pt-2 leading-relaxed">
+            <p className="text-xs font-normal uppercase text-slate-600 border-t border-slate-100 pt-2 leading-relaxed">
               {visit.clinicalNotes}
             </p>
           ) : null}
@@ -260,12 +305,14 @@ function PatientDetailDrawer({
   onClose,
   onOpenSpecimen,
   onPrintResults,
+  onMarkResultsPickedUp,
 }: {
   record: PatientRecord;
   reqById: Map<string, LabTestRequisition>;
   onClose: () => void;
   onOpenSpecimen?: (sample: Sample, req: LabTestRequisition) => void;
   onPrintResults?: (req: LabTestRequisition) => void;
+  onMarkResultsPickedUp?: (req: LabTestRequisition, pickedUp: boolean) => void;
 }) {
   const stats = patientRecordStats(record);
   const latestVisit = record.visits[0];
@@ -339,10 +386,13 @@ function PatientDetailDrawer({
             <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
               Patient history
             </p>
-            <h2 id="patient-drawer-title" className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight mt-0.5 break-words">
+            <h2
+              id="patient-drawer-title"
+              className="text-xl sm:text-2xl font-normal uppercase text-slate-900 tracking-tight mt-0.5 break-words"
+            >
               {formatPersonName(record.fullName)}
             </h2>
-            <p className="text-sm text-slate-600 mt-1">
+            <p className="text-sm font-normal uppercase text-slate-600 mt-1">
               {stats.firstVisit && stats.lastVisit
                 ? stats.firstVisit === stats.lastVisit
                   ? `Single visit on ${stats.lastVisit}`
@@ -350,7 +400,7 @@ function PatientDetailDrawer({
                 : 'No visits recorded'}
             </p>
             {record.address ? (
-              <p className="text-xs text-slate-500 mt-1">{record.address}</p>
+              <p className="text-xs font-normal uppercase text-slate-500 mt-1">{record.address}</p>
             ) : null}
           </div>
           <button
@@ -382,13 +432,13 @@ function PatientDetailDrawer({
             <dt className="text-[11px] text-slate-500 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" /> Date of birth
             </dt>
-            <dd className="font-semibold text-slate-900 mt-0.5">{record.birthday || '—'}</dd>
+            <dd className="font-normal uppercase text-slate-900 mt-0.5">{record.birthday || '—'}</dd>
           </div>
           <div className="rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2">
             <dt className="text-[11px] text-slate-500 flex items-center gap-1">
               <Activity className="w-3.5 h-3.5" /> Age / sex
             </dt>
-            <dd className="font-semibold text-slate-900 mt-0.5">
+            <dd className="font-normal uppercase text-slate-900 mt-0.5">
               {record.age ? `${record.age} yrs` : '—'} · {record.sex}
             </dd>
           </div>
@@ -396,13 +446,13 @@ function PatientDetailDrawer({
             <dt className="text-[11px] text-slate-500 flex items-center gap-1">
               <FileText className="w-3.5 h-3.5" /> Civil status
             </dt>
-            <dd className="font-semibold text-slate-900 mt-0.5">{record.civilStatus}</dd>
+            <dd className="font-normal uppercase text-slate-900 mt-0.5">{record.civilStatus}</dd>
           </div>
           <div className="rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2">
             <dt className="text-[11px] text-slate-500 flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5" /> Latest category
             </dt>
-            <dd className="font-semibold text-slate-900 mt-0.5">{record.category}</dd>
+            <dd className="font-normal uppercase text-slate-900 mt-0.5">{record.category}</dd>
           </div>
         </dl>
 
@@ -451,6 +501,7 @@ function PatientDetailDrawer({
               isLast={idx === record.visits.length - 1}
               onOpenSpecimen={onOpenSpecimen}
               onPrintResults={onPrintResults}
+              onMarkResultsPickedUp={onMarkResultsPickedUp}
             />
           ))}
         </div>
@@ -464,6 +515,7 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
   samples,
   onOpenSpecimen,
   onPrintResults,
+  onMarkResultsPickedUp,
 }) => {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<PatientCategory | 'ALL'>('ALL');
@@ -658,7 +710,7 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-xs">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-left text-[11px] font-semibold text-slate-600">
+                <tr className="bg-slate-50 border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   <th className="py-2 px-3">Patient</th>
                   <th className="py-2 px-2">Date of birth</th>
                   <th className="py-2 px-2">Sex</th>
@@ -697,9 +749,9 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
                       <tr
                         key={record.id}
                         onClick={() => openDrawer(record.id)}
-                        className="border-b border-slate-100 hover:bg-[#eef4ff]/60 cursor-pointer transition-colors"
+                        className="border-b border-slate-100 hover:bg-[#eef4ff]/60 cursor-pointer transition-colors uppercase font-normal"
                       >
-                        <td className="py-2 px-3">
+                        <td className="py-2 px-3 text-slate-900">
                           <div className="flex items-center gap-2 min-w-0">
                             <div className="relative w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
                               <User className="w-3 h-3 text-slate-600" />
@@ -707,7 +759,7 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
                                 className={`absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ring-2 ring-white ${STATUS_DOT[statusKey] || STATUS_DOT.SUBMITTED}`}
                               />
                             </div>
-                            <span className="font-medium text-slate-900 truncate max-w-[200px]">
+                            <span className="truncate max-w-[200px]">
                               {formatPersonName(record.fullName)}
                             </span>
                           </div>
@@ -715,15 +767,15 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
                         <td className="py-2 px-2 tabular-nums text-slate-800">{record.birthday || '—'}</td>
                         <td className="py-2 px-2 text-slate-700">{record.sex}</td>
                         <td className="py-2 px-2 text-slate-700 max-w-[120px] truncate">{record.category}</td>
-                        <td className="py-2 px-2 text-center font-semibold tabular-nums text-slate-900">
+                        <td className="py-2 px-2 text-center tabular-nums text-slate-900">
                           {record.visits.length}
                         </td>
                         <td className="py-2 px-2 tabular-nums text-slate-800 whitespace-nowrap">
                           {last?.requestDate || '—'}
                         </td>
-                        <td className="py-2 px-2">
+                        <td className="py-2 px-2 normal-case">
                           <span
-                            className={`inline-flex text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full border ${tone}`}
+                            className={`inline-flex text-[9px] font-normal uppercase tracking-wide px-1.5 py-0.5 rounded-full border ${tone}`}
                           >
                             {label}
                           </span>
@@ -750,6 +802,7 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
           onClose={closeDrawer}
           onOpenSpecimen={handleOpenSpecimen}
           onPrintResults={onPrintResults}
+          onMarkResultsPickedUp={onMarkResultsPickedUp}
         />
       ) : null}
     </div>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   FileText,
   Printer,
@@ -17,11 +17,20 @@ import {
   getAllAnalyteRows,
   examChoiceKey,
   resultOptionsForRow,
+  resolveResultFormGenderVariant,
+  listResultFormsForGender,
+  normalizeResultFormGender,
 } from '../../data/resultFormsCatalog';
 import { NtpLabRequestForm } from '../forms/NtpLabRequestForm';
+import {
+  hasEnteredResult,
+  isResultFormRowExamined,
+} from '../../utils/resultDisplay';
 
 interface ResultFormsViewProps {
   currentUserName?: string;
+  /** Requisition / patient sex — auto-selects male vs female result form variants */
+  patientGender?: string | null;
 }
 
 type FormValues = Record<string, string>;
@@ -170,26 +179,91 @@ function AnalyteResultInput({
 
 export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
   currentUserName = '',
+  patientGender = null,
 }) => {
-  const [selectedId, setSelectedId] = useState(RESULT_FORMS[0]?.id || 'RF-01');
+  const initialList = listResultFormsForGender(patientGender);
+  const [selectedId, setSelectedId] = useState(initialList[0]?.id || 'RF-01');
   const activeForm = useMemo(
     () => getResultFormById(selectedId) || RESULT_FORMS[0],
     [selectedId]
   );
 
   const [values, setValues] = useState<FormValues>(() =>
-    blankValues(RESULT_FORMS[0])
+    blankValues(getResultFormById(initialList[0]?.id || 'RF-01') || RESULT_FORMS[0])
+  );
+  const [examinedResultsOnly, setExaminedResultsOnly] = useState(false);
+
+  const referenceGender = patientGender || values.gender || '';
+
+  const sidebarForms = useMemo(
+    () => listResultFormsForGender(referenceGender),
+    [referenceGender]
   );
 
-  const handleSelectForm = useCallback((id: string) => {
-    const next = getResultFormById(id);
-    if (!next) return;
-    setSelectedId(id);
-    setValues(blankValues(next));
-  }, []);
+  const switchToGenderVariant = useCallback(
+    (formId: string, gender: string | null | undefined, mergeValues?: FormValues) => {
+      const resolved = resolveResultFormGenderVariant(formId, gender);
+      if (!resolved) return;
+      setSelectedId(resolved.id);
+      setValues((prev) => {
+        const base = blankValues(resolved);
+        const merged = { ...base, ...(mergeValues ?? prev) };
+        if (gender) merged.gender = gender.startsWith('f') || gender === 'Female' ? 'Female' : gender.startsWith('m') || gender === 'Male' ? 'Male' : gender;
+        return merged;
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (patientGender) {
+      const g = String(patientGender).trim();
+      const label = g.toLowerCase().startsWith('f')
+        ? 'Female'
+        : g.toLowerCase().startsWith('m')
+          ? 'Male'
+          : g;
+      setValues((prev) => (prev.gender === label ? prev : { ...prev, gender: label }));
+    }
+  }, [patientGender]);
+
+  useEffect(() => {
+    if (!referenceGender) return;
+    const resolved = resolveResultFormGenderVariant(selectedId, referenceGender);
+    if (resolved && resolved.id !== selectedId) {
+      switchToGenderVariant(selectedId, referenceGender);
+    }
+  }, [referenceGender, selectedId, switchToGenderVariant]);
+
+  const handleSelectForm = useCallback(
+    (id: string) => {
+      const resolved = resolveResultFormGenderVariant(id, referenceGender);
+      if (!resolved) return;
+      setSelectedId(resolved.id);
+      const nextValues = blankValues(resolved);
+      if (referenceGender) {
+        const g = String(referenceGender).trim();
+        if (g.toLowerCase().startsWith('f')) nextValues.gender = 'Female';
+        else if (g.toLowerCase().startsWith('m')) nextValues.gender = 'Male';
+        else nextValues.gender = g;
+      }
+      setValues(nextValues);
+    },
+    [referenceGender]
+  );
 
   const setField = (key: string, value: string) => {
-    setValues((prev) => ({ ...prev, [key]: value }));
+    setValues((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === 'gender') {
+        const resolved = resolveResultFormGenderVariant(selectedId, value);
+        if (resolved && resolved.id !== selectedId) {
+          setSelectedId(resolved.id);
+          return { ...blankValues(resolved), ...next };
+        }
+      }
+      return next;
+    });
   };
 
   const handleReset = () => {
@@ -239,6 +313,13 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
             </h1>
             <p className="text-[11px] text-slate-500 mt-0.5">
               Fillable printable laboratory result sheets (patient header, examination, signatures).
+              {normalizeResultFormGender(referenceGender) && activeForm?.genderVariant ? (
+                <span className="ml-1 text-[#014486] font-semibold">
+                  Reference ranges:{' '}
+                  {normalizeResultFormGender(referenceGender) === 'female' ? 'Female' : 'Male'} (from
+                  patient sex).
+                </span>
+              ) : null}
               {hideEmpty && (
                 <span className="ml-1 text-amber-700">
                   Print hides empty test rows.
@@ -249,6 +330,23 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setExaminedResultsOnly((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border shadow-xs cursor-pointer ${
+              examinedResultsOnly
+                ? 'bg-[#0176d3]/10 border-[#0176d3]/40 text-[#014486]'
+                : 'bg-white hover:bg-slate-50 text-slate-700 border-[#d8dde6]'
+            }`}
+            title={
+              examinedResultsOnly
+                ? 'Showing tests with results only — click to show all parameters'
+                : 'Showing all parameters — click to show examined tests only'
+            }
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            {examinedResultsOnly ? 'Examined only' : 'Show all tests'}
+          </button>
           <button
             type="button"
             onClick={handleReset}
@@ -274,11 +372,11 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
           <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm overflow-hidden">
             <div className="px-3 py-2 border-b border-[#e5e7eb] bg-slate-50">
               <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
-                Available Forms ({RESULT_FORMS.length})
+                Available Forms ({sidebarForms.length})
               </span>
             </div>
             <ul className="divide-y divide-[#eef1f6]">
-              {RESULT_FORMS.map((form) => {
+              {sidebarForms.map((form) => {
                 const selected = form.id === selectedId;
                 return (
                   <li key={form.id}>
@@ -347,7 +445,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                       Clinical Diagnostic Laboratory &amp; Chest Center
                     </h2>
                     <p className="text-[11px] print:text-[9px] text-slate-600">
-                      68 Kalaw Hill, Quirino Highway, Pasong Putik, Quezon City · Tel: (02) 8928-1234
+                      Quezon Institute Compound, E. Rodriguez Sr. Avenue, Quezon City · Tel: (02) 0000 - 0000
                     </p>
                   </div>
                 </div>
@@ -368,14 +466,14 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
               </h2>
             ) : null}
 
-            <section className="mb-3 text-[10px] print:text-[8px] leading-tight">
-              <div className="grid grid-cols-12 gap-x-2 gap-y-0.5">
+            <section className="lims-result-form-patient mb-3 text-[10px] print:text-[8px] leading-tight">
+              <div className="grid grid-cols-12 gap-x-2 gap-y-1">
                 {PTSI_PATIENT_HEADER_FIELDS.map((field) => {
                   const span = field.span ?? 4;
                   return (
                     <div
                       key={field.id}
-                      className="flex items-baseline gap-1 min-w-0 py-0.5 border-b border-slate-200"
+                      className="flex items-baseline gap-1 min-w-0 py-0.5"
                       style={{ gridColumn: `span ${span} / span ${span}` }}
                     >
                       <label className="text-slate-500 font-semibold shrink-0 whitespace-nowrap">
@@ -398,8 +496,8 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
 
             {/* Specimen block (Forms 1–2 style) */}
             {specimenFields.length > 0 && (
-              <section className="mb-5 border border-slate-300 rounded-sm overflow-hidden">
-                <div className="bg-slate-100 border-b border-slate-300 px-3 py-1.5">
+              <section className="mb-5 overflow-hidden">
+                <div className="bg-slate-100 px-3 py-1.5">
                   <span className="text-[11px] font-bold uppercase tracking-wide text-slate-700">
                     Specimen &amp; Accession
                   </span>
@@ -445,26 +543,32 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                     Reference: {activeForm.genderVariant === 'male' ? 'Male' : 'Female'}
                   </div>
                 ) : null}
-                <div className="border border-slate-400 overflow-hidden">
+                <div className="lims-result-form-table overflow-hidden">
                   {activeForm.tableColumns === 'test-result-unit-ref' ? (
-                    <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-400 text-[11px] font-bold uppercase tracking-wide text-slate-700">
-                      <div className="col-span-4 px-3 py-1.5 border-r border-slate-400">Test</div>
-                      <div className="col-span-3 px-3 py-1.5 border-r border-slate-400">Result</div>
-                      <div className="col-span-2 px-3 py-1.5 border-r border-slate-400">Unit</div>
+                    <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                      <div className="col-span-4 px-3 py-1.5">Test</div>
+                      <div className="col-span-3 px-3 py-1.5">Result</div>
+                      <div className="col-span-2 px-3 py-1.5">Unit</div>
                       <div className="col-span-3 px-3 py-1.5">Ref. Range</div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 bg-slate-100 border-b border-slate-400 text-[11px] font-bold uppercase tracking-wide text-slate-700">
-                      <div className="px-3 py-1.5 border-r border-slate-400">
+                    <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                      <div className="px-3 py-1.5">
                         {activeForm.testColumnLabel || 'Test'}
                       </div>
                       <div className="px-3 py-1.5">{activeForm.resultColumnLabel || 'Result'}</div>
                     </div>
                   )}
                   {sections.map((section) => {
-                    const sectionHasAnyValue = section.rows.some(
-                      (r) => (values[`${r.id}_result`] || '').trim() !== ''
+                    const readFormParam = (paramId: string) =>
+                      values[paramId] || values[`${paramId}_result`] || '';
+                    const sectionHasAnyValue = section.rows.some((r) =>
+                      isResultFormRowExamined(r, readFormParam)
                     );
+                    const visibleRows = examinedResultsOnly
+                      ? section.rows.filter((r) => isResultFormRowExamined(r, readFormParam))
+                      : section.rows;
+                    if (examinedResultsOnly && visibleRows.length === 0) return null;
                     return (
                       <div
                         key={section.id}
@@ -475,32 +579,32 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                         }
                       >
                         {section.title ? (
-                          <div className="px-3 py-1 bg-slate-50 border-b border-slate-300 text-[11px] font-bold uppercase text-slate-800 tracking-wide">
+                          <div className="lims-rf-section-label px-3 py-1 bg-slate-50 text-[11px] font-bold uppercase text-slate-800 tracking-wide">
                             {section.title}
                           </div>
                         ) : null}
-                        {section.rows.map((row) => {
+                        {visibleRows.map((row) => {
                           const val = (values[`${row.id}_result`] || '').trim();
                           const emptyPrintHide = hideEmpty && !val;
                           if (activeForm.tableColumns === 'test-result-unit-ref') {
                             return (
                               <div
                                 key={row.id}
-                                className={`grid grid-cols-12 border-b border-slate-200 last:border-b-0 ${
+                                className={`lims-rf-grid-row grid grid-cols-12 ${
                                   emptyPrintHide ? 'print:hidden' : ''
                                 }`}
                               >
-                                <div className="col-span-4 px-3 py-1.5 border-r border-slate-200 text-sm text-slate-800">
+                                <div className="col-span-4 px-3 py-1.5 text-sm text-slate-800">
                                   {row.label}
                                 </div>
-                                <div className="col-span-3 px-2 py-1 border-r border-slate-200">
+                                <div className="col-span-3 px-2 py-1">
                                   <AnalyteResultInput
                                     analyte={row}
                                     value={values[`${row.id}_result`] || ''}
                                     onChange={(v) => setField(`${row.id}_result`, v)}
                                   />
                                 </div>
-                                <div className="col-span-2 px-3 py-1.5 border-r border-slate-200 text-xs text-slate-700 font-mono">
+                                <div className="col-span-2 px-3 py-1.5 text-xs text-slate-700 font-mono">
                                   {row.unit || '—'}
                                 </div>
                                 <div className="col-span-3 px-3 py-1.5 text-xs text-slate-700 font-mono">
@@ -515,11 +619,11 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                           return (
                             <div
                               key={row.id}
-                              className={`grid grid-cols-2 border-b border-slate-200 last:border-b-0 ${
+                              className={`lims-rf-grid-row grid grid-cols-2 ${
                                 emptyPrintHide ? 'print:hidden' : ''
                               }`}
                             >
-                              <div className="px-3 py-1.5 border-r border-slate-200 text-sm text-slate-800">
+                              <div className="px-3 py-1.5 text-sm text-slate-800">
                                 {row.examOptions ? (
                                   <select
                                     value={examChoice}
@@ -658,14 +762,20 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
               activeForm.layoutStyle !== 'blood-typing' &&
               activeForm.layoutStyle !== 'pregnancy' &&
               flatAnalytes.length > 0 && (
-              <section className="mb-8 border border-slate-300 rounded-sm overflow-hidden">
-                <div className="bg-slate-100 border-b border-slate-300 px-3 py-1.5">
+              <section className="lims-result-form-table mb-8 overflow-hidden">
+                <div className="bg-slate-100 px-3 py-1.5">
                   <span className="text-[11px] font-bold uppercase tracking-wide text-slate-700">
                     Examination
                   </span>
                 </div>
-                <div className="divide-y divide-slate-200">
+                <div>
                   {flatAnalytes.map((analyte) => {
+                    if (
+                      examinedResultsOnly &&
+                      !hasEnteredResult(values[`${analyte.id}_result`])
+                    ) {
+                      return null;
+                    }
                     const showUnit = !analyte.hideUnit && Boolean(analyte.unit);
                     return (
                       <div key={analyte.id} className="p-3 sm:p-4 space-y-3">

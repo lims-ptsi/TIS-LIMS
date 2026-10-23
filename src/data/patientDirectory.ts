@@ -15,6 +15,8 @@ export interface PatientVisit {
   sampleId?: string;
   sampleBarcode?: string;
   sampleStatus?: string;
+  resultsPickedUpAt?: string | null;
+  resultsPickedUpBy?: string | null;
 }
 
 export interface PatientRecord {
@@ -29,6 +31,8 @@ export interface PatientRecord {
   sex: 'Male' | 'Female' | 'Other';
   civilStatus: CivilStatus;
   address: string;
+  phone?: string;
+  email?: string;
   category: PatientCategory;
   visits: PatientVisit[];
 }
@@ -196,6 +200,8 @@ export function buildPatientDirectory(
       sex: normalizeSex(latest.patientGender),
       civilStatus: normalizeCivil(latest.civilStatus),
       address: latest.patientAddress && latest.patientAddress !== 'N/A' ? latest.patientAddress.toUpperCase() : '',
+      phone: latest.patientPhone || undefined,
+      email: latest.patientEmail || undefined,
       category: normalizeCategory(latest.patientCategory),
       visits: sorted.map((req) => {
         const matched = findSampleForRequisition(req, samples);
@@ -215,6 +221,8 @@ export function buildPatientDirectory(
           sampleId: matched?.id,
           sampleBarcode: matched?.barcode,
           sampleStatus: matched?.status,
+          resultsPickedUpAt: req.resultsPickedUpAt ?? null,
+          resultsPickedUpBy: req.resultsPickedUpBy ?? null,
         };
       }),
     });

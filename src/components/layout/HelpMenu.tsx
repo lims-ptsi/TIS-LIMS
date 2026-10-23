@@ -12,7 +12,14 @@ interface HelpMenuProps {
 const SCREEN_HELP: Record<string, string> = {
   home: 'Today’s counts, the three request steps, and the latest requests are on this screen. Begin opens the form. A row opens the queue only when this desk is allowed to work that request.',
   'create-request': 'Step 1 is the patient. OPD goes to the cashier. PhilHealth, Indigent, Corporate, Employee, and Projects go to the laboratory. Step 2 is the date, case number, and physician. Step 3 is the examinations. Choose at least one, then submit.',
-  submissions: 'Receive a request that is ready for the laboratory, then enter the result. PhilHealth, Indigent, Corporate, Employee, and Projects arrive here. OPD arrives after the cashier assigns the receipt.',
+  'all-requests':
+    'Every lab test request in one list. Search and filter by pipeline stage from intake through completed results.',
+  'analytics-reports':
+    'KPIs, pipeline breakdown, OPD payment coverage, examination mix, and 14-day volume. Use Print report pack for management summaries.',
+  'lab-requests':
+    'Information desk intake (select examinations), OPD waiting at cashier, and ready to receive. Receive and accession happen here.',
+  'testing-queue': 'Specimens already received — enter and finalize analytical results.',
+  submissions: 'Same as Request queue (legacy link).',
   payments: 'Only OPD requests are listed. Assign the official receipt after the patient pays. Other categories go to the laboratory and do not appear here.',
   samples: 'Print the specimen QR label for a received request.',
   'patient-records': 'Search every patient and open their full lab visit history, specimens, and results.',

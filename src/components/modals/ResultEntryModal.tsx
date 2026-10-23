@@ -28,6 +28,12 @@ import { getResultFormForExam, resolveEntryForm } from '../../data/resultFormsCa
 import { isSendOutExamination } from '../../data/examinationCatalog';
 import { NtpLabRequestForm, NTP_FIELD_KEYS } from '../forms/NtpLabRequestForm';
 import { determineResultFlag } from '../../utils/qcCalculations';
+import { baselineParameterValue, simulateParameterValue } from '../../utils/resultSimulate';
+import {
+  hasEnteredResult,
+  isResultFormRowExamined,
+  resultFormRowAppliesToExamCodes,
+} from '../../utils/resultDisplay';
 
 export interface ResultParamValue {
   paramId: string;
@@ -110,6 +116,7 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
   const [examResults, setExamResults] = useState<Record<string, ExamResultGroup>>({});
   const [generalRemarks, setGeneralRemarks] = useState('');
   const [isSavedSuccess, setIsSavedSuccess] = useState(false);
+  const [examinedResultsOnly, setExaminedResultsOnly] = useState(false);
   const dirtyRef = useRef(false);
   const hydratedRef = useRef('');
   const onSaveRef = useRef(onSaveResults);
@@ -337,7 +344,7 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
       const updatedParams = { ...updatedGroup.parameters };
 
       currentTemplate.parameters.forEach((p) => {
-        const defaultVal = p.defaultValue || (p.specMin !== undefined && p.specMax !== undefined ? ((p.specMin + p.specMax) / 2).toFixed(2) : 'Normal');
+        const defaultVal = baselineParameterValue(p);
         updatedParams[p.id] = {
           ...updatedParams[p.id],
           value: defaultVal,
@@ -360,23 +367,14 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
       const updatedParams = { ...updatedGroup.parameters };
 
       currentTemplate.parameters.forEach((p) => {
-        if (p.dataType === 'NUMERIC' && p.specMin !== undefined && p.specMax !== undefined) {
-          const mid = (p.specMin + p.specMax) / 2;
-          const range = (p.specMax - p.specMin) * 0.4;
-          const randomVal = (mid + (Math.random() - 0.5) * range).toFixed(2);
-          updatedParams[p.id] = {
-            ...updatedParams[p.id],
-            value: randomVal,
-            flag: calculateFlag(p, randomVal),
-          };
-        } else if (p.dataType === 'SELECT' && p.options && p.options.length > 0) {
-          const defaultOpt = p.defaultValue || p.options[0];
-          updatedParams[p.id] = {
-            ...updatedParams[p.id],
-            value: defaultOpt,
-            flag: calculateFlag(p, defaultOpt),
-          };
-        }
+        if (p.dataType === 'CALCULATED') return;
+        const simulated = simulateParameterValue(p);
+        if (!simulated) return;
+        updatedParams[p.id] = {
+          ...updatedParams[p.id],
+          value: simulated,
+          flag: calculateFlag(p, simulated),
+        };
       });
 
       updatedGroup.parameters = updatedParams;
@@ -543,7 +541,24 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                 </div>
 
                 {/* Automation Quick Actions */}
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setExaminedResultsOnly((v) => !v)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border shadow-2xs transition-all cursor-pointer active:scale-95 ${
+                      examinedResultsOnly
+                        ? 'bg-[#0176d3]/10 border-[#0176d3]/40 text-[#014486]'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'
+                    }`}
+                    title={
+                      examinedResultsOnly
+                        ? 'Showing tests with results only — click to show all parameters'
+                        : 'Showing all parameters — click to show examined tests only'
+                    }
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>{examinedResultsOnly ? 'Examined only' : 'Show all tests'}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={handleFillNormalBaselines}
@@ -680,30 +695,42 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                 if (useSimple && resultForm?.resultSections) {
                   const fourCol = resultForm.tableColumns === 'test-result-unit-ref';
                   return (
-                    <div className="border border-slate-300 rounded-sm overflow-hidden">
+                    <div className="lims-result-form-table overflow-hidden">
                       {fourCol ? (
-                        <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-300 text-[11px] font-bold uppercase tracking-wide text-slate-700">
-                          <div className="col-span-4 px-4 py-2 border-r border-slate-300">Test</div>
-                          <div className="col-span-3 px-4 py-2 border-r border-slate-300">Result</div>
-                          <div className="col-span-2 px-4 py-2 border-r border-slate-300">Unit</div>
+                        <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                          <div className="col-span-4 px-4 py-2">Test</div>
+                          <div className="col-span-3 px-4 py-2">Result</div>
+                          <div className="col-span-2 px-4 py-2">Unit</div>
                           <div className="col-span-3 px-4 py-2">Ref. Range</div>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-2 bg-slate-100 border-b border-slate-300 text-[11px] font-bold uppercase tracking-wide text-slate-700">
-                          <div className="px-4 py-2 border-r border-slate-300">
+                        <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                          <div className="px-4 py-2">
                             {resultForm.testColumnLabel || 'Test'}
                           </div>
                           <div className="px-4 py-2">{resultForm.resultColumnLabel || 'Result'}</div>
                         </div>
                       )}
-                      {resultForm.resultSections.map((section) => (
+                      {resultForm.resultSections.map((section) => {
+                        const readParam = (paramId: string) =>
+                          currentGroup.parameters[paramId]?.value ?? '';
+                        const sectionRows = section.rows
+                          .filter((row) =>
+                            resultFormRowAppliesToExamCodes(row, [currentGroup.examCode])
+                          )
+                          .filter((row) => {
+                            if (!examinedResultsOnly) return true;
+                            return isResultFormRowExamined(row, readParam);
+                          });
+                        if (sectionRows.length === 0) return null;
+                        return (
                         <div key={section.id}>
                           {section.title ? (
-                            <div className="px-4 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-800">
+                            <div className="lims-rf-section-label px-4 py-1.5 bg-slate-50 text-[11px] font-bold uppercase text-slate-800">
                               {section.title}
                             </div>
                           ) : null}
-                          {section.rows.map((row) => {
+                          {sectionRows.map((row) => {
                             const param = currentTemplate.parameters.find((p) => p.id === row.id);
                             const currentValue =
                               currentGroup.parameters[row.id]?.value ||
@@ -717,12 +744,12 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                               return (
                                 <div
                                   key={row.id}
-                                  className="grid grid-cols-12 border-b border-slate-100 last:border-b-0"
+                                  className="lims-rf-grid-row grid grid-cols-12"
                                 >
-                                  <div className="col-span-4 px-4 py-2.5 border-r border-slate-100 text-sm text-slate-800">
+                                  <div className="col-span-4 px-4 py-2.5 text-sm text-slate-800">
                                     {row.label}
                                   </div>
-                                  <div className="col-span-3 px-3 py-1.5 border-r border-slate-100">
+                                  <div className="col-span-3 px-3 py-1.5">
                                     <input
                                       type={inputType}
                                       step={inputType === 'number' ? 'any' : undefined}
@@ -733,7 +760,7 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                                       className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
                                     />
                                   </div>
-                                  <div className="col-span-2 px-4 py-2.5 border-r border-slate-100 text-xs font-mono text-slate-700">
+                                  <div className="col-span-2 px-4 py-2.5 text-xs font-mono text-slate-700">
                                     {row.unit || param?.unit || '—'}
                                   </div>
                                   <div className="col-span-3 px-4 py-2.5 text-xs font-mono text-slate-700">
@@ -752,9 +779,9 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                             return (
                               <div
                                 key={row.id}
-                                className="grid grid-cols-2 border-b border-slate-100 last:border-b-0"
+                                className="lims-rf-grid-row grid grid-cols-2"
                               >
-                                <div className="px-4 py-2.5 border-r border-slate-100 text-sm text-slate-800">
+                                <div className="px-4 py-2.5 text-sm text-slate-800">
                                   {row.examOptions ? (
                                     <select
                                       value={methodValue}
@@ -812,16 +839,17 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                             );
                           })}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
                 }
 
                 if (useFlatAnalytes && resultForm?.analytes) {
                   return (
-                    <div className="border border-slate-300 rounded-sm overflow-hidden">
-                      <div className="grid grid-cols-2 bg-slate-100 border-b border-slate-300 text-[11px] font-bold uppercase tracking-wide text-slate-700">
-                        <div className="px-4 py-2 border-r border-slate-300">Test</div>
+                    <div className="lims-result-form-table overflow-hidden">
+                      <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                        <div className="px-4 py-2">Test</div>
                         <div className="px-4 py-2">Result</div>
                       </div>
                       {resultForm.analytes.map((row) => {
@@ -830,6 +858,7 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                           currentGroup.parameters[row.id]?.value ||
                           (param ? currentGroup.parameters[param.id]?.value : '') ||
                           '';
+                        if (examinedResultsOnly && !hasEnteredResult(currentValue)) return null;
                         const isSelect =
                           row.resultType === 'select' || param?.dataType === 'SELECT';
                         const isNumeric =
@@ -837,9 +866,9 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                         return (
                           <div
                             key={row.id}
-                            className="grid grid-cols-2 border-b border-slate-100 last:border-b-0"
+                            className="lims-rf-grid-row grid grid-cols-2"
                           >
-                            <div className="px-4 py-2.5 border-r border-slate-100 text-sm text-slate-800">
+                            <div className="px-4 py-2.5 text-sm text-slate-800">
                               {row.label}
                             </div>
                             <div className="px-3 py-1.5">
@@ -878,24 +907,25 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                 }
 
                 return (
-              <div className="border border-slate-300 rounded-sm overflow-hidden">
-                <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-300 text-[11px] font-bold uppercase tracking-wide text-slate-700">
-                  <div className="col-span-4 px-4 py-2 border-r border-slate-300">Test</div>
-                  <div className="col-span-3 px-4 py-2 border-r border-slate-300">Result</div>
-                  <div className="col-span-2 px-4 py-2 border-r border-slate-300">Unit</div>
+              <div className="lims-result-form-table overflow-hidden">
+                <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                  <div className="col-span-4 px-4 py-2">Test</div>
+                  <div className="col-span-3 px-4 py-2">Result</div>
+                  <div className="col-span-2 px-4 py-2">Unit</div>
                   <div className="col-span-3 px-4 py-2">Ref. Range</div>
                 </div>
                 {currentTemplate.parameters.map((param) => {
                   const currentValue = currentGroup.parameters[param.id]?.value || '';
+                  if (examinedResultsOnly && !hasEnteredResult(currentValue)) return null;
                   return (
                     <div
                       key={param.id}
-                      className="grid grid-cols-12 border-b border-slate-100 last:border-b-0"
+                      className="lims-rf-grid-row grid grid-cols-12"
                     >
-                      <div className="col-span-4 px-4 py-2.5 border-r border-slate-100 text-sm text-slate-800">
+                      <div className="col-span-4 px-4 py-2.5 text-sm text-slate-800">
                         {param.name}
                       </div>
-                      <div className="col-span-3 px-3 py-1.5 border-r border-slate-100">
+                      <div className="col-span-3 px-3 py-1.5">
                         {param.dataType === 'SELECT' && param.options ? (
                           <select
                             value={currentValue}
@@ -919,7 +949,7 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                           />
                         )}
                       </div>
-                      <div className="col-span-2 px-4 py-2.5 border-r border-slate-100 text-xs font-mono text-slate-700">
+                      <div className="col-span-2 px-4 py-2.5 text-xs font-mono text-slate-700">
                         {param.unit || '—'}
                       </div>
                       <div className="col-span-3 px-4 py-2.5 text-xs font-mono text-slate-700">

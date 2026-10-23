@@ -1,21 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  X, 
-  CheckCircle2, 
-  User, 
-  BadgePercent, 
+import {
+  X,
+  CheckCircle2,
+  BadgePercent,
   Barcode,
   Receipt,
   AlertCircle,
+  FlaskConical,
+  ShieldCheck,
+  UserRound,
 } from 'lucide-react';
 import { LabTestRequisition, PatientCategory, PriorityLevel, Sample } from '../../types/lims';
+import { hasOfficialReceipt, readyForLaboratory, requiresCashier } from '../../data/requestDesk';
+import { buildAccessionSpecimenPlan } from '../../utils/accessionSpecimen';
 
 interface ReceiveAccessionModalProps {
   isOpen: boolean;
   onClose: () => void;
   requisition: LabTestRequisition | null;
   onConfirmAccession: (
-    req: LabTestRequisition, 
+    req: LabTestRequisition,
     accessionData: {
       patientCategory: PatientCategory;
       sampleType: Sample['sampleType'];
@@ -36,12 +40,50 @@ interface ReceiveAccessionModalProps {
   existingSamples?: Sample[];
 }
 
+const CATEGORY_OPTIONS: { value: PatientCategory; label: string }[] = [
+  { value: 'OPD', label: 'OPD — Outpatient walk-in' },
+  { value: 'PhilHealth', label: 'PhilHealth — NHIP' },
+  { value: 'Indigent', label: 'Indigent — subsidized care' },
+  { value: 'Corporate', label: 'Corporate — company / HMO' },
+  { value: 'Pre-Employment / Employee', label: 'Pre-employment / employee screening' },
+  { value: 'Projects', label: 'Projects — studies & trials' },
+];
+
+function ModalSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-2.5">
+        <h3 className="text-[13px] font-semibold text-slate-900 tracking-tight">{title}</h3>
+        {description ? <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{description}</p> : null}
+      </div>
+      <div className="rounded-lg border border-[#d8dde6] bg-white p-4 shadow-xs">{children}</div>
+    </section>
+  );
+}
+
+function MetaBadge({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] shadow-2xs">
+      <span className="font-medium text-slate-500">{label}</span>
+      <span className="font-semibold text-slate-800 tabular-nums">{value}</span>
+    </span>
+  );
+}
+
 export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
   isOpen,
   onClose,
   requisition,
   onConfirmAccession,
-  currentUserName,
+  currentUserName: _currentUserName,
   existingSamples: _existingSamples = [],
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<PatientCategory>('OPD');
@@ -56,28 +98,16 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formError, setFormError] = useState<string>('');
 
-  // Auto-detect intelligent specimen type based on test panel selections
+  const specimenPlan = requisition ? buildAccessionSpecimenPlan(requisition) : null;
+
   useEffect(() => {
     if (!requisition) return;
 
-    const tests = (requisition.kindOfExamination || requisition.selectedTestNames || []).join(' ').toLowerCase();
-    
-    if (tests.includes('urinalysis') || tests.includes('urine')) {
-      setSampleType('Urine');
-      setMatrix('Clean Catch Midstream Urine');
-    } else if (tests.includes('metabolic') || tests.includes('lipid') || tests.includes('glucose') || tests.includes('sugar') || tests.includes('liver') || tests.includes('renal') || tests.includes('thyroid')) {
-      setSampleType('Serum');
-      setMatrix('Clotted Serum (SST Gel Separator)');
-    } else if (tests.includes('heavy metals') || tests.includes('water')) {
-      setSampleType('Drinking Water');
-      setMatrix('Nitric Acid (HNO3) Preserved Water');
-    } else {
-      setSampleType('Whole Blood');
-      setMatrix('K2-EDTA Anticoagulated Whole Blood');
-    }
-
+    const plan = buildAccessionSpecimenPlan(requisition);
+    setSampleType(plan.primarySampleType);
+    setMatrix(plan.primaryMatrix);
     setPriority(requisition.priority || 'ROUTINE');
-    setTubeCount(requisition.tubeCount || 2);
+    setTubeCount(plan.tubeCount);
     setNotes(requisition.clinicalNotes || '');
     setOrNumber(requisition.orNumber && requisition.orNumber !== 'N/A' ? requisition.orNumber : '');
     setSelectedCategory(requisition.patientCategory || 'OPD');
@@ -86,11 +116,31 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
 
   if (!isOpen || !requisition) return null;
 
+  const billingCategory = requisition.patientCategory || 'OPD';
+  const opdAwaitingCashier =
+    requisition.status === 'SUBMITTED' &&
+    requiresCashier(billingCategory) &&
+    !readyForLaboratory(requisition);
+  const editingCategoryOnly =
+    requisition.status === 'RECEIVED' || requisition.status === 'IN_TESTING';
+  const exams = requisition.kindOfExamination?.length
+    ? requisition.kindOfExamination
+    : requisition.selectedTestNames || [];
+  const receiptDraft = orNumber.trim() || (requisition.orNumber || '').trim();
+  const orVerified = requiresCashier(billingCategory) && hasOfficialReceipt(receiptDraft);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const receipt = orNumber.trim().toUpperCase();
-    if (selectedCategory === 'OPD' && (!receipt || receipt === 'N/A')) {
-      setFormError('OPD goes to the cashier first. The laboratory can receive this request after the official receipt is assigned.');
+    const mergedOr = receipt || (requisition.orNumber || '').trim();
+    if (requiresCashier(billingCategory) && !hasOfficialReceipt(mergedOr)) {
+      setFormError(
+        'OPD requests need an official receipt (OR) from the cashier before the laboratory can receive the specimen.'
+      );
+      return;
+    }
+    if (requisition.status === 'SUBMITTED' && !readyForLaboratory(requisition)) {
+      setFormError('This request is not ready for receiving yet.');
       return;
     }
     setFormError('');
@@ -106,7 +156,7 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
       storageRoom,
       storageTemp,
       notes,
-      orNumber: orNumber.trim().toUpperCase() || (requisition.orNumber !== 'N/A' ? requisition.orNumber : ''),
+      orNumber: hasOfficialReceipt(mergedOr) ? mergedOr.toUpperCase() : requisition.orNumber,
     });
 
     setIsSubmitting(false);
@@ -114,192 +164,274 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-hidden animate-fadeIn">
-      {/* Constrained Modal Container */}
-      <div className="bg-white border border-[#d8dde6] rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-slate-900 font-sans">
-        
-        {/* Fixed Header */}
-        <div className="px-5 py-3.5 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-md bg-[#eaf5ea] border border-[#a3d9a5] flex items-center justify-center text-[#2e844a] shadow-xs shrink-0">
-              <Barcode className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-slate-900 leading-tight">
-                  {requisition.status === 'RECEIVED' ? 'ASSIGN PATIENT CATEGORY' : 'RECEIVE & ACCESSION SPECIMEN'}
-                </h2>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-50 text-[#0176d3] border border-blue-200">
-                  {requisition.requisitionNumber}
-                </span>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-[3px] p-4 overflow-hidden animate-fadeIn"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="receive-accession-title"
+    >
+      <div className="bg-white border border-[#d8dde6] rounded-2xl max-w-[640px] w-full max-h-[min(90vh,820px)] flex flex-col shadow-[0_24px_48px_-12px_rgba(15,23,42,0.25)] overflow-hidden text-slate-900">
+        <div className="shrink-0 border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-slate-50">
+          <div className="px-6 pt-5 pb-4 flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-[#eaf5ea] border border-[#b8ddb9] flex items-center justify-center text-[#2e844a] shrink-0 shadow-2xs">
+                <Barcode className="w-[18px] h-[18px]" strokeWidth={2.25} />
               </div>
-              <p className="text-[11px] text-slate-500 leading-tight">
-                {requisition.status === 'RECEIVED' 
-                  ? 'Update Patient Category Classification & Physical Specimen Details' 
-                  : 'Step 2: Assign Patient Category & Validate Physical Specimen Intake'}
+              <div className="min-w-0 pt-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[#0176d3] mb-1">
+                  Laboratory intake
+                </p>
+                <h2 id="receive-accession-title" className="text-lg font-semibold text-slate-900 leading-snug tracking-tight">
+                  {editingCategoryOnly ? 'Update patient category' : 'Receive & accession specimen'}
+                </h2>
+                {!editingCategoryOnly ? (
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Verify billing and assign specimen details before barcode generation.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 -mr-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100/80 cursor-pointer shrink-0 transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="px-6 pb-4 flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="w-8 h-8 rounded-full bg-[#eef4ff] border border-[#c5d9f7] flex items-center justify-center text-[#0176d3] shrink-0">
+                <UserRound className="w-4 h-4" />
+              </div>
+              <p className="text-sm font-semibold text-slate-900 truncate" title={requisition.patientOrSubjectName}>
+                {requisition.patientOrSubjectName}
               </p>
             </div>
+            <div className="flex flex-wrap gap-1.5">
+              <MetaBadge label="Case" value={requisition.caseNo || requisition.externalRef || '—'} />
+              <MetaBadge label="Request" value={requisition.requisitionNumber} />
+              <MetaBadge label="Priority" value={requisition.priority || 'ROUTINE'} />
+            </div>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
-            title="Close"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
 
-        {/* Scrollable Modal Body */}
-        <form id="accession-form" onSubmit={handleSubmit} className="px-5 py-4 overflow-y-auto flex-1 space-y-4 text-xs">
-          
-          {/* 1. Patient & Requisition Summary Info Box */}
-          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-1.5 text-[11px]">
-              <div className="flex items-center gap-1.5 font-bold text-slate-800 uppercase">
-                <User className="w-3.5 h-3.5 text-[#0176d3]" />
-                <span>Patient: <strong className="text-slate-900">{requisition.patientOrSubjectName}</strong></span>
+        <form id="accession-form" onSubmit={handleSubmit} className="px-6 py-5 overflow-y-auto flex-1 space-y-5 text-[13px]">
+          <ModalSection title="Request summary" description="Demographics and ordered work from the lab request.">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+              <div>
+                <dt className="text-[11px] font-medium text-slate-500">Age & sex</dt>
+                <dd className="mt-0.5 font-medium text-slate-900">
+                  {requisition.patientAge} yrs · {requisition.patientGender}
+                </dd>
               </div>
-              <div className="font-mono text-slate-600 font-semibold">
-                CASE#: <span className="text-slate-900">{requisition.caseNo || requisition.externalRef}</span>
+              <div>
+                <dt className="text-[11px] font-medium text-slate-500">Civil status</dt>
+                <dd className="mt-0.5 font-medium text-slate-900">{requisition.civilStatus || 'Single'}</dd>
               </div>
-            </div>
+              <div className="col-span-2 sm:col-span-1">
+                <dt className="text-[11px] font-medium text-slate-500">Ordering physician</dt>
+                <dd className="mt-0.5 font-medium text-slate-900 truncate" title={requisition.orderingPhysicianOrPI}>
+                  {requisition.orderingPhysicianOrPI || '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] font-medium text-slate-500">Charge slip</dt>
+                <dd className="mt-0.5 font-medium text-slate-900 tabular-nums">
+                  {requisition.chargeSlipNumber || '—'}
+                </dd>
+              </div>
+            </dl>
+            {exams.length > 0 ? (
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <p className="text-[11px] font-medium text-slate-500 mb-2">Examinations</p>
+                <ul className="flex flex-wrap gap-1.5">
+                  {exams.map((t) => (
+                    <li
+                      key={t}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-50 border border-slate-200 text-slate-800"
+                    >
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </ModalSection>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-              <div>
-                <span className="text-slate-500 block text-[10px]">Demographics:</span>
-                <span className="font-semibold text-slate-800">{requisition.patientAge} yrs · {requisition.patientGender}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[10px]">Civil Status:</span>
-                <span className="font-semibold text-slate-800">{requisition.civilStatus || 'Single'}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[10px]">Billing (OR# / CS#):</span>
-                <span className="font-mono font-semibold text-slate-800">{requisition.orNumber || 'N/A'} / {requisition.chargeSlipNumber || 'N/A'}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[10px]">Physician:</span>
-                <span className="font-semibold text-[#0176d3] truncate block" title={requisition.orderingPhysicianOrPI}>
-                  {requisition.orderingPhysicianOrPI}
-                </span>
-              </div>
+          {opdAwaitingCashier ? (
+            <div className="flex gap-3 rounded-lg border border-amber-200/90 bg-amber-50 px-4 py-3 text-xs text-amber-950 leading-relaxed">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <p>
+                Payment is pending at the cashier. Once the OR is recorded, this request will show as{' '}
+                <span className="font-semibold">Ready to receive</span> on Request queue.
+              </p>
             </div>
+          ) : null}
 
-            {/* Test Examination Tags */}
-            <div className="pt-1 border-t border-slate-200 flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] text-slate-500 font-medium">Tests Requested:</span>
-              {(requisition.kindOfExamination || requisition.selectedTestNames || ['CBC']).map((t, idx) => (
-                <span key={idx} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white border border-slate-300 text-slate-800">
-                  {t}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {formError && (
-            <div className="p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-950 flex items-start gap-2 text-xs font-semibold">
-              <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+          {formError ? (
+            <div className="flex gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-900 leading-relaxed">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{formError}</span>
             </div>
-          )}
+          ) : null}
 
-          {/* 2. REQUIRED: PATIENT CATEGORY ASSIGNMENT AS DROPDOWN LIST */}
-          <div className="p-4 rounded-lg bg-white border border-slate-200 space-y-2 shadow-2xs">
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-bold text-slate-900 uppercase flex items-center gap-1.5">
-                <BadgePercent className="w-4 h-4 text-[#0176d3]" />
-                <span>SELECT PATIENT CATEGORY *</span>
-              </label>
-              <span className="text-[11px] font-semibold text-blue-700 font-mono bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                Current: [{selectedCategory}]
-              </span>
-            </div>
-
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value as PatientCategory)}
-              required
-              className="w-full px-3 py-2.5 rounded-lg bg-white border border-[#d8dde6] text-slate-900 text-xs font-bold font-mono focus:outline-none focus:border-[#0176d3] focus:ring-1 focus:ring-[#0176d3] cursor-pointer uppercase shadow-2xs"
-            >
-              <option value="OPD">OPD — Outpatient Department Walk-in</option>
-              <option value="PhilHealth">PhilHealth — National Health Insurance (NHIP)</option>
-              <option value="Indigent">Indigent — Social Welfare &amp; Subsidized Care</option>
-              <option value="Corporate">Corporate — Company Account / HMO Coverage</option>
-              <option value="Pre-Employment / Employee">Pre-Employment / Employee — Staff Screening &amp; Personnel</option>
-              <option value="Projects">Projects — Special Clinical Studies &amp; Trials</option>
-            </select>
-            <p className="text-[11px] text-slate-500 mt-1">
-              Assign the billing classification and medical program coverage for this patient request.
-            </p>
-          </div>
-
-          {/* 3. OPD CASHIER OFFICIAL RECEIPT (OR#) VERIFICATION */}
-          {selectedCategory === 'OPD' && (
-            <div className="p-4 rounded-lg bg-amber-50/90 border border-amber-300 space-y-3 shadow-2xs animate-fadeIn">
-              <div className="flex items-center justify-between border-b border-amber-200 pb-1.5">
-                <span className="text-xs font-bold text-amber-950 uppercase flex items-center gap-1.5">
-                  <Receipt className="w-4 h-4 text-amber-700" />
-                  <span>OPD Cashier Official Receipt (OR#) Verification</span>
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
-                  Verify Cashier Payment
-                </span>
+          <ModalSection
+            title="Accession details"
+            description="Category and specimen handling applied when the sample is received."
+          >
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="patient-category" className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 mb-1.5">
+                  <BadgePercent className="w-3.5 h-3.5 text-[#0176d3]" />
+                  Patient category
+                </label>
+                <select
+                  id="patient-category"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value as PatientCategory)}
+                  required
+                  disabled={opdAwaitingCashier}
+                  className="w-full px-3 py-2.5 rounded-lg bg-white border border-[#d8dde6] text-[13px] text-slate-900 focus:outline-none focus:border-[#0176d3] focus:ring-2 focus:ring-[#0176d3]/20 cursor-pointer disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-shadow"
+                >
+                  {CATEGORY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  Intake classification: <span className="font-medium text-slate-700">{billingCategory}</span>
+                </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="rounded-lg bg-slate-50/90 border border-slate-100 p-3.5 space-y-3">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                  <FlaskConical className="w-3.5 h-3.5 text-[#0176d3]" />
+                  Suggested specimen
+                </div>
+                {specimenPlan?.multipleContainers ? (
+                  <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-2 leading-relaxed">
+                    This order needs <strong>{specimenPlan.lines.length} different containers</strong>. Collect and
+                    label each type below. The first accession record uses the primary blood/serum line when present.
+                  </p>
+                ) : null}
+                <div className="space-y-2.5">
+                  {(specimenPlan?.lines || []).map((line) => (
+                    <div
+                      key={`${line.sampleType}-${line.matrix}`}
+                      className="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-xs"
+                    >
+                      <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500 mb-1">
+                        {line.examinationNames.join(' · ')}
+                      </div>
+                      <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div>
+                          <dt className="text-[10px] text-slate-500">Type</dt>
+                          <dd className="font-semibold text-slate-900">{line.sampleType}</dd>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <dt className="text-[10px] text-slate-500">Matrix / container</dt>
+                          <dd className="font-medium text-slate-900 leading-snug">{line.matrix}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  ))}
+                </div>
+                <dl className="grid grid-cols-2 gap-3 text-xs pt-1 border-t border-slate-200">
+                  <div>
+                    <dt className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                      Primary accession (barcode)
+                    </dt>
+                    <dd className="mt-0.5 font-semibold text-slate-900">{sampleType}</dd>
+                    <dd className="text-[11px] text-slate-600 leading-snug">{matrix}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                      Containers to collect
+                    </dt>
+                    <dd className="mt-0.5 font-semibold text-slate-900 tabular-nums">{tubeCount}</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+          </ModalSection>
+
+          {requiresCashier(billingCategory) ? (
+            <ModalSection
+              title="Payment verification"
+              description="Match the OR on the physical receipt from the cashier before collection."
+            >
+              <div className="space-y-3">
+                {orVerified ? (
+                  <div className="flex items-center gap-2 rounded-md bg-emerald-50 border border-emerald-200/80 px-3 py-2 text-xs text-emerald-900">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      OR <span className="font-semibold tabular-nums">{receiptDraft.toUpperCase()}</span> is on file.
+                      Confirm it matches the printed receipt.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200/80 px-3 py-2 text-xs text-amber-950">
+                    <Receipt className="w-4 h-4 text-amber-700 shrink-0" />
+                    <span>Enter or confirm the official receipt number from the cashier.</span>
+                  </div>
+                )}
                 <div>
-                  <label className="text-[11px] font-bold text-amber-950 block mb-1">
-                    OFFICIAL RECEIPT (OR#) NUMBER *
+                  <label htmlFor="or-number" className="text-[11px] font-medium text-slate-600 block mb-1.5">
+                    Official receipt (OR) number
                   </label>
                   <input
+                    id="or-number"
                     type="text"
-                    placeholder="E.G. OR-2026-90412"
+                    placeholder="e.g. OR-57772"
                     value={orNumber}
                     onChange={(e) => setOrNumber(e.target.value.toUpperCase())}
-                    className="w-full px-3 py-1.5 rounded-md bg-white border border-amber-300 text-slate-900 font-mono text-xs font-bold uppercase focus:outline-none focus:border-[#0176d3] focus:ring-1 focus:ring-[#0176d3]"
+                    className="w-full px-3 py-2.5 rounded-lg bg-white border border-[#d8dde6] text-[13px] text-slate-900 tabular-nums placeholder:text-slate-400 focus:outline-none focus:border-[#0176d3] focus:ring-2 focus:ring-[#0176d3]/20"
                   />
                 </div>
-                <div className="text-[11px] text-amber-900 flex items-center pt-2 sm:pt-4">
-                  <span>Verify cashier stamp on physical payment slip prior to drawing specimen.</span>
-                </div>
               </div>
-            </div>
-          )}
+            </ModalSection>
+          ) : null}
         </form>
 
-        {/* Fixed Footer */}
-        <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isSubmitting}
-            className="px-4 py-2 border border-[#d8dde6] rounded-md text-slate-600 hover:bg-slate-100 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
-          >
-            CANCEL
-          </button>
-          
-          <button
-            type="submit"
-            form="accession-form"
-            disabled={isSubmitting}
-            className="flex items-center gap-1.5 px-5 py-2 bg-[#2e844a] hover:bg-[#26713f] disabled:opacity-70 text-white rounded-md text-xs font-bold shadow-sm transition-colors cursor-pointer"
-          >
-            {isSubmitting ? (
-              <>
-                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>SAVING CHANGES...</span>
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{requisition.status === 'RECEIVED' ? 'SAVE & ASSIGN PATIENT CATEGORY' : 'CONFIRM ACCESSION & GENERATE BARCODE'}</span>
-              </>
-            )}
-          </button>
+        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50/90 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+          <p className="text-[11px] text-slate-500 leading-relaxed hidden sm:block max-w-[240px]">
+            {editingCategoryOnly
+              ? 'Updates billing category on this accession.'
+              : 'Creates the accession record and specimen barcode.'}
+          </p>
+          <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="px-4 py-2.5 border border-[#d8dde6] rounded-lg text-slate-700 hover:bg-white text-sm font-medium cursor-pointer disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form="accession-form"
+              disabled={isSubmitting || opdAwaitingCashier}
+              className="inline-flex items-center justify-center gap-2 min-w-[200px] px-5 py-2.5 bg-[#2e844a] hover:bg-[#26713f] disabled:opacity-60 disabled:hover:bg-[#2e844a] text-white rounded-lg text-sm font-semibold shadow-sm cursor-pointer transition-colors"
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" strokeWidth={2.25} />
+                  {editingCategoryOnly ? 'Save category' : 'Confirm accession & barcode'}
+                </>
+              )}
+            </button>
+          </div>
         </div>
-
       </div>
     </div>
   );

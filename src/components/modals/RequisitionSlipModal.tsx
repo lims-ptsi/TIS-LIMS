@@ -37,6 +37,10 @@ interface RequisitionSlipModalProps {
   requisition: LabTestRequisition | null;
   canEdit?: boolean;
   onEditRequisition?: (requisition: LabTestRequisition) => void;
+  /** Render document body only (inside a side drawer). */
+  embedded?: boolean;
+  /** Information desk: patient/request only; laboratory orders tests later. */
+  hideExaminations?: boolean;
 }
 
 // Crisp Simulated Barcode Component for Medical Requisitions
@@ -74,8 +78,11 @@ export const RequisitionSlipModal: React.FC<RequisitionSlipModalProps> = ({
   requisition,
   canEdit = false,
   onEditRequisition,
+  embedded = false,
+  hideExaminations = false,
 }) => {
-  if (!isOpen || !requisition) return null;
+  if (!requisition) return null;
+  if (!isOpen && !embedded) return null;
 
   const handlePrint = () => {
     window.print();
@@ -117,12 +124,17 @@ export const RequisitionSlipModal: React.FC<RequisitionSlipModalProps> = ({
 
   const totalExaminationFee = itemizedExams.reduce((sum, item) => sum + item.price, 0);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-hidden animate-fadeIn print-modal-backdrop">
-      {/* Modal Container */}
-      <div className="bg-white border border-slate-200 rounded-2xl max-w-4xl w-full max-h-[94vh] flex flex-col shadow-2xl overflow-hidden text-slate-900 font-sans print-modal-container">
+  const panel = (
+      <div
+        className={`bg-white border-slate-200 w-full flex flex-col overflow-hidden text-slate-900 font-sans print-modal-container ${
+          embedded
+            ? 'h-full min-h-0 border-0 shadow-none rounded-none'
+            : 'border rounded-2xl max-w-4xl max-h-[94vh] shadow-2xl'
+        }`}
+      >
         
         {/* Top Header Bar */}
+        {!embedded ? (
         <div className="px-5 py-3 border-b border-slate-200 bg-white flex items-center justify-between shrink-0 print:hidden">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700">
@@ -174,6 +186,7 @@ export const RequisitionSlipModal: React.FC<RequisitionSlipModalProps> = ({
             </button>
           </div>
         </div>
+        ) : null}
 
         {/* Slip Document Body */}
         <div className="px-3 sm:px-6 py-4 overflow-y-auto flex-1 bg-slate-100/60 print:bg-white print:p-0 print:overflow-visible">
@@ -319,7 +332,7 @@ export const RequisitionSlipModal: React.FC<RequisitionSlipModalProps> = ({
               </div>
             </div>
 
-            {/* 3. Itemized Requested Examinations Table */}
+            {!hideExaminations ? (
             <div className="border border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs print:shadow-none print:border-slate-300">
               {/* Section Subheader */}
               <div className="bg-slate-100 px-3 py-1.5 border-b border-slate-300 flex items-center justify-between text-xs print:text-[8.5px] print:py-1">
@@ -403,6 +416,7 @@ export const RequisitionSlipModal: React.FC<RequisitionSlipModalProps> = ({
                 </div>
               )}
             </div>
+            ) : null}
 
             {/* 4. Official Signatures & Verification Section */}
             <div className="pt-2.5 border-t border-slate-300 grid grid-cols-1 sm:grid-cols-2 gap-4 items-end print:grid-cols-2 print-avoid-break print:pt-2">
@@ -442,6 +456,13 @@ export const RequisitionSlipModal: React.FC<RequisitionSlipModalProps> = ({
         </div>
 
       </div>
+  );
+
+  if (embedded) return panel;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-hidden animate-fadeIn print-modal-backdrop">
+      {panel}
     </div>
   );
 };

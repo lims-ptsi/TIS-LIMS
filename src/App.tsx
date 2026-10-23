@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { canReviseRequest } from './data/requestDesk';
+import {
+  canReviseRequest,
+  hasExaminationOrder,
+  hasOfficialReceipt,
+  needsLaboratoryExamSelection,
+  readyForLaboratory,
+  requiresCashier,
+} from './data/requestDesk';
 import { TopNavbar } from './components/layout/TopNavbar';
 import { HomeDashboardView } from './components/views/HomeDashboardView';
+import { AdvancedAnalyticsView } from './components/views/AdvancedAnalyticsView';
 import { SamplesListView } from './components/views/SamplesListView';
 import { SampleDetailView } from './components/views/SampleDetailView';
 import { BatchDetailView } from './components/views/BatchDetailView';
@@ -27,6 +35,8 @@ import { ResultEntryModal, ExamResultGroup } from './components/modals/ResultEnt
 import { CoAReportModal } from './components/modals/CoAReportModal';
 import { RequisitionSlipModal } from './components/modals/RequisitionSlipModal';
 import { ReceiveAccessionModal } from './components/modals/ReceiveAccessionModal';
+import { PatientNotifyDrawer } from './components/modals/PatientNotifyDrawer';
+import { ResultsPickupDrawer } from './components/modals/ResultsPickupDrawer';
 import { limsService } from './services/limsService';
 import { LoginPage } from './components/auth/LoginPage';
 import { LockScreenModal } from './components/auth/LockScreenModal';
@@ -61,9 +71,25 @@ import {
   saveStoredTestOrders,
   loadStoredTestResults,
   saveStoredTestResults,
+  loadStoredNotifications,
+  saveStoredNotifications,
   lookupStoredRecord,
   requisitionNumberKey,
 } from './data/limsDataStore';
+import {
+  buildPipelineNotification,
+  dedupeByWorkflowKey,
+  notificationVisibleToRole,
+  reconcilePipelineNotifications,
+  trimNotificationList,
+  workflowKeyForRequisition,
+} from './utils/workflowNotifications';
+import { sendResultsReadyPickupNotifications } from './services/patientNotificationService';
+import {
+  buildAccessionSpecimenPlan,
+  inferAccessionDefaultsFromPlan,
+} from './utils/accessionSpecimen';
+import { isResultsReleasedForPickup } from './utils/resultsPickup';
 
 import { 
   INITIAL_SAMPLES, 
@@ -89,7 +115,7 @@ import {
 } from './types/lims';
 import { playNotificationChime, triggerDesktopNotification } from './utils/notificationSound';
 import { hasPermission, permissionDeniedMessage } from './utils/permissions';
-import { canOpenTab, defaultTabForRole, tabsForRole } from './data/roleAccess';
+import { canOpenTab, defaultTabForRole, isAppRole, tabsForRole } from './data/roleAccess';
 import { readAppNav, writeAppNav } from './utils/appNavigation';
 
 function MainLimsContent() {
@@ -107,6 +133,13 @@ function MainLimsContent() {
   const [detailCoAModalReq, setDetailCoAModalReq] = useState<LabTestRequisition | null>(null);
   const [slipModalReq, setSlipModalReq] = useState<LabTestRequisition | null>(null);
   const [receiveModalReq, setReceiveModalReq] = useState<LabTestRequisition | null>(null);
+  const [patientNotifyDrawerReq, setPatientNotifyDrawerReq] = useState<LabTestRequisition | null>(null);
+  const [patientNotifySending, setPatientNotifySending] = useState(false);
+  const [resultsPickupDrawer, setResultsPickupDrawer] = useState<{
+    req: LabTestRequisition;
+    markAsPickedUp: boolean;
+  } | null>(null);
+  const [resultsPickupSaving, setResultsPickupSaving] = useState(false);
   const [storedResults, setStoredResults] = useState<Record<string, Record<string, ExamResultGroup>>>(
     () => loadStoredTestResults().results
   );
@@ -131,32 +164,49 @@ function MainLimsContent() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Real-time Live Notifications State
-  const [notifications, setNotifications] = useState<LimsNotification[]>([]);
+  // Real-time Live Notifications State (persisted + pipeline sync)
+  const [notifications, setNotifications] = useState<LimsNotification[]>(() => loadStoredNotifications());
+
+  useEffect(() => {
+    saveStoredNotifications(notifications);
+  }, [notifications]);
 
   const addNotification = (notif: Omit<LimsNotification, 'id' | 'timestamp' | 'read'>) => {
-    const newNotif: LimsNotification = {
-      ...notif,
-      id: `notif-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-      timestamp: 'Just now',
-      read: false,
-    };
+    const role = isAppRole(user?.roleType) ? user.roleType : null;
+    setNotifications((prev) => {
+      if (dedupeByWorkflowKey(notif, prev)) return prev;
+      const newNotif: LimsNotification = {
+        ...notif,
+        id: `notif-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        timestamp: 'Just now',
+        read: false,
+      };
+      return trimNotificationList([newNotif, ...prev]);
+    });
 
-    setNotifications((prev) => [newNotif, ...prev]);
+    if (!notificationVisibleToRole(notif as LimsNotification, role)) return;
 
-    // 1. Play Audio Chime via Web Audio API synthesizer
     playNotificationChime(notif.priority === 'STAT' ? 'stat' : 'new_request');
 
-    // 2. Trigger native OS / Browser Desktop Notification
     triggerDesktopNotification(
       notif.title,
       notif.message,
       () => {
         if (notif.targetTab) {
-          setCurrentTab(notif.targetTab);
+          const tab = notif.targetTab === 'submissions' ? 'lab-requests' : notif.targetTab;
+          if (canOpenTab(user.roleType, tab)) setCurrentTab(tab);
+        }
+        if (notif.pipelineFilter) {
+          setSubmissionsPipelineFilter(notif.pipelineFilter);
         }
       }
     );
+  };
+
+  const notifyWorkflowMove = (req: LabTestRequisition, keyOverride?: string) => {
+    const key = keyOverride || workflowKeyForRequisition(req);
+    if (!key) return;
+    addNotification(buildPipelineNotification(req, key));
   };
 
   const handleMarkNotificationAsRead = (id: string) => {
@@ -167,6 +217,16 @@ function MainLimsContent() {
 
   const handleMarkAllNotificationsAsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
+  const handleMarkNotificationAsUnread = (id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: false } : n))
+    );
+  };
+
+  const handleMarkAllNotificationsAsUnread = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: false })));
   };
 
   const handleClearAllNotifications = () => {
@@ -199,6 +259,10 @@ function MainLimsContent() {
           pendingSampleIdRef.current = nav.sampleId;
         }
       }
+    }
+    if (currentTab === 'submissions') {
+      setCurrentTab('lab-requests');
+      return;
     }
     if (!canOpenTab(user.roleType, currentTab)) {
       setCurrentTab(defaultTabForRole(user.roleType));
@@ -346,9 +410,14 @@ function MainLimsContent() {
   // Requisitions / Lab Test Requests State with LocalStorage Persistence
   const [requisitions, setRequisitions] = useState<LabTestRequisition[]>(() => loadStoredRequisitions());
   const [editingRequest, setEditingRequest] = useState<LabTestRequisition | null>(null);
+  const [submissionsPipelineFilter, setSubmissionsPipelineFilter] = useState<string | null>(null);
 
   useEffect(() => {
     saveStoredRequisitions(requisitions);
+  }, [requisitions]);
+
+  useEffect(() => {
+    setNotifications((prev) => reconcilePipelineNotifications(requisitions, prev));
   }, [requisitions]);
 
   // Load initial requisitions from Supabase if connected
@@ -453,7 +522,6 @@ function MainLimsContent() {
     return <LoginPage />;
   }
 
-  // Handler: Add New Requisition
   const handleAddRequisition = async (newReq: LabTestRequisition) => {
     try {
       // 1. Add to local state immediately for instant responsive UI
@@ -467,11 +535,14 @@ function MainLimsContent() {
         user: `${user.name} (${user.role})`,
         userRole: user.role,
         ipAddress: '10.0.14.88',
-        reasonForChange: `Submitted electronic test requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.kindOfExamination.length} examinations requested)`,
+        reasonForChange: hasExaminationOrder(newReq)
+          ? `Submitted electronic test requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.kindOfExamination.length} examinations requested)`
+          : `Submitted intake requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (examinations to be ordered at laboratory desk)`,
       });
 
       // 3. Sync to Supabase Database
       const res = await limsService.createRequisition(newReq);
+      const hasExams = hasExaminationOrder(newReq);
 
       if (res.success) {
         if (res.createdId) {
@@ -482,9 +553,11 @@ function MainLimsContent() {
         addToast({
           type: 'success',
           title: 'SUCCESSFULLY SUBMITTED',
-          message: newReq.patientCategory === 'OPD'
-            ? `Laboratory Test Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.caseNo}) is saved. Send the patient to the cashier.`
-            : `Laboratory Test Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.caseNo}) is saved. Send the patient to the laboratory.`,
+          message: !hasExams
+            ? `Request ${newReq.requisitionNumber} saved. Send the patient to the laboratory desk — staff will select examinations next.`
+            : newReq.patientCategory === 'OPD'
+              ? `Laboratory Test Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.caseNo}) is saved. Send the patient to the cashier.`
+              : `Laboratory Test Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.caseNo}) is saved. Send the patient to the laboratory.`,
           duration: 5000,
         });
       } else {
@@ -496,25 +569,17 @@ function MainLimsContent() {
         });
       }
 
-      // 4. Dispatch Live Notification & Audio Chime
-      const examCount = (newReq.kindOfExamination || newReq.selectedTestNames || []).length;
-      addNotification({
-        type: 'NEW_REQUEST',
-        title: 'New Lab Request Submitted',
-        message: `Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} with ${examCount} test${examCount > 1 ? 's' : ''} requested.`,
-        priority: newReq.priority,
-        reqId: newReq.id,
-        caseNo: newReq.caseNo,
-        patientName: newReq.patientOrSubjectName,
-        targetTab: newReq.patientCategory === 'OPD' ? 'payments' : 'submissions',
-      });
+      notifyWorkflowMove(newReq);
 
-      // If patient is OPD, automatically generate and open the Order of Payment / Partial Receipt Modal
-      if (newReq.patientCategory === 'OPD' && hasPermission(user, 'canAssignOrNumber')) {
+      if (
+        hasExams &&
+        newReq.patientCategory === 'OPD' &&
+        hasPermission(user, 'canAssignOrNumber')
+      ) {
         setOpdPaymentModalReq(newReq);
       }
 
-      setCurrentTab(canOpenTab(user.roleType, 'submissions') ? 'submissions' : 'home');
+      setCurrentTab(canOpenTab(user.roleType, 'lab-requests') ? 'lab-requests' : 'home');
     } catch (err: any) {
       addToast({
         type: 'error',
@@ -672,15 +737,164 @@ function MainLimsContent() {
       duration: 5000,
     });
 
-    addNotification({
-      type: 'PAYMENT_SETTLED',
-      title: 'Cashier Payment Recorded (OR#)',
-      message: `Official Receipt ${orNumber} recorded for ${patientName}. Status updated to Settled.`,
-      priority: 'ROUTINE',
-      reqId: reqId,
-      caseNo: targetReqNum,
-      patientName: patientName,
-      targetTab: 'submissions',
+    if (foundReq) {
+      notifyWorkflowMove({ ...foundReq, orNumber });
+    }
+  };
+
+  const openResultsPickupDrawer = (req: LabTestRequisition, markAsPickedUp: boolean) => {
+    setResultsPickupDrawer({ req, markAsPickedUp });
+  };
+
+  const handleMarkResultsPickedUp = async (req: LabTestRequisition, pickedUp: boolean) => {
+    if (!isResultsReleasedForPickup(req, samples)) {
+      addToast({
+        type: 'warning',
+        title: 'NOT READY',
+        message: 'Results can only be marked picked up after the laboratory report is completed.',
+        duration: 4000,
+      });
+      return;
+    }
+    const canRecord =
+      hasPermission(user, 'canPrintResults') ||
+      hasPermission(user, 'canReleaseCoA') ||
+      hasPermission(user, 'canAccessionSamples') ||
+      hasPermission(user, 'canAssignOrNumber');
+    if (!canRecord) {
+      addToast({
+        type: 'error',
+        title: 'PERMISSION DENIED',
+        message: 'Your role cannot record patient pickup for laboratory results.',
+        duration: 5000,
+      });
+      return;
+    }
+
+    const updated: LabTestRequisition = {
+      ...req,
+      resultsPickedUpAt: pickedUp ? new Date().toISOString() : null,
+      resultsPickedUpBy: pickedUp ? user.name : null,
+    };
+
+    setRequisitions((prev) => prev.map((r) => (r.id === req.id ? updated : r)));
+
+    handleAppendAuditLog({
+      tableName: 'requisitions',
+      recordId: req.id,
+      action: pickedUp ? 'UPDATE' : 'UPDATE',
+      user: `${user.name} (${user.role})`,
+      userRole: user.role,
+      ipAddress: '10.0.14.88',
+      fieldName: 'resultsPickedUpAt',
+      oldValue: req.resultsPickedUpAt || '—',
+      newValue: pickedUp ? updated.resultsPickedUpAt || '—' : '—',
+      reasonForChange: pickedUp
+        ? `Patient picked up results for ${req.caseNo || req.requisitionNumber}`
+        : `Cleared patient pickup record for ${req.caseNo || req.requisitionNumber}`,
+    });
+
+    const res = await limsService.updateRequisition(updated);
+    addToast({
+      type: res.success ? 'success' : 'warning',
+      title: pickedUp ? 'PICKUP RECORDED' : 'PICKUP CLEARED',
+      message: pickedUp
+        ? `${req.patientOrSubjectName} — marked as picked up by patient.`
+        : `${req.patientOrSubjectName} — pickup record removed.`,
+      duration: 4500,
+    });
+  };
+
+  const openPatientNotifyDrawer = (req: LabTestRequisition) => {
+    setPatientNotifyDrawerReq(req);
+  };
+
+  const handleNotifyResultsReadyForPickup = async (req: LabTestRequisition) => {
+    if (!isResultsReleasedForPickup(req, samples)) {
+      addToast({
+        type: 'warning',
+        title: 'NOT READY',
+        message: 'Send pickup alerts only after results are completed and released.',
+        duration: 4500,
+      });
+      return;
+    }
+    const canNotify =
+      hasPermission(user, 'canReleaseCoA') ||
+      hasPermission(user, 'canPrintResults') ||
+      hasPermission(user, 'canAccessionSamples') ||
+      hasPermission(user, 'canAssignOrNumber');
+    if (!canNotify) {
+      addToast({
+        type: 'error',
+        title: 'PERMISSION DENIED',
+        message: 'Your role cannot send patient pickup notifications.',
+        duration: 5000,
+      });
+      return;
+    }
+
+    const result = await sendResultsReadyPickupNotifications(req);
+    if (result.skippedReason) {
+      addToast({
+        type: 'warning',
+        title: 'NO CONTACT ON FILE',
+        message: result.skippedReason,
+        duration: 7000,
+      });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const updated: LabTestRequisition = {
+      ...req,
+      resultsReadySmsSentAt: result.smsSent ? now : req.resultsReadySmsSentAt ?? null,
+      resultsReadyEmailSentAt: result.emailSent ? now : req.resultsReadyEmailSentAt ?? null,
+    };
+    setRequisitions((prev) => prev.map((r) => (r.id === req.id ? updated : r)));
+
+    handleAppendAuditLog({
+      tableName: 'requisitions',
+      recordId: req.id,
+      action: 'UPDATE',
+      user: `${user.name} (${user.role})`,
+      userRole: user.role,
+      ipAddress: '10.0.14.88',
+      fieldName: 'patientNotification',
+      oldValue: '—',
+      newValue: [
+        result.smsSent ? 'SMS sent' : result.smsError ? `SMS failed: ${result.smsError}` : '',
+        result.emailSent ? 'Email sent' : result.emailError ? `Email failed: ${result.emailError}` : '',
+      ]
+        .filter(Boolean)
+        .join('; '),
+      reasonForChange: `Results ready for pickup notification — ${req.caseNo || req.requisitionNumber}`,
+    });
+
+    void limsService.updateRequisition(updated);
+
+    const delivered: string[] = [];
+    if (result.smsSent) delivered.push('SMS');
+    if (result.emailSent) delivered.push('email');
+    const failed: string[] = [];
+    if (result.smsError) failed.push(`SMS: ${result.smsError}`);
+    if (result.emailError) failed.push(`Email: ${result.emailError}`);
+
+    if (delivered.length === 0) {
+      addToast({
+        type: 'error',
+        title: 'NOTIFICATION FAILED',
+        message: failed.join(' · ') || 'Could not send SMS or email.',
+        duration: 7000,
+      });
+      return;
+    }
+
+    addToast({
+      type: failed.length ? 'warning' : 'success',
+      title: 'PICKUP ALERT SENT',
+      message: `${req.patientOrSubjectName}: ${delivered.join(' and ')} sent.${failed.length ? ` ${failed.join(' · ')}` : ''}`,
+      duration: 6500,
     });
   };
 
@@ -842,21 +1056,14 @@ function MainLimsContent() {
       duration: 5000,
     });
 
-    if (isFinalize) {
-      addNotification({
-        type: 'RESULTS_READY',
-        title: 'Analytical Results Completed (CoA Release)',
-        message: `Validated test results & released official Certificate of Analysis for ${patientName}.`,
-        priority: 'ROUTINE',
-        reqId: reqId,
-        caseNo: caseRef,
-        patientName: patientName,
-        targetTab: 'coa-reports',
-      });
+    if (isFinalize && foundReq) {
+      notifyWorkflowMove({ ...foundReq, status: 'COMPLETED' });
 
       // Open printable CoA immediately so finalize → print is one flow
       if (foundReq) {
-        setDetailCoAModalReq({ ...foundReq, status: 'COMPLETED' });
+        const completedReq = { ...foundReq, status: 'COMPLETED' as const };
+        setDetailCoAModalReq(completedReq);
+        void handleNotifyResultsReadyForPickup(completedReq);
       }
     }
   };
@@ -1165,6 +1372,15 @@ function MainLimsContent() {
     });
   };
 
+  const inferAccessionDefaults = (req: LabTestRequisition) => {
+    const plan = buildAccessionSpecimenPlan(req, examinations);
+    const core = inferAccessionDefaultsFromPlan(plan, req);
+    return {
+      patientCategory: (req.patientCategory || 'Corporate') as PatientCategory,
+      ...core,
+    };
+  };
+
   // Handler: Receive and Accession Requisition into Samples & Testing Queue
   const handleReceiveAndAccession = (
     req: LabTestRequisition,
@@ -1182,6 +1398,11 @@ function MainLimsContent() {
       storageTemp?: string;
       notes: string;
       orNumber?: string;
+    },
+    options?: {
+      skipAccessionToast?: boolean;
+      skipNavigation?: boolean;
+      notificationTargetTab?: string;
     }
   ) => {
     if (!hasPermission(user, 'canAccessionSamples')) {
@@ -1198,8 +1419,35 @@ function MainLimsContent() {
     const caseRef = req.caseNo || req.externalRef;
     const effectiveOr = accessionData?.orNumber || req.orNumber;
 
+    if (req.status === 'SUBMITTED' && !readyForLaboratory(req)) {
+      addToast({
+        type: 'error',
+        title: 'NOT READY TO RECEIVE',
+        message: requiresCashier(req.patientCategory)
+          ? 'OPD requests need an official receipt (OR) from the cashier before the laboratory can receive the specimen.'
+          : 'Examinations must be ordered before receiving this request.',
+        duration: 6500,
+      });
+      return;
+    }
+
+    if (
+      req.status === 'SUBMITTED' &&
+      requiresCashier(req.patientCategory) &&
+      !hasOfficialReceipt(effectiveOr)
+    ) {
+      addToast({
+        type: 'error',
+        title: 'CASHIER PAYMENT REQUIRED',
+        message:
+          'This request is billed as OPD. Send the patient to the cashier first, then receive after the OR is recorded.',
+        duration: 6500,
+      });
+      return;
+    }
+
     // If requisition is ALREADY received, update category without duplicating sample
-    if (req.status === 'RECEIVED') {
+    if (req.status === 'RECEIVED' || req.status === 'IN_TESTING') {
       setRequisitions((prev) =>
         prev.map((r) => (r.id === req.id || r.requisitionNumber === req.requisitionNumber ? { ...r, patientCategory: category } : r))
       );
@@ -1274,12 +1522,15 @@ function MainLimsContent() {
 
     // Sync to Supabase
     limsService.createSample(newSample);
-    limsService.updateRequisitionStatus(req.id, 'RECEIVED', req.requisitionNumber);
+    limsService.updateRequisitionStatus(req.id, 'IN_TESTING', req.requisitionNumber);
     limsService.updateRequisitionCategory(req.id, category, req.requisitionNumber);
 
-    // Update Requisition Status to RECEIVED with Patient Category and OR#
     setRequisitions((prev) =>
-      prev.map((r) => (r.id === req.id || r.requisitionNumber === req.requisitionNumber ? { ...r, status: 'RECEIVED', patientCategory: category, orNumber: effectiveOr || r.orNumber } : r))
+      prev.map((r) =>
+        r.id === req.id || r.requisitionNumber === req.requisitionNumber
+          ? { ...r, status: 'IN_TESTING', patientCategory: category, orNumber: effectiveOr || r.orNumber }
+          : r
+      )
     );
 
     // Create Test Orders
@@ -1305,25 +1556,83 @@ function MainLimsContent() {
       }
     });
 
+    if (!options?.skipAccessionToast) {
+      addToast({
+        type: 'success',
+        title: 'SPECIMEN ACCESSIONED',
+        message: `Requisition ${req.requisitionNumber} received as [${category}]. Barcode ${barcode} created and dispatched to queue.`,
+        duration: 5000,
+      });
+    }
+
+    notifyWorkflowMove(
+      { ...req, status: 'RECEIVED' },
+      `${req.requisitionNumber || req.id}:IN_TESTING`
+    );
+
+    if (!options?.skipNavigation) {
+      setCurrentTab('sample-detail');
+    }
+  };
+
+  const handleAssignExaminations = async (req: LabTestRequisition, examNames: string[]) => {
+    const updated: LabTestRequisition = {
+      ...req,
+      kindOfExamination: examNames,
+      selectedTestNames: examNames,
+      selectedTestIds: [],
+    };
+    setRequisitions((prev) => prev.map((r) => (r.id === req.id ? updated : r)));
+    handleAppendAuditLog({
+      tableName: 'requisitions',
+      recordId: req.id,
+      action: 'UPDATE',
+      user: `${user.name} (${user.role})`,
+      userRole: user.role,
+      ipAddress: '10.0.14.88',
+      fieldName: 'kindOfExamination',
+      oldValue: '—',
+      newValue: examNames.join('; '),
+      reasonForChange: `Laboratory ordered ${examNames.length} examination(s) for ${req.caseNo || req.requisitionNumber}`,
+    });
+    const res = await limsService.updateRequisition(updated);
+    const opd = requiresCashier(updated.patientCategory);
+
+    if (!opd && updated.status === 'SUBMITTED') {
+      handleAppendAuditLog({
+        tableName: 'requisitions',
+        recordId: req.id,
+        action: 'UPDATE',
+        user: `${user.name} (${user.role})`,
+        userRole: user.role,
+        ipAddress: '10.0.14.88',
+        fieldName: 'status',
+        oldValue: 'SUBMITTED',
+        newValue: 'IN_TESTING',
+        reasonForChange: `Non-OPD request auto-advanced to testing queue after ${examNames.length} examination(s) were ordered`,
+      });
+      handleReceiveAndAccession(updated, inferAccessionDefaults(updated), {
+        skipAccessionToast: true,
+        skipNavigation: true,
+        notificationTargetTab: 'testing-queue',
+      });
+      addToast({
+        type: res.success ? 'success' : 'warning',
+        title: res.success ? 'EXAMINATIONS ORDERED' : 'SAVED LOCALLY',
+        message: `${updated.patientOrSubjectName} — moved to the Testing queue. Physical receiving can be handled separately.`,
+        duration: 6500,
+      });
+      notifyWorkflowMove(updated);
+      return;
+    }
+
     addToast({
-      type: 'success',
-      title: 'SPECIMEN ACCESSIONED',
-      message: `Requisition ${req.requisitionNumber} received as [${category}]. Barcode ${barcode} created and dispatched to queue.`,
-      duration: 5000,
+      type: res.success ? 'success' : 'warning',
+      title: res.success ? 'EXAMINATIONS ORDERED' : 'SAVED LOCALLY',
+      message: `${updated.patientOrSubjectName} — send the patient to the cashier for payment and official receipt (OR).`,
+      duration: 6500,
     });
-
-    addNotification({
-      type: 'ACCESSIONED',
-      title: 'Specimen Accessioned & Barcoded',
-      message: `Specimen for ${req.patientOrSubjectName} received as [${category}]. Barcode ${barcode} assigned.`,
-      priority: accessionData?.priority || req.priority || 'ROUTINE',
-      reqId: req.id,
-      caseNo: req.caseNo || req.externalRef,
-      patientName: req.patientOrSubjectName,
-      targetTab: 'sample-detail',
-    });
-
-    setCurrentTab('sample-detail');
+    notifyWorkflowMove(updated);
   };
 
   const handleAddSample = (newSample: Sample) => {
@@ -1506,12 +1815,19 @@ function MainLimsContent() {
         onGlobalSearchChange={setGlobalSearch}
         notifications={notifications}
         onMarkNotificationAsRead={handleMarkNotificationAsRead}
+        onMarkNotificationAsUnread={handleMarkNotificationAsUnread}
         onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
+        onMarkAllNotificationsAsUnread={handleMarkAllNotificationsAsUnread}
         onClearAllNotifications={handleClearAllNotifications}
         onDeleteNotification={handleDeleteNotification}
         onSelectNotification={(notif) => {
-          if (notif.targetTab && canOpenTab(user.roleType, notif.targetTab)) {
-            setCurrentTab(notif.targetTab);
+          const tab =
+            notif.targetTab === 'submissions' ? 'lab-requests' : notif.targetTab;
+          if (tab && canOpenTab(user.roleType, tab)) {
+            setCurrentTab(tab);
+          }
+          if (notif.pipelineFilter) {
+            setSubmissionsPipelineFilter(notif.pipelineFilter);
           }
           if (notif.caseNo) {
             const foundSample = samples.find(
@@ -1539,7 +1855,20 @@ function MainLimsContent() {
               if (canOpenTab(user.roleType, tab)) setCurrentTab(tab);
             }}
             onOpenRequest={(req) => {
-              setSlipModalReq(req);
+              setEditingRequest(req);
+              if (canOpenTab(user.roleType, 'create-request')) {
+                setCurrentTab('create-request');
+              }
+            }}
+          />
+        )}
+
+        {currentTab === 'analytics-reports' && (
+          <AdvancedAnalyticsView
+            requisitions={requisitions}
+            samples={samples}
+            onNavigate={(tab) => {
+              if (canOpenTab(user.roleType, tab)) setCurrentTab(tab);
             }}
           />
         )}
@@ -1551,8 +1880,11 @@ function MainLimsContent() {
             examinationCatalog={examinations}
             onSubmitRequisition={editingRequest ? handleUpdateRequisition : handleAddRequisition}
             priorRequisitions={requisitions}
-            allowQueueLink={canOpenTab(user.roleType, 'submissions')}
+            allowQueueLink={canOpenTab(user.roleType, 'lab-requests')}
             editingRequest={editingRequest}
+            hidePriorVisitExaminations={user.roleType === 'STAFF'}
+            examinationStepDeferred={user.roleType === 'STAFF'}
+            onViewOfficialSlip={(req) => setSlipModalReq(req)}
             onCancel={() => {
               setEditingRequest(null);
               setCurrentTab('home');
@@ -1561,16 +1893,43 @@ function MainLimsContent() {
         )}
 
         {/* Submissions & Lab Test Requests (Requisition Portal) */}
-        {(currentTab === 'submissions' || currentTab === 'payments') && (
+        {(currentTab === 'lab-requests' ||
+          currentTab === 'testing-queue' ||
+          currentTab === 'payments' ||
+          currentTab === 'all-requests' ||
+          currentTab === 'submissions') && (
           <SubmissionsView
-            variant={currentTab === 'payments' ? 'payments' : 'queue'}
+            variant={
+              currentTab === 'payments'
+                ? 'payments'
+                : currentTab === 'testing-queue'
+                  ? 'testing-queue'
+                  : currentTab === 'all-requests'
+                    ? 'all-requests'
+                    : 'lab-requests'
+            }
+            pipelineFilter={submissionsPipelineFilter}
+            onPipelineFilterApplied={() => setSubmissionsPipelineFilter(null)}
             requisitions={requisitions}
             onOpenNewRequisition={
               hasPermission(user, 'canCreateRequest') ? () => setCurrentTab('create-request') : undefined
             }
+            onOpenRequestDetails={(req) => {
+              setEditingRequest(req);
+              if (canOpenTab(user.roleType, 'create-request')) {
+                setCurrentTab('create-request');
+              }
+            }}
             onSelectRequisition={(req) => {
               // If requisition has not yet been received by lab, lock sample details
               if (req.status === 'SUBMITTED') {
+                if (
+                  needsLaboratoryExamSelection(req) &&
+                  hasPermission(user, 'canAccessionSamples')
+                ) {
+                  setSlipModalReq(req);
+                  return;
+                }
                 if (hasPermission(user, 'canAccessionSamples')) {
                   setReceiveModalReq(req);
                 } else {
@@ -1667,13 +2026,22 @@ function MainLimsContent() {
                 duration: 3500,
               });
             }}
-            onViewPaymentSlip={(req) => setOpdPaymentModalReq(req)}
             onSettlePayment={hasPermission(user, 'canAssignOrNumber') ? handleSettlePayment : undefined}
             onSaveResults={handleSaveTestResults}
             storedResults={storedResults}
             storedMedTechInfo={storedMedTechInfo}
             currentUserName={user.name}
             permissions={user.permissions}
+            onMarkResultsPickedUp={(req, pickedUp) => {
+              openResultsPickupDrawer(req, pickedUp);
+            }}
+            onNotifyResultsReady={(req) => {
+              openPatientNotifyDrawer(req);
+            }}
+            examinationCatalog={examinations}
+            onAssignExaminations={
+              hasPermission(user, 'canAccessionSamples') ? handleAssignExaminations : undefined
+            }
           />
         )}
 
@@ -1691,9 +2059,29 @@ function MainLimsContent() {
         )}
 
         {/* Printable Result Forms (paper-style lab reports) */}
-        {currentTab === 'result-forms' && (
-          <ResultFormsView currentUserName={user.name} />
-        )}
+        {currentTab === 'result-forms' && (() => {
+          const ctxSample = selectedSample || samples[0];
+          const ctxReq = ctxSample
+            ? requisitions.find((r) => {
+                const sExt = (ctxSample.externalId || '').trim().toLowerCase();
+                const sPatient = (ctxSample.patientOrSourceName || '').trim().toLowerCase();
+                const rCase = (r.caseNo || '').trim().toLowerCase();
+                const rNum = (r.requisitionNumber || '').trim().toLowerCase();
+                const rPatient = (r.patientOrSubjectName || '').trim().toLowerCase();
+                return (
+                  (rCase && sExt === rCase) ||
+                  (rNum && sExt === rNum) ||
+                  (rPatient && sPatient && (sPatient.includes(rPatient) || rPatient.includes(sPatient)))
+                );
+              })
+            : null;
+          return (
+            <ResultFormsView
+              currentUserName={user.name}
+              patientGender={ctxReq?.patientGender ?? null}
+            />
+          );
+        })()}
 
         {/* Diagnostic Result Templates & Parameters Admin Editor (Dedicated Tab) */}
         {currentTab === 'result-templates' && (
@@ -1721,6 +2109,9 @@ function MainLimsContent() {
           <PatientRecordsView
             requisitions={requisitions}
             samples={samples}
+            onMarkResultsPickedUp={(req, pickedUp) => {
+              openResultsPickupDrawer(req, pickedUp);
+            }}
             onOpenSpecimen={(sample, req) => {
               const resolved = samples.find((s) => s.id === sample.id) || findSampleForRequisition(req, samples);
               if (resolved) {
@@ -1785,7 +2176,7 @@ function MainLimsContent() {
           return (
             <ErrorBoundary
               fallbackTitle="Error Loading Patient / Specimen Details"
-              onReset={() => setCurrentTab('submissions')}
+              onReset={() => setCurrentTab('testing-queue')}
             >
               <SampleDetailView
                 sample={currentSample}
@@ -1800,7 +2191,7 @@ function MainLimsContent() {
                     ? lookupStoredRecord(storedMedTechInfo, matchedReq.id, matchedReq.requisitionNumber)
                     : undefined
                 }
-                onBack={() => setCurrentTab('submissions')}
+                onBack={() => setCurrentTab('testing-queue')}
                 onReceiveSpecimen={(req) => setReceiveModalReq(req)}
                 onViewSlip={(req) => setSlipModalReq(req)}
                 canAccession={hasPermission(user, 'canAccessionSamples')}
@@ -1841,6 +2232,24 @@ function MainLimsContent() {
                     return;
                   }
                   setDetailCoAModalReq(matchedReq);
+                }}
+                canRecordResultsPickup={
+                  hasPermission(user, 'canPrintResults') ||
+                  hasPermission(user, 'canReleaseCoA') ||
+                  hasPermission(user, 'canAccessionSamples') ||
+                  hasPermission(user, 'canAssignOrNumber')
+                }
+                onMarkResultsPickedUp={(req, pickedUp) => {
+                  openResultsPickupDrawer(req, pickedUp);
+                }}
+                canNotifyPatient={
+                  hasPermission(user, 'canReleaseCoA') ||
+                  hasPermission(user, 'canPrintResults') ||
+                  hasPermission(user, 'canAccessionSamples') ||
+                  hasPermission(user, 'canAssignOrNumber')
+                }
+                onNotifyResultsReady={(req) => {
+                  openPatientNotifyDrawer(req);
                 }}
                 currentUserName={user?.name}
               />
@@ -2033,6 +2442,7 @@ function MainLimsContent() {
         isOpen={Boolean(slipModalReq)}
         onClose={() => setSlipModalReq(null)}
         requisition={slipModalReq}
+        hideExaminations={user.roleType === 'STAFF'}
         canEdit={hasPermission(user, 'canCreateRequest')}
         onEditRequisition={(req) => {
           setSlipModalReq(null);
@@ -2040,6 +2450,64 @@ function MainLimsContent() {
           setCurrentTab('create-request');
         }}
       />
+
+      {patientNotifyDrawerReq ? (
+        <PatientNotifyDrawer
+          requisition={
+            requisitions.find((r) => r.id === patientNotifyDrawerReq.id) ?? patientNotifyDrawerReq
+          }
+          samples={samples}
+          canSend={
+            hasPermission(user, 'canReleaseCoA') ||
+            hasPermission(user, 'canPrintResults') ||
+            hasPermission(user, 'canAccessionSamples') ||
+            hasPermission(user, 'canAssignOrNumber')
+          }
+          sending={patientNotifySending}
+          onClose={() => setPatientNotifyDrawerReq(null)}
+          onSend={async () => {
+            const live =
+              requisitions.find((r) => r.id === patientNotifyDrawerReq.id) ?? patientNotifyDrawerReq;
+            setPatientNotifySending(true);
+            try {
+              await handleNotifyResultsReadyForPickup(live);
+            } finally {
+              setPatientNotifySending(false);
+            }
+          }}
+        />
+      ) : null}
+
+      {resultsPickupDrawer ? (
+        <ResultsPickupDrawer
+          requisition={
+            requisitions.find((r) => r.id === resultsPickupDrawer.req.id) ?? resultsPickupDrawer.req
+          }
+          samples={samples}
+          markAsPickedUp={resultsPickupDrawer.markAsPickedUp}
+          currentUserName={user.name}
+          canRecord={
+            hasPermission(user, 'canPrintResults') ||
+            hasPermission(user, 'canReleaseCoA') ||
+            hasPermission(user, 'canAccessionSamples') ||
+            hasPermission(user, 'canAssignOrNumber')
+          }
+          saving={resultsPickupSaving}
+          onClose={() => setResultsPickupDrawer(null)}
+          onConfirm={async () => {
+            const live =
+              requisitions.find((r) => r.id === resultsPickupDrawer.req.id) ??
+              resultsPickupDrawer.req;
+            setResultsPickupSaving(true);
+            try {
+              await handleMarkResultsPickedUp(live, resultsPickupDrawer.markAsPickedUp);
+              setResultsPickupDrawer(null);
+            } finally {
+              setResultsPickupSaving(false);
+            }
+          }}
+        />
+      ) : null}
 
       {/* Receive & Specimen Accessioning Modal */}
       <ReceiveAccessionModal

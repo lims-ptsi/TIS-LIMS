@@ -17,6 +17,7 @@ interface CoAReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   requisition: LabTestRequisition | null;
+  embedded?: boolean;
   examResults?: Record<string, ExamResultGroup>;
   medTechInfo?: {
     labTechName?: string;
@@ -122,7 +123,7 @@ const SingleExamFormSheet: React.FC<{
                 Clinical Diagnostic Laboratory &amp; Chest Center
               </h2>
               <p className="text-[11px] print:text-[9px] text-slate-600">
-                68 Kalaw Hill, Quirino Highway, Pasong Putik, Quezon City · Tel: (02) 8928-1234
+                Quezon Institute Compound, E. Rodriguez Sr. Avenue, Quezon City · Tel: (02) 0000 - 0000
               </p>
             </div>
           </div>
@@ -231,7 +232,7 @@ const SingleExamFormSheet: React.FC<{
           ).map(([label, value, span]) => (
             <div
               key={label}
-              className="flex items-baseline gap-1 min-w-0 py-0.5 border-b border-slate-200"
+              className="flex items-baseline gap-1 min-w-0 py-0.5"
               style={{ gridColumn: `span ${span} / span ${span}` }}
             >
               <span className="text-slate-500 font-semibold shrink-0 whitespace-nowrap">
@@ -309,17 +310,17 @@ const SingleExamFormSheet: React.FC<{
           if (sections && sections.length > 0) {
             const fourCol = rf?.tableColumns === 'test-result-unit-ref';
             return (
-              <div className="border border-slate-400 overflow-hidden">
+              <div className="lims-result-form-table overflow-hidden">
                 {fourCol ? (
-                  <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-400 text-[11px] print:text-[9px] font-bold uppercase tracking-wide text-slate-700">
-                    <div className="col-span-4 px-3 py-1.5 border-r border-slate-400">Test</div>
-                    <div className="col-span-3 px-3 py-1.5 border-r border-slate-400">Result</div>
-                    <div className="col-span-2 px-3 py-1.5 border-r border-slate-400">Unit</div>
+                  <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-[11px] print:text-[9px] font-bold uppercase tracking-wide text-slate-700">
+                    <div className="col-span-4 px-3 py-1.5">Test</div>
+                    <div className="col-span-3 px-3 py-1.5">Result</div>
+                    <div className="col-span-2 px-3 py-1.5">Unit</div>
                     <div className="col-span-3 px-3 py-1.5">Ref. Range</div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 bg-slate-100 border-b border-slate-400 text-[11px] print:text-[9px] font-bold uppercase tracking-wide text-slate-700">
-                    <div className="px-3 py-1.5 border-r border-slate-400">
+                  <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-[11px] print:text-[9px] font-bold uppercase tracking-wide text-slate-700">
+                    <div className="px-3 py-1.5">
                       {rf?.testColumnLabel || 'Test'}
                     </div>
                     <div className="px-3 py-1.5">{rf?.resultColumnLabel || 'Result'}</div>
@@ -335,7 +336,7 @@ const SingleExamFormSheet: React.FC<{
                       className={hideEmpty && !sectionHasValue ? 'print:hidden' : undefined}
                     >
                       {section.title ? (
-                        <div className="px-3 py-1 bg-slate-50 border-b border-slate-300 text-[11px] print:text-[9px] font-bold uppercase text-slate-800">
+                        <div className="lims-rf-section-label px-3 py-1 bg-slate-50 text-[11px] print:text-[9px] font-bold uppercase text-slate-800">
                           {section.title}
                         </div>
                       ) : null}
@@ -350,17 +351,17 @@ const SingleExamFormSheet: React.FC<{
                           return (
                             <div
                               key={row.id}
-                              className={`grid grid-cols-12 border-b border-slate-200 last:border-b-0 ${
+                              className={`lims-rf-grid-row grid grid-cols-12 ${
                                 emptyPrintHide ? 'print:hidden' : ''
                               }`}
                             >
-                              <div className="col-span-4 px-3 py-1.5 print:py-1 border-r border-slate-200 text-xs print:text-[9px] text-slate-800">
+                              <div className="col-span-4 px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-800">
                                 {examLabel}
                               </div>
-                              <div className="col-span-3 px-3 py-1.5 print:py-1 border-r border-slate-200 text-xs print:text-[9px] font-semibold text-slate-900 font-mono">
+                              <div className="col-span-3 px-3 py-1.5 print:py-1 text-xs print:text-[9px] font-semibold text-slate-900 font-mono">
                                 {val || '—'}
                               </div>
-                              <div className="col-span-2 px-3 py-1.5 print:py-1 border-r border-slate-200 text-xs print:text-[9px] text-slate-700 font-mono">
+                              <div className="col-span-2 px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-700 font-mono">
                                 {row.unit || '—'}
                               </div>
                               <div className="col-span-3 px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-700 font-mono">
@@ -372,11 +373,11 @@ const SingleExamFormSheet: React.FC<{
                         return (
                           <div
                             key={row.id}
-                            className={`grid grid-cols-2 border-b border-slate-200 last:border-b-0 ${
+                            className={`lims-rf-grid-row grid grid-cols-2 ${
                               emptyPrintHide ? 'print:hidden' : ''
                             }`}
                           >
-                            <div className="px-3 py-1.5 print:py-1 border-r border-slate-200 text-xs print:text-[9px] text-slate-800">
+                            <div className="px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-800">
                               {examLabel}
                             </div>
                             <div className="px-3 py-1.5 print:py-1 text-xs print:text-[9px] font-semibold text-slate-900">
@@ -399,7 +400,7 @@ const SingleExamFormSheet: React.FC<{
                   if (extra.length === 0) return null;
                   return (
                     <div key={memberTemplate.examCode || memberName}>
-                      <div className="px-3 py-1 bg-slate-50 border-b border-slate-300 text-[11px] print:text-[9px] font-bold uppercase text-slate-800">
+                      <div className="lims-rf-section-label px-3 py-1 bg-slate-50 text-[11px] print:text-[9px] font-bold uppercase text-slate-800">
                         {memberTemplate.examName || memberName}
                       </div>
                       {extra.map((param) => {
@@ -414,17 +415,17 @@ const SingleExamFormSheet: React.FC<{
                           return (
                             <div
                               key={param.id}
-                              className={`grid grid-cols-12 border-b border-slate-200 ${
+                              className={`lims-rf-grid-row grid grid-cols-12 ${
                                 emptyPrintHide ? 'print:hidden' : ''
                               }`}
                             >
-                              <div className="col-span-4 px-3 py-1.5 print:py-1 border-r border-slate-200 text-xs print:text-[9px] text-slate-800">
+                              <div className="col-span-4 px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-800">
                                 {param.name}
                               </div>
-                              <div className="col-span-3 px-3 py-1.5 print:py-1 border-r border-slate-200 text-xs print:text-[9px] font-semibold text-slate-900 font-mono">
+                              <div className="col-span-3 px-3 py-1.5 print:py-1 text-xs print:text-[9px] font-semibold text-slate-900 font-mono">
                                 {val || '—'}
                               </div>
-                              <div className="col-span-2 px-3 py-1.5 print:py-1 border-r border-slate-200 text-xs print:text-[9px] text-slate-700 font-mono">
+                              <div className="col-span-2 px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-700 font-mono">
                                 {param.unit || '—'}
                               </div>
                               <div className="col-span-3 px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-700 font-mono">
@@ -436,11 +437,11 @@ const SingleExamFormSheet: React.FC<{
                         return (
                           <div
                             key={param.id}
-                            className={`grid grid-cols-2 border-b border-slate-200 ${
+                            className={`lims-rf-grid-row grid grid-cols-2 ${
                               emptyPrintHide ? 'print:hidden' : ''
                             }`}
                           >
-                            <div className="px-3 py-1.5 print:py-1 border-r border-slate-200 text-xs print:text-[9px] text-slate-800">
+                            <div className="px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-800">
                               {param.name}
                             </div>
                             <div className="px-3 py-1.5 print:py-1 text-xs print:text-[9px] font-semibold text-slate-900">
@@ -597,6 +598,7 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
   isOpen,
   onClose,
   requisition,
+  embedded = false,
   examResults,
   medTechInfo,
 }) => {
@@ -668,7 +670,8 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
     setActiveIndex(0);
   }, [requisition?.id]);
 
-  if (!isOpen || !requisition) return null;
+  if (!requisition) return null;
+  if (!isOpen && !embedded) return null;
 
   const activeSheet = sheets[activeIndex] || sheets[0];
   const formTotal = sheets.length;
@@ -677,10 +680,16 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
     window.print();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print-modal-backdrop">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-300 w-full max-w-4xl overflow-hidden flex flex-col max-h-[95vh] text-slate-900 font-sans print:border-none print:shadow-none print:max-h-none print:w-full print:rounded-none print-modal-container">
+  const panel = (
+      <div
+        className={`bg-white w-full overflow-hidden flex flex-col text-slate-900 font-sans print:border-none print:shadow-none print:max-h-none print:w-full print:rounded-none print-modal-container ${
+          embedded
+            ? 'h-full min-h-0 border-0 shadow-none rounded-none'
+            : 'rounded-xl shadow-2xl border border-slate-300 max-w-4xl max-h-[95vh]'
+        }`}
+      >
         {/* Toolbar — screen only */}
+        {!embedded ? (
         <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 print:hidden">
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
@@ -716,6 +725,7 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
             </button>
           </div>
         </div>
+        ) : null}
 
         {/* Exam form tabs — screen only */}
         {formTotal > 1 && (
@@ -788,6 +798,13 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
           ))}
         </div>
       </div>
+  );
+
+  if (embedded) return panel;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print-modal-backdrop">
+      {panel}
     </div>
   );
 };

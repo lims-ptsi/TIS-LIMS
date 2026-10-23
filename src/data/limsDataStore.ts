@@ -1,10 +1,11 @@
 import { LabTestRequisition } from '../components/modals/NewRequisitionModal';
-import { Sample, TestOrder } from '../types/lims';
+import { LimsNotification, Sample, TestOrder } from '../types/lims';
 
 const REQUISITIONS_STORAGE_KEY = 'lims_requisitions_v2';
 const SAMPLES_STORAGE_KEY = 'lims_samples_v2';
 const TEST_ORDERS_STORAGE_KEY = 'lims_test_orders_v2';
 const TEST_RESULTS_STORAGE_KEY = 'lims_test_results_v1';
+const NOTIFICATIONS_STORAGE_KEY = 'lims_notifications_v1';
 
 export interface PersistedTestResults {
   results: Record<string, any>;
@@ -150,5 +151,25 @@ export function saveStoredTestResults(data: PersistedTestResults): void {
     localStorage.setItem(TEST_RESULTS_STORAGE_KEY, JSON.stringify(data));
   } catch (e) {
     console.warn('Failed to save test results to localStorage:', e);
+  }
+}
+
+export function loadStoredNotifications(): LimsNotification[] {
+  try {
+    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.warn('Failed to load notifications from localStorage:', e);
+    return [];
+  }
+}
+
+export function saveStoredNotifications(list: LimsNotification[]): void {
+  try {
+    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.warn('Failed to save notifications to localStorage:', e);
   }
 }
