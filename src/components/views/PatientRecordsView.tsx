@@ -98,12 +98,12 @@ function CopyChip({ label, value }: { label: string; value: string }) {
         setCopied(true);
         window.setTimeout(() => setCopied(false), 1600);
       }}
-      className="inline-flex items-center gap-1 text-left rounded px-1 -mx-1 hover:bg-slate-100 transition-colors cursor-pointer group"
+      className="inline-flex items-center gap-1 text-left rounded-md px-2 py-0.5 bg-white border border-slate-200 hover:border-slate-300 transition-colors cursor-pointer group text-[11px]"
       title={`Copy ${label}`}
     >
-      <span className="text-slate-500">{label} </span>
+      <span className="text-slate-500 font-medium">{label}</span>
       <span
-        className={`font-normal uppercase tabular-nums ${label === 'Barcode' ? 'text-[#0176d3]' : 'text-slate-900'}`}
+        className={`font-semibold tabular-nums ${label === 'Barcode' ? 'text-[#0176d3]' : 'text-slate-900'}`}
       >
         {value}
       </span>
@@ -146,97 +146,96 @@ function VisitTimelineItem({
   const visibleExams = examsExpanded ? exams : exams.slice(0, 5);
 
   return (
-    <div className="relative pl-8 pb-8 last:pb-0">
+    <div className="relative pl-6 pb-5 last:pb-0">
       {!isLast ? (
-        <span className="absolute left-[11px] top-6 bottom-0 w-px bg-slate-200" aria-hidden />
+        <span className="absolute left-[9px] top-5 bottom-0 w-px bg-slate-200" aria-hidden />
       ) : null}
       <span
-        className="absolute left-0 top-1.5 w-6 h-6 rounded-full border-2 border-white bg-[#0176d3] shadow-sm ring-2 ring-[#c5daf8] flex items-center justify-center"
+        className="absolute left-0 top-1 w-[18px] h-[18px] rounded-full border-2 border-white bg-[#0176d3] shadow-sm ring-2 ring-[#c5daf8]"
         aria-hidden
-      >
-        <span className="w-2 h-2 rounded-full bg-white" />
-      </span>
+      />
 
-      <div className="rounded-md border border-[#d8dde6] bg-white overflow-hidden shadow-sm hover:border-slate-300 transition-colors">
-        <div className="px-4 py-3 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/80">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-normal uppercase text-slate-900 tabular-nums">
-                {visit.requestDate || '—'}
-              </span>
-              <span
-                className={`text-[10px] font-normal uppercase tracking-wide px-2 py-0.5 rounded-full border ${tone}`}
-              >
-                {label}
-              </span>
-              {visit.patientCategory ? (
-                <span className="text-[10px] font-normal uppercase text-slate-600 px-2 py-0.5 rounded bg-white border border-slate-200">
-                  {visit.patientCategory}
+      <div className="rounded-lg border border-[#d8dde6] bg-white overflow-hidden shadow-sm hover:border-slate-300 transition-colors">
+        <div className="px-3.5 py-2.5 border-b border-slate-100 bg-slate-50/70">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-900 tabular-nums">{visit.requestDate || '—'}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <span className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${tone}`}>
+                  {label}
                 </span>
-              ) : null}
-              {visit.status === 'COMPLETED' ? (
-                isResultsPickedUp(visit) ? (
-                  <span
-                    className="text-[10px] font-normal uppercase tracking-wide px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200"
-                    title={formatResultsPickupWhen(visit.resultsPickedUpAt) || undefined}
-                  >
-                    Picked up
+                {visit.patientCategory ? (
+                  <span className="text-[10px] font-medium text-slate-600 px-2 py-0.5 rounded-md bg-white border border-slate-200">
+                    {visit.patientCategory}
                   </span>
-                ) : (
-                  <span className="text-[10px] font-normal uppercase tracking-wide px-2 py-0.5 rounded-full border bg-violet-50 text-violet-900 border-violet-200">
-                    Awaiting pickup
-                  </span>
-                )
-              ) : null}
-            </div>
-            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-              <CopyChip label="Case" value={visit.caseNo || '—'} />
-              <CopyChip label="Requisition" value={visit.requisitionNumber} />
-              {visit.sampleBarcode ? <CopyChip label="Barcode" value={visit.sampleBarcode} /> : null}
+                ) : null}
+                {visit.status === 'COMPLETED' ? (
+                  isResultsPickedUp(visit) ? (
+                    <span
+                      className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200"
+                      title={formatResultsPickupWhen(visit.resultsPickedUpAt) || undefined}
+                    >
+                      Picked up
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border bg-violet-50 text-violet-900 border-violet-200">
+                      Awaiting pickup
+                    </span>
+                  )
+                ) : null}
+              </div>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 shrink-0">
-            {req && visit.sampleId && onOpenSpecimen ? (
-              <button
-                type="button"
-                onClick={() => {
-                  const sample = { id: visit.sampleId! } as Sample;
-                  onOpenSpecimen(sample, req);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-normal uppercase rounded-md border border-[#c5daf8] bg-[#eef4ff] hover:bg-[#dde9fc] text-[#014486] cursor-pointer"
-              >
-                <FlaskConical className="w-3.5 h-3.5" />
-                Open specimen
-              </button>
-            ) : null}
-            {req && visit.status === 'COMPLETED' && onPrintResults ? (
-              <button
-                type="button"
-                onClick={() => onPrintResults(req)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-normal uppercase rounded-md bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Print results
-              </button>
-            ) : null}
-            {req && visit.status === 'COMPLETED' && onMarkResultsPickedUp ? (
-              <button
-                type="button"
-                onClick={() => onMarkResultsPickedUp(req, !isResultsPickedUp(visit))}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-normal uppercase rounded-md border cursor-pointer ${
-                  isResultsPickedUp(visit)
-                    ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                    : 'border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100'
-                }`}
-              >
-                <PackageCheck className="w-3.5 h-3.5" />
-                {isResultsPickedUp(visit) ? 'Undo pickup' : 'Mark picked up'}
-              </button>
-            ) : null}
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <CopyChip label="Case" value={visit.caseNo || '—'} />
+            <CopyChip label="Req" value={visit.requisitionNumber} />
+            {visit.sampleBarcode ? <CopyChip label="Barcode" value={visit.sampleBarcode} /> : null}
           </div>
+          {(req && visit.sampleId && onOpenSpecimen) ||
+          (req && visit.status === 'COMPLETED' && (onPrintResults || onMarkResultsPickedUp)) ? (
+            <div className="mt-2.5 flex flex-wrap gap-1.5 pt-2 border-t border-slate-200/80">
+              {req && visit.sampleId && onOpenSpecimen ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sample = { id: visit.sampleId! } as Sample;
+                    onOpenSpecimen(sample, req);
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md border border-[#c5daf8] bg-[#eef4ff] hover:bg-[#dde9fc] text-[#014486] cursor-pointer"
+                >
+                  <FlaskConical className="w-3.5 h-3.5" />
+                  Open specimen
+                </button>
+              ) : null}
+              {req && visit.status === 'COMPLETED' && onPrintResults ? (
+                <button
+                  type="button"
+                  onClick={() => onPrintResults(req)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Print results
+                </button>
+              ) : null}
+              {req && visit.status === 'COMPLETED' && onMarkResultsPickedUp ? (
+                <button
+                  type="button"
+                  onClick={() => onMarkResultsPickedUp(req, !isResultsPickedUp(visit))}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md border cursor-pointer ${
+                    isResultsPickedUp(visit)
+                      ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      : 'border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100'
+                  }`}
+                >
+                  <PackageCheck className="w-3.5 h-3.5" />
+                  {isResultsPickedUp(visit) ? 'Undo pickup' : 'Mark picked up'}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
-        <div className="px-4 py-3 space-y-2.5 text-sm">
+        <div className="px-3.5 py-3 space-y-3 text-sm">
           {visit.status === 'COMPLETED' && isResultsPickedUp(visit) ? (
             <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-2">
               Results picked up
@@ -244,18 +243,38 @@ function VisitTimelineItem({
               {formatResultsPickupWhen(visit.resultsPickedUpAt) ? ` · ${formatResultsPickupWhen(visit.resultsPickedUpAt)}` : ''}
             </p>
           ) : null}
-          <div>
-            <span className="text-xs font-medium text-slate-500">Requesting physician</span>
-            <p className="font-medium text-slate-900">{visit.physician || '—'}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Physician</span>
+              <p className="text-sm font-medium text-slate-900 mt-0.5">{visit.physician || '—'}</p>
+            </div>
+            {(visit.orNumber || visit.chargeSlipNumber) && (
+              <div className="space-y-1.5">
+                {visit.orNumber ? (
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Official receipt</span>
+                    <p className="text-sm font-medium tabular-nums text-slate-900 mt-0.5">{visit.orNumber}</p>
+                  </div>
+                ) : null}
+                {visit.chargeSlipNumber ? (
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Charge slip</span>
+                    <p className="text-sm font-medium tabular-nums text-slate-900 mt-0.5">{visit.chargeSlipNumber}</p>
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
           {exams.length > 0 ? (
             <div>
-              <span className="text-xs font-medium text-slate-500">Examinations ({exams.length})</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Examinations ({exams.length})
+              </span>
               <ul className="mt-1.5 flex flex-wrap gap-1.5">
                 {visibleExams.map((exam) => (
                   <li
                     key={exam}
-                    className="text-[11px] font-normal uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 leading-snug max-w-full"
+                    className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 leading-snug max-w-full"
                   >
                     {exam}
                   </li>
@@ -272,24 +291,8 @@ function VisitTimelineItem({
               ) : null}
             </div>
           ) : null}
-          {(visit.orNumber || visit.chargeSlipNumber) && (
-            <dl className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-100">
-              {visit.orNumber ? (
-                <div>
-                  <dt className="text-slate-500">Official receipt</dt>
-                  <dd className="font-normal uppercase tabular-nums">{visit.orNumber}</dd>
-                </div>
-              ) : null}
-              {visit.chargeSlipNumber ? (
-                <div>
-                  <dt className="text-slate-500">Charge slip</dt>
-                  <dd className="font-normal uppercase tabular-nums">{visit.chargeSlipNumber}</dd>
-                </div>
-              ) : null}
-            </dl>
-          )}
           {visit.clinicalNotes ? (
-            <p className="text-xs font-normal uppercase text-slate-600 border-t border-slate-100 pt-2 leading-relaxed">
+            <p className="text-xs text-slate-600 border-t border-slate-100 pt-2 leading-relaxed">
               {visit.clinicalNotes}
             </p>
           ) : null}
@@ -377,121 +380,117 @@ function PatientDetailDrawer({
         onClick={requestClose}
       />
       <div
-        className={`relative w-full sm:w-[min(58vw,1100px)] sm:max-w-none h-full bg-white shadow-2xl flex flex-col border-l border-[#d8dde6] will-change-transform ${
+        className={`relative w-full sm:max-w-[28rem] md:max-w-[32rem] h-full bg-white shadow-2xl flex flex-col border-l border-[#d8dde6] will-change-transform ${
           closing ? 'patient-drawer-panel-out' : 'patient-drawer-panel-in'
         }`}
       >
-        <div className="shrink-0 px-5 py-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white flex items-start justify-between gap-3">
-          <div className="min-w-0 pr-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              Patient history
-            </p>
-            <h2
-              id="patient-drawer-title"
-              className="text-xl sm:text-2xl font-normal uppercase text-slate-900 tracking-tight mt-0.5 break-words"
+        <div className="shrink-0 px-4 py-3.5 border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#0176d3]">
+                Patient history
+              </p>
+              <h2
+                id="patient-drawer-title"
+                className="text-lg font-semibold text-slate-900 tracking-tight mt-0.5 break-words leading-snug"
+              >
+                {formatPersonName(record.fullName)}
+              </h2>
+              <p className="text-xs text-slate-600 mt-1">
+                {stats.firstVisit && stats.lastVisit
+                  ? stats.firstVisit === stats.lastVisit
+                    ? `Single visit · ${stats.lastVisit}`
+                    : `${stats.firstVisit} – ${stats.lastVisit}`
+                  : 'No visits recorded'}
+              </p>
+              {record.address ? (
+                <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{record.address}</p>
+              ) : null}
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-800 tabular-nums">
+                  {stats.totalVisits} {stats.totalVisits === 1 ? 'visit' : 'visits'}
+                </span>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-900 tabular-nums">
+                  {stats.completed} completed
+                </span>
+                {stats.inFlight > 0 ? (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[#014486] tabular-nums">
+                    {stats.inFlight} in progress
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={requestClose}
+              className="p-1.5 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer shrink-0"
+              aria-label="Close"
             >
-              {formatPersonName(record.fullName)}
-            </h2>
-            <p className="text-sm font-normal uppercase text-slate-600 mt-1">
-              {stats.firstVisit && stats.lastVisit
-                ? stats.firstVisit === stats.lastVisit
-                  ? `Single visit on ${stats.lastVisit}`
-                  : `${stats.firstVisit} → ${stats.lastVisit}`
-                : 'No visits recorded'}
-            </p>
-            {record.address ? (
-              <p className="text-xs font-normal uppercase text-slate-500 mt-1">{record.address}</p>
-            ) : null}
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={requestClose}
-            className="p-2 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer shrink-0"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
-        <div className="shrink-0 px-5 py-3 border-b border-slate-100 flex flex-wrap gap-2">
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-800">
-            {stats.totalVisits} visits
-          </span>
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-900">
-            {stats.completed} completed
-          </span>
-          {stats.inFlight > 0 ? (
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-[#014486]">
-              {stats.inFlight} in progress
-            </span>
+          <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            {[
+              { icon: Calendar, label: 'Date of birth', value: record.birthday || '—' },
+              {
+                icon: Activity,
+                label: 'Age / sex',
+                value: `${record.age ? `${record.age} yrs` : '—'} · ${record.sex}`,
+              },
+              { icon: FileText, label: 'Civil status', value: record.civilStatus },
+              { icon: MapPin, label: 'Category', value: record.category },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="rounded-md border border-slate-200/90 bg-white px-2.5 py-2 min-w-0"
+              >
+                <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1">
+                  <item.icon className="w-3 h-3 shrink-0" aria-hidden />
+                  {item.label}
+                </dt>
+                <dd className="font-medium text-slate-900 mt-0.5 truncate" title={item.value}>
+                  {item.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          {stats.categories.length > 1 ? (
+            <p className="mt-2 text-[11px] text-amber-950 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+              Multiple billing categories: {stats.categories.join(', ')}
+            </p>
+          ) : null}
+
+          {latestVisit && latestReq ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {latestVisit.sampleId && onOpenSpecimen ? (
+                <button
+                  type="button"
+                  onClick={() => handleOpenSpecimen({ id: latestVisit.sampleId! } as Sample, latestReq)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md bg-[#0176d3] hover:bg-[#0060b2] text-white cursor-pointer"
+                >
+                  <FlaskConical className="w-3.5 h-3.5" />
+                  Latest specimen
+                </button>
+              ) : null}
+              {latestVisit.status === 'COMPLETED' && onPrintResults ? (
+                <button
+                  type="button"
+                  onClick={() => onPrintResults(latestReq)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md border border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Print latest results
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
 
-        <dl className="shrink-0 px-5 py-4 grid grid-cols-2 gap-3 text-sm border-b border-slate-100">
-          <div className="rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2">
-            <dt className="text-[11px] text-slate-500 flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5" /> Date of birth
-            </dt>
-            <dd className="font-normal uppercase text-slate-900 mt-0.5">{record.birthday || '—'}</dd>
-          </div>
-          <div className="rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2">
-            <dt className="text-[11px] text-slate-500 flex items-center gap-1">
-              <Activity className="w-3.5 h-3.5" /> Age / sex
-            </dt>
-            <dd className="font-normal uppercase text-slate-900 mt-0.5">
-              {record.age ? `${record.age} yrs` : '—'} · {record.sex}
-            </dd>
-          </div>
-          <div className="rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2">
-            <dt className="text-[11px] text-slate-500 flex items-center gap-1">
-              <FileText className="w-3.5 h-3.5" /> Civil status
-            </dt>
-            <dd className="font-normal uppercase text-slate-900 mt-0.5">{record.civilStatus}</dd>
-          </div>
-          <div className="rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2">
-            <dt className="text-[11px] text-slate-500 flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5" /> Latest category
-            </dt>
-            <dd className="font-normal uppercase text-slate-900 mt-0.5">{record.category}</dd>
-          </div>
-        </dl>
-
-        {stats.categories.length > 1 ? (
-          <p className="shrink-0 mx-5 mt-3 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-            Multiple billing categories: {stats.categories.join(', ')}
-          </p>
-        ) : null}
-
-        {latestVisit && latestReq ? (
-          <div className="shrink-0 px-5 py-3 flex flex-wrap gap-2 border-b border-slate-100">
-            {latestVisit.sampleId && onOpenSpecimen ? (
-              <button
-                type="button"
-                onClick={() => handleOpenSpecimen({ id: latestVisit.sampleId! } as Sample, latestReq)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-[#0176d3] hover:bg-[#0060b2] text-white cursor-pointer"
-              >
-                <FlaskConical className="w-3.5 h-3.5" />
-                Latest specimen
-              </button>
-            ) : null}
-            {latestVisit.status === 'COMPLETED' && onPrintResults ? (
-              <button
-                type="button"
-                onClick={() => onPrintResults(latestReq)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Print latest results
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0">
-          <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-4">
-            <Activity className="w-4 h-4 text-[#0176d3]" />
-            Visit timeline
-            <span className="text-xs font-normal text-slate-500">({record.visits.length})</span>
+        <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0 bg-slate-50/40">
+          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-600 mb-3">
+            Visit timeline · {record.visits.length}
           </h3>
           {record.visits.map((visit, idx) => (
             <VisitTimelineItem

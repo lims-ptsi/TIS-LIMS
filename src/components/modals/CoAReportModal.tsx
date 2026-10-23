@@ -12,6 +12,7 @@ import { getTemplateForExamination, ExaminationTemplate } from '../../data/testP
 import { getResultFormForExam, getResultFormById, resolveEntryForm } from '../../data/resultFormsCatalog';
 import { isSendOutExamination } from '../../data/examinationCatalog';
 import { NtpLabRequestForm, NTP_FIELD_KEYS } from '../forms/NtpLabRequestForm';
+import { hasEnteredResult, isResultFormRowExamined } from '../../utils/resultDisplay';
 
 interface CoAReportModalProps {
   isOpen: boolean;
@@ -72,7 +73,8 @@ const SingleExamFormSheet: React.FC<{
   const rf =
     (sheet.resolvedFormId && getResultFormById(sheet.resolvedFormId)) ||
     getResultFormForExam(tmpl.examCode, requisition.patientGender);
-  const hideEmpty = Boolean(rf?.hideEmptyResultsOnPrint);
+  const readParam = (paramId: string) =>
+    String(resultGroup?.parameters?.[paramId]?.value ?? '');
 
   if (rf?.layoutStyle === 'ntp-request') {
     const ntpValues = Object.fromEntries(
@@ -327,33 +329,28 @@ const SingleExamFormSheet: React.FC<{
                   </div>
                 )}
                 {sections.map((section) => {
-                  const sectionHasValue = section.rows.some(
-                    (r) => String(resultGroup?.parameters?.[r.id]?.value || '').trim() !== ''
+                  const visibleRows = section.rows.filter((r) =>
+                    isResultFormRowExamined(r, readParam)
                   );
+                  if (visibleRows.length === 0) return null;
                   return (
-                    <div
-                      key={section.id}
-                      className={hideEmpty && !sectionHasValue ? 'print:hidden' : undefined}
-                    >
+                    <div key={section.id}>
                       {section.title ? (
                         <div className="lims-rf-section-label px-3 py-1 bg-slate-50 text-[11px] print:text-[9px] font-bold uppercase text-slate-800">
                           {section.title}
                         </div>
                       ) : null}
-                      {section.rows.map((row) => {
+                      {visibleRows.map((row) => {
                         const val = resultGroup?.parameters?.[row.id]?.value || '';
                         const methodId = row.examChoiceId || `${row.id}_exam`;
                         const examLabel = row.examOptions
                           ? resultGroup?.parameters?.[methodId]?.value || '—'
                           : row.label;
-                        const emptyPrintHide = hideEmpty && !String(val).trim();
                         if (fourCol) {
                           return (
                             <div
                               key={row.id}
-                              className={`lims-rf-grid-row grid grid-cols-12 ${
-                                emptyPrintHide ? 'print:hidden' : ''
-                              }`}
+                              className="lims-rf-grid-row grid grid-cols-12"
                             >
                               <div className="col-span-4 px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-800">
                                 {examLabel}
@@ -371,12 +368,7 @@ const SingleExamFormSheet: React.FC<{
                           );
                         }
                         return (
-                          <div
-                            key={row.id}
-                            className={`lims-rf-grid-row grid grid-cols-2 ${
-                              emptyPrintHide ? 'print:hidden' : ''
-                            }`}
-                          >
+                          <div key={row.id} className="lims-rf-grid-row grid grid-cols-2">
                             <div className="px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-800">
                               {examLabel}
                             </div>
@@ -395,7 +387,10 @@ const SingleExamFormSheet: React.FC<{
                     (sections || []).flatMap((section) => section.rows.map((row) => row.id))
                   );
                   const extra = (memberTemplate.parameters || []).filter(
-                    (param) => param && !covered.has(param.id)
+                    (param) =>
+                      param &&
+                      !covered.has(param.id) &&
+                      hasEnteredResult(resultGroup?.parameters?.[param.id]?.value)
                   );
                   if (extra.length === 0) return null;
                   return (
@@ -405,7 +400,6 @@ const SingleExamFormSheet: React.FC<{
                       </div>
                       {extra.map((param) => {
                         const val = resultGroup?.parameters?.[param.id]?.value || '';
-                        const emptyPrintHide = hideEmpty && !String(val).trim();
                         const refText =
                           param.normalText ||
                           (param.specMin !== undefined && param.specMax !== undefined
@@ -415,9 +409,7 @@ const SingleExamFormSheet: React.FC<{
                           return (
                             <div
                               key={param.id}
-                              className={`lims-rf-grid-row grid grid-cols-12 ${
-                                emptyPrintHide ? 'print:hidden' : ''
-                              }`}
+                              className="lims-rf-grid-row grid grid-cols-12"
                             >
                               <div className="col-span-4 px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-800">
                                 {param.name}
@@ -435,12 +427,7 @@ const SingleExamFormSheet: React.FC<{
                           );
                         }
                         return (
-                          <div
-                            key={param.id}
-                            className={`lims-rf-grid-row grid grid-cols-2 ${
-                              emptyPrintHide ? 'print:hidden' : ''
-                            }`}
-                          >
+                          <div key={param.id} className="lims-rf-grid-row grid grid-cols-2">
                             <div className="px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-800">
                               {param.name}
                             </div>
@@ -469,12 +456,9 @@ const SingleExamFormSheet: React.FC<{
                 {tmpl.parameters.map((param) => {
                   const resItem = resultGroup?.parameters?.[param.id];
                   const val = resItem?.value || '';
-                  const emptyPrintHide = hideEmpty && !String(val).trim();
+                  if (!hasEnteredResult(val)) return null;
                   return (
-                    <tr
-                      key={param.id}
-                      className={emptyPrintHide ? 'print:hidden' : undefined}
-                    >
+                    <tr key={param.id}>
                       <td className="py-1.5 px-3 print:py-1 print:px-2 text-slate-900 font-semibold">
                         {param.name}
                       </td>

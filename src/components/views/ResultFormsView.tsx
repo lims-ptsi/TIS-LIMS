@@ -191,7 +191,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
   const [values, setValues] = useState<FormValues>(() =>
     blankValues(getResultFormById(initialList[0]?.id || 'RF-01') || RESULT_FORMS[0])
   );
-  const [examinedResultsOnly, setExaminedResultsOnly] = useState(false);
+  const [examinedResultsOnly, setExaminedResultsOnly] = useState(true);
 
   const referenceGender = patientGender || values.gender || '';
 
