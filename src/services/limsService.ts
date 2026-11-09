@@ -2,6 +2,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { LabTestRequisition, Sample, AuditEntry } from '../types/lims';
 import { ExaminationItem, AssignedFormType } from '../data/examinationCatalog';
 import { splitPatientName } from '../data/patientDirectory';
+import type { ExamResultGroup } from '../components/modals/ResultEntryModal';
 
 function examinationToRow(item: ExaminationItem) {
   return {
@@ -57,6 +58,55 @@ function isUuid(val?: string): boolean {
 }
 
 /** Supabase `requisitions.id` / `test_results.requisition_id` must be UUID — resolve from requisition number when needed. */
+function mapRequisitionRow(row: Record<string, any>): LabTestRequisition {
+  const rawFirst = (row.first_name || '').trim();
+  const rawLast = (row.last_name || '').trim();
+  const parsed = !rawFirst || !rawLast ? splitPatientName(row.patient_name || '') : null;
+  const firstName = rawFirst || parsed?.firstName || undefined;
+  const middleName = (row.middle_name || '').trim() || parsed?.middleName || undefined;
+  const lastName = rawLast || parsed?.lastName || undefined;
+  const suffix = (row.suffix || '').trim() || parsed?.suffix || undefined;
+
+  return {
+    id: row.id,
+    requisitionNumber: row.requisition_number,
+    requestDate: row.request_date || new Date().toISOString().split('T')[0],
+    patientOrSubjectName: row.patient_name,
+    patientId: row.patient_record_id || undefined,
+    firstName,
+    middleName,
+    lastName,
+    suffix,
+    patientDob: row.birthday || '',
+    patientAddress: row.address || '',
+    patientPhone: row.patient_phone || row.phone || undefined,
+    patientEmail: row.patient_email || row.email || undefined,
+    caseNo: row.case_no || '',
+    patientAge: Number(row.age) || 0,
+    patientGender: row.sex || 'Male',
+    civilStatus: row.civil_status || 'Single',
+    kindOfExamination: Array.isArray(row.kind_of_examination) ? row.kind_of_examination : [],
+    orderingPhysicianOrPI: row.requesting_physician,
+    orNumber: row.or_number || '',
+    chargeSlipNumber: row.charge_slip_number || '',
+    organizationOrClient: row.organization_client || '',
+    externalRef: row.case_no || row.requisition_number,
+    priority: row.priority || 'ROUTINE',
+    selectedTestIds: Array.isArray(row.selected_test_ids) ? row.selected_test_ids : [],
+    selectedTestNames: Array.isArray(row.kind_of_examination) ? row.kind_of_examination : [],
+    specimenTypes: Array.isArray(row.specimen_types) ? row.specimen_types : ['Whole Blood (K2-EDTA)'],
+    tubeCount: Number(row.tube_count) || 1,
+    patientCategory: row.patient_category || undefined,
+    clinicalNotes: row.clinical_notes || '',
+    status: row.status || 'SUBMITTED',
+    tatDeadline: row.tat_deadline || new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+    resultsPickedUpAt: row.results_picked_up_at || null,
+    resultsPickedUpBy: row.results_picked_up_by || null,
+    resultsReadySmsSentAt: row.results_ready_sms_sent_at || null,
+    resultsReadyEmailSentAt: row.results_ready_email_sent_at || null,
+  };
+}
+
 async function resolveRequisitionDbId(
   requisitionId: string,
   requisitionNumber?: string | null
@@ -99,57 +149,52 @@ export const limsService = {
         return null;
       }
 
-      // Map Supabase DB columns to frontend LabTestRequisition model
-      return (data || []).map((row) => {
-        const rawFirst = (row.first_name || '').trim();
-        const rawLast = (row.last_name || '').trim();
-        const parsed = (!rawFirst || !rawLast) ? splitPatientName(row.patient_name || '') : null;
-        const firstName = rawFirst || parsed?.firstName || undefined;
-        const middleName = (row.middle_name || '').trim() || parsed?.middleName || undefined;
-        const lastName = rawLast || parsed?.lastName || undefined;
-        const suffix = (row.suffix || '').trim() || parsed?.suffix || undefined;
-
-        return {
-          id: row.id,
-          requisitionNumber: row.requisition_number,
-          requestDate: row.request_date || new Date().toISOString().split('T')[0],
-          patientOrSubjectName: row.patient_name,
-          patientId: row.patient_record_id || undefined,
-          firstName,
-          middleName,
-          lastName,
-          suffix,
-        patientDob: row.birthday || '',
-        patientAddress: row.address || '',
-        patientPhone: row.patient_phone || row.phone || undefined,
-        patientEmail: row.patient_email || row.email || undefined,
-        caseNo: row.case_no || '',
-        patientAge: Number(row.age) || 0,
-        patientGender: row.sex || 'Male',
-        civilStatus: row.civil_status || 'Single',
-        kindOfExamination: Array.isArray(row.kind_of_examination) ? row.kind_of_examination : [],
-        orderingPhysicianOrPI: row.requesting_physician,
-        orNumber: row.or_number || '',
-        chargeSlipNumber: row.charge_slip_number || '',
-        organizationOrClient: row.organization_client || '',
-        externalRef: row.case_no || row.requisition_number,
-        priority: row.priority || 'ROUTINE',
-        selectedTestIds: Array.isArray(row.selected_test_ids) ? row.selected_test_ids : [],
-        selectedTestNames: Array.isArray(row.kind_of_examination) ? row.kind_of_examination : [],
-        specimenTypes: Array.isArray(row.specimen_types) ? row.specimen_types : ['Whole Blood (K2-EDTA)'],
-        tubeCount: Number(row.tube_count) || 1,
-        patientCategory: row.patient_category || undefined,
-        clinicalNotes: row.clinical_notes || '',
-        status: row.status || 'SUBMITTED',
-        tatDeadline: row.tat_deadline || new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-        resultsPickedUpAt: row.results_picked_up_at || null,
-        resultsPickedUpBy: row.results_picked_up_by || null,
-        resultsReadySmsSentAt: row.results_ready_sms_sent_at || null,
-        resultsReadyEmailSentAt: row.results_ready_email_sent_at || null,
-      };
-    });
+      return (data || []).map((row) => mapRequisitionRow(row));
     } catch (err) {
       console.warn('[Supabase] Error connecting to requisitions:', err);
+      return null;
+    }
+  },
+
+  async fetchRequisitionByNumber(requisitionNumber: string): Promise<LabTestRequisition | null> {
+    const num = requisitionNumber.trim();
+    if (!num || !supabase || !isSupabaseConfigured) return null;
+    try {
+      const { data, error } = await supabase
+        .from('requisitions')
+        .select('*')
+        .eq('requisition_number', num)
+        .maybeSingle();
+      if (error) {
+        console.warn('[Supabase] fetchRequisitionByNumber warning:', error.message);
+        return null;
+      }
+      return data ? mapRequisitionRow(data) : null;
+    } catch (err) {
+      console.warn('[Supabase] fetchRequisitionByNumber exception:', err);
+      return null;
+    }
+  },
+
+  async fetchTestResultsMapByRequisitionNumber(
+    requisitionNumber: string
+  ): Promise<Record<string, ExamResultGroup> | null> {
+    const num = requisitionNumber.trim();
+    if (!num || !supabase || !isSupabaseConfigured) return null;
+    try {
+      const { data, error } = await supabase
+        .from('test_results')
+        .select('results')
+        .eq('requisition_number', num)
+        .maybeSingle();
+      if (error) {
+        console.warn('[Supabase] fetchTestResultsMapByRequisitionNumber warning:', error.message);
+        return null;
+      }
+      if (!data?.results || typeof data.results !== 'object') return null;
+      return data.results as Record<string, ExamResultGroup>;
+    } catch (err) {
+      console.warn('[Supabase] fetchTestResultsMapByRequisitionNumber exception:', err);
       return null;
     }
   },

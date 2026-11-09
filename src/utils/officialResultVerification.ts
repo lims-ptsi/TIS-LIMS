@@ -73,6 +73,18 @@ export type ResolvedVerifyMatch = {
   formLabel?: string;
 };
 
+/** Case identifiers used when sealing a QR (print may use case no. or external ref). */
+export function requisitionCaseNoCandidates(requisition: LabTestRequisition): string[] {
+  const out: string[] = [];
+  const add = (raw: string) => {
+    const t = raw.trim();
+    if (t && !out.includes(t)) out.push(t);
+  };
+  add(requisition.caseNo || '');
+  add(requisition.externalRef || '');
+  return out.length ? out : [''];
+}
+
 /** Match token to a stored exam — used when QR only carries rn + tok. */
 export async function resolveVerifiedExamGroup(
   requisition: LabTestRequisition,
@@ -81,28 +93,37 @@ export async function resolveVerifiedExamGroup(
   hint?: { examKey?: string; formId?: string }
 ): Promise<ResolvedVerifyMatch | null> {
   if (!resultMap) return null;
-  const cn = requisition.caseNo || requisition.externalRef || '';
   const rn = requisition.requisitionNumber || '';
   const tok = token.trim().toUpperCase();
+  const caseIds = requisitionCaseNoCandidates(requisition);
 
   const tryKey = async (examKey: string, group: ExamResultGroup) => {
     const form = getResultFormForExam(group.examCode || examKey, requisition.patientGender);
-    const formId = hint?.formId || form?.id;
-    const ok = await verifyOfficialResultToken({
-      requisitionNumber: rn,
-      caseNo: cn,
-      examKey,
-      formId,
-      token: tok,
-      resultGroup: group,
-    });
-    if (!ok) return null;
-    return {
-      examKey,
-      group,
-      formId,
-      formLabel: form?.shortName || group.examName,
-    } satisfies ResolvedVerifyMatch;
+    const formIds = new Set<string>();
+    if (hint?.formId) formIds.add(hint.formId);
+    if (form?.id) formIds.add(form.id);
+    formIds.add('');
+
+    for (const formId of formIds) {
+      for (const caseNo of caseIds) {
+        const ok = await verifyOfficialResultToken({
+          requisitionNumber: rn,
+          caseNo,
+          examKey,
+          formId: formId || undefined,
+          token: tok,
+          resultGroup: group,
+        });
+        if (!ok) continue;
+        return {
+          examKey,
+          group,
+          formId: formId || form?.id,
+          formLabel: form?.shortName || group.examName,
+        } satisfies ResolvedVerifyMatch;
+      }
+    }
+    return null;
   };
 
   if (hint?.examKey && resultMap[hint.examKey]) {

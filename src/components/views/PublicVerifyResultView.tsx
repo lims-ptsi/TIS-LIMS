@@ -1,15 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ShieldCheck, ShieldAlert, Loader2 } from 'lucide-react';
 import {
-  loadStoredRequisitions,
-  loadStoredTestResults,
-  lookupStoredRecord,
-} from '../../data/limsDataStore';
-import {
   resolveVerifiedExamGroup,
   summarizeVerifiedResultParameters,
   type ResolvedVerifyMatch,
 } from '../../utils/officialResultVerification';
+import { loadVerifyRequisitionRecord } from '../../utils/verifyResultDataLoader';
 import { LabTestRequisition } from '../modals/NewRequisitionModal';
 import { ExamResultGroup } from '../modals/ResultEntryModal';
 
@@ -28,7 +24,10 @@ function readVerifyParams() {
 
 export function PublicVerifyResultView() {
   const params = useMemo(() => readVerifyParams(), []);
-  const [status, setStatus] = useState<'loading' | 'valid' | 'invalid' | 'missing'>('loading');
+  const [status, setStatus] = useState<'loading' | 'valid' | 'invalid' | 'missing' | 'not_found'>(
+    'loading'
+  );
+  const [notFoundDetail, setNotFoundDetail] = useState<string | null>(null);
   const [req, setReq] = useState<LabTestRequisition | null>(null);
   const [group, setGroup] = useState<ExamResultGroup | undefined>();
   const [match, setMatch] = useState<ResolvedVerifyMatch | null>(null);
@@ -41,20 +40,27 @@ export function PublicVerifyResultView() {
 
     let cancelled = false;
     (async () => {
-      const reqs = loadStoredRequisitions();
-      const found =
-        reqs.find((r) => r.requisitionNumber === params.rn) ||
-        (params.cn
-          ? reqs.find((r) => r.caseNo === params.cn || r.externalRef === params.cn)
-          : undefined);
+      const loaded = await loadVerifyRequisitionRecord(params.rn, params.cn);
+      if (!loaded) {
+        if (!cancelled) {
+          setNotFoundDetail(
+            'No requisition with this number was found in the laboratory database. Results must be saved to the server before QR verification works from a phone.'
+          );
+          setStatus('not_found');
+        }
+        return;
+      }
 
-      const resultsStore = loadStoredTestResults().results;
-      const resultMap =
-        (found && lookupStoredRecord(resultsStore, found.id, found.requisitionNumber)) ||
-        undefined;
+      const { requisition: found, resultMap } = loaded;
 
-      if (!found) {
-        if (!cancelled) setStatus('invalid');
+      if (!resultMap || Object.keys(resultMap).length === 0) {
+        if (!cancelled) {
+          setReq(found);
+          setNotFoundDetail(
+            'This requisition is on file, but no examination results are stored on the server yet. Finalize and save results in Lab-TIS, then scan again.'
+          );
+          setStatus('not_found');
+        }
         return;
       }
 
@@ -171,6 +177,21 @@ export function PublicVerifyResultView() {
               This seal matches the result data on file for this requisition. Compare printed values with this
               record before clinical use.
             </p>
+          </div>
+        ) : null}
+
+        {status === 'not_found' ? (
+          <div className="flex flex-col items-center gap-3 py-4">
+            <ShieldAlert className="w-12 h-12 text-amber-600" />
+            <p className="text-base font-bold text-amber-900">Record not available for verification</p>
+            <p className="text-xs text-slate-600 text-center leading-relaxed">
+              {notFoundDetail ||
+                'This requisition could not be loaded from the laboratory system. Contact PTSI Laboratory Section.'}
+            </p>
+            <dl className="w-full text-xs space-y-1 border-t border-slate-200 pt-3 font-mono text-slate-600">
+              <div>Req: {params.rn}</div>
+              <div>Token: {params.tok}</div>
+            </dl>
           </div>
         ) : null}
 
