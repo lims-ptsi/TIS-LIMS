@@ -7,6 +7,7 @@ import {
 } from '../../utils/officialResultVerification';
 import { loadVerifyRequisitionRecord } from '../../utils/verifyResultDataLoader';
 import { resolveVerifyStatusOnFile } from '../../utils/verifyStatusOnFile';
+import { PtsiVerifyPageHeader } from '../common/PtsiVerifyPageHeader';
 import { LabTestRequisition } from '../modals/NewRequisitionModal';
 import { ExamResultGroup } from '../modals/ResultEntryModal';
 
@@ -105,12 +106,7 @@ export function PublicVerifyResultView() {
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-xl shadow-lg border border-slate-200 p-6 space-y-4">
-        <div className="text-center space-y-1">
-          <h1 className="text-lg font-bold text-slate-900">PTSI Laboratory Result Verification</h1>
-          <p className="text-xs text-slate-600">
-            Philippine Tuberculosis Society, Inc. · Laboratory Section
-          </p>
-        </div>
+        <PtsiVerifyPageHeader />
 
         {status === 'loading' ? (
           <div className="flex flex-col items-center gap-2 py-8 text-slate-600">

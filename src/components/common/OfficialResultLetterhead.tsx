@@ -1,4 +1,5 @@
 import React from 'react';
+import { PtsiLogo } from '../brand/PtsiLogo';
 
 export interface OfficialResultLetterheadProps {
   /** @deprecated Form name is shown in the report title, not the letterhead */
@@ -31,15 +32,7 @@ export function OfficialResultLetterhead({
   return (
     <header className="flex items-start justify-between gap-4 border-b-2 border-slate-900 pb-3 mb-3 print:pb-2 print:mb-2">
       <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
-        <img
-          src="/ptsilogo.png"
-          alt=""
-          aria-hidden
-          className="h-14 sm:h-16 w-auto print:h-14 object-contain shrink-0"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = 'none';
-          }}
-        />
+        <PtsiLogo decorative className="h-14 sm:h-16 w-auto print:h-14 object-contain shrink-0" />
         <div className="min-w-0 leading-snug">
           <h1 className="text-base sm:text-lg print:text-sm font-black tracking-tight text-slate-900 uppercase font-serif leading-tight">
             Philippine Tuberculosis Society, Inc.

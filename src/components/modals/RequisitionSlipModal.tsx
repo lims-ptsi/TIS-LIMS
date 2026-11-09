@@ -197,8 +197,8 @@ export const RequisitionSlipModal: React.FC<RequisitionSlipModalProps> = ({
               {/* Left: Brand & Address */}
               <div className="flex items-start gap-3 sm:gap-3.5">
                 <img 
-                  src="/ptsilogo.png" 
-                  alt="PTSI Logo" 
+                  src="/ptsilogo.png"
+                  alt="Philippine Tuberculosis Society, Inc."
                   className="w-14 h-14 sm:w-16 sm:h-16 print:w-12 print:h-12 object-contain shrink-0" 
                 />
                 <div className="space-y-0.5">
