@@ -967,7 +967,7 @@ export const NtpLabRequestForm: React.FC<{
     ) {
       return;
     }
-    const next = { ...values, res_diagnostic_test: pickedChkId };
+    const next: Values = { ...values, res_diagnostic_test: pickedChkId };
     syncNtpResultChecksFromRequest(next);
     DIAGNOSTIC_RESULT_ROWS.forEach((t) => {
       const on = Boolean(pickedChkId && t.chkId === pickedChkId);
