@@ -56,6 +56,31 @@ function isUuid(val?: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val.trim());
 }
 
+/** Supabase `requisitions.id` / `test_results.requisition_id` must be UUID — resolve from requisition number when needed. */
+async function resolveRequisitionDbId(
+  requisitionId: string,
+  requisitionNumber?: string | null
+): Promise<string | null> {
+  if (isUuid(requisitionId)) return requisitionId.trim();
+  if (!supabase || !isSupabaseConfigured) return null;
+
+  const candidates = new Set<string>();
+  const num = (requisitionNumber || '').trim();
+  if (num) candidates.add(num);
+  const idTrim = (requisitionId || '').trim();
+  if (idTrim && !isUuid(idTrim)) candidates.add(idTrim);
+
+  for (const requisition_number of candidates) {
+    const { data, error } = await supabase
+      .from('requisitions')
+      .select('id')
+      .eq('requisition_number', requisition_number)
+      .maybeSingle();
+    if (!error && data?.id && isUuid(data.id)) return data.id;
+  }
+  return null;
+}
+
 export const limsService = {
   // Check if Supabase live sync is enabled
   isLive: isSupabaseConfigured && !!supabase,
@@ -562,10 +587,23 @@ export const limsService = {
       return { success: true };
     }
     try {
+      const dbRequisitionId = await resolveRequisitionDbId(
+        payload.requisitionId,
+        payload.requisitionNumber
+      );
+      if (!dbRequisitionId) {
+        console.warn(
+          '[Supabase] upsertTestResults skipped — no database UUID for requisition',
+          payload.requisitionId,
+          payload.requisitionNumber
+        );
+        return { success: true };
+      }
+
       const { error } = await supabase.from('test_results').upsert(
         [
           {
-            requisition_id: payload.requisitionId,
+            requisition_id: dbRequisitionId,
             requisition_number: payload.requisitionNumber || null,
             results: payload.results,
             medtech_info: payload.medtechInfo,

@@ -13,6 +13,7 @@ import {
   ResultFormHeaderField,
   ResultFormSpecimenField,
   ResultFormAnalyteRow,
+  ResultFormSignature,
   getResultFormById,
   getAllAnalyteRows,
   examChoiceKey,
@@ -22,10 +23,64 @@ import {
   normalizeResultFormGender,
 } from '../../data/resultFormsCatalog';
 import { NtpLabRequestForm } from '../forms/NtpLabRequestForm';
+import { ResultFormOrgBanner } from '../common/ResultFormOrgBanner';
+import { OfficialResultVerificationQr } from '../common/OfficialResultVerificationQr';
+import {
+  examKeyForResultForm,
+  requisitionStubFromFormValues,
+  resultFormShowsVerifyQr,
+  valuesToExamResultGroup,
+} from '../../utils/resultFormVerifyContext';
+import {
+  OFFICIAL_RESULT_SIGNATURE_LABELS,
+} from '../common/OfficialResultSignatureFooter';
+import { ROLE_DEFAULT_DESIGNATION } from '../../data/labPersonnelCatalog';
 import {
   hasEnteredResult,
   isResultFormRowExamined,
+  isResultFormSectionApplicable,
 } from '../../utils/resultDisplay';
+
+const OFFICIAL_SIGNATURE_DESIGNATIONS = [
+  ROLE_DEFAULT_DESIGNATION.performed,
+  ROLE_DEFAULT_DESIGNATION.verified,
+  ROLE_DEFAULT_DESIGNATION.pathologist,
+] as const;
+
+function officialSignatureSlots(form: ResultFormDefinition): ResultFormSignature[] {
+  const standard: ResultFormSignature[] = [
+    {
+      id: 'medTech1',
+      label: OFFICIAL_RESULT_SIGNATURE_LABELS[0],
+      showLicense: true,
+      showSignatureLine: true,
+    },
+    {
+      id: 'medTech2',
+      label: OFFICIAL_RESULT_SIGNATURE_LABELS[1],
+      showLicense: true,
+      showSignatureLine: true,
+    },
+    {
+      id: 'pathologist',
+      label: OFFICIAL_RESULT_SIGNATURE_LABELS[2],
+      showLicense: true,
+      showSignatureLine: true,
+    },
+  ];
+  if (form.signatures.length >= 3) {
+    return form.signatures.slice(0, 3).map((sig, index) => ({
+      ...sig,
+      label: standard[index]?.label || sig.label,
+    }));
+  }
+  return standard.map((slot, index) => ({
+    ...slot,
+    ...(form.signatures[index] || {}),
+    id: form.signatures[index]?.id || slot.id,
+    label: standard[index].label,
+  }));
+}
 
 interface ResultFormsViewProps {
   currentUserName?: string;
@@ -61,8 +116,9 @@ function blankValues(form: ResultFormDefinition): FormValues {
     if (a.hasAtTime) values[`${a.id}_at`] = '';
   });
   if (form.showRemarks) values.remarks = '';
-  form.signatures.forEach((s) => {
+  officialSignatureSlots(form).forEach((s, index) => {
     values[`${s.id}_name`] = s.defaultName || '';
+    values[`${s.id}_designation`] = OFFICIAL_SIGNATURE_DESIGNATIONS[index] || '';
     if (s.showDate) values[`${s.id}_date`] = '';
     if (s.showLicense) values[`${s.id}_license`] = s.defaultLicense || '';
   });
@@ -275,6 +331,22 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
     window.print();
   };
 
+  const verificationQr = useMemo(() => {
+    if (!activeForm || !resultFormShowsVerifyQr(activeForm)) return null;
+    const req = requisitionStubFromFormValues(values);
+    return (
+      <OfficialResultVerificationQr
+        requisition={req}
+        examKey={examKeyForResultForm(activeForm, values)}
+        formId={activeForm.id}
+        formLabel={activeForm.shortName}
+        resultGroup={valuesToExamResultGroup(values)}
+        compact
+        minimal
+      />
+    );
+  }, [activeForm, values]);
+
   if (!activeForm) {
     return (
       <div className="p-8 text-center text-slate-500 text-sm">
@@ -288,10 +360,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
   const sections = activeForm.resultSections || [];
   const isSectioned = sections.length > 0;
   const hideEmpty = Boolean(activeForm.hideEmptyResultsOnPrint);
-  const sigCols =
-    activeForm.signatures.length >= 3
-      ? 'sm:grid-cols-3'
-      : 'sm:grid-cols-2';
+  const signatureSlots = officialSignatureSlots(activeForm);
 
   return (
     <div className="lims-page-shell text-slate-900">
@@ -423,64 +492,40 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
         <div className="lg:col-span-9">
           <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm p-5 sm:p-7 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 print:max-w-none">
             {activeForm.layoutStyle === 'ntp-request' ? (
-              <NtpLabRequestForm values={values} onChange={setField} />
+              <NtpLabRequestForm
+                values={values}
+                onChange={setField}
+                shortName={activeForm.shortName}
+                panelTitle={activeForm.panelTitle}
+                verificationQr={verificationQr}
+              />
             ) : (
             <>
-            <div className="border-b-2 border-slate-900 pb-4 mb-4 print:pb-2">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4 min-w-0">
-                  <img
-                    src="/ptsilogo.png"
-                    alt="PTSI Official Seal"
-                    className="h-20 w-auto print:h-14 object-contain shrink-0"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                  <div className="min-w-0">
-                    <h1 className="text-base sm:text-lg print:text-sm font-black tracking-tight text-slate-900 uppercase font-serif">
-                      Philippine Tuberculosis Society, Inc.
-                    </h1>
-                    <h2 className="text-xs sm:text-sm print:text-[11px] font-bold text-slate-700 uppercase tracking-wide">
-                      Clinical Diagnostic Laboratory &amp; Chest Center
-                    </h2>
-                    <p className="text-[11px] print:text-[9px] text-slate-600">
-                      Quezon Institute Compound, E. Rodriguez Sr. Avenue, Quezon City · Tel: (02) 0000 - 0000
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <div className="inline-block px-3 py-1 bg-slate-900 text-white font-mono font-bold text-xs print:text-[9.5px] rounded uppercase tracking-wider">
-                    OFFICIAL RESULT
-                  </div>
-                  <div className="text-[10px] print:text-[8px] text-slate-500 font-mono mt-1">
-                    {activeForm.shortName}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ResultFormOrgBanner
+              shortName={activeForm.shortName}
+              panelTitle={
+                activeForm.panelTitle && activeForm.panelTitlePlacement === 'below-org'
+                  ? activeForm.panelTitle
+                  : undefined
+              }
+              verificationQr={verificationQr}
+            />
 
-            {activeForm.panelTitle && activeForm.panelTitlePlacement === 'below-org' ? (
-              <h2 className="text-center text-sm sm:text-base font-bold tracking-wide text-slate-900 mb-3 uppercase">
-                {activeForm.panelTitle}
-              </h2>
-            ) : null}
-
-            <section className="lims-result-form-patient mb-3 text-[10px] print:text-[8px] leading-tight">
-              <div className="grid grid-cols-12 gap-x-2 gap-y-1">
+            <section className="lims-result-form-patient mb-3 rounded border border-slate-200/80 bg-slate-50/40 px-2.5 py-2 print:mb-2 print:border-slate-300 print:bg-white print:px-0 print:py-0.5">
+              <div className="grid grid-cols-12 gap-x-3 gap-y-2 print:gap-x-2 print:gap-y-1">
                 {PTSI_PATIENT_HEADER_FIELDS.map((field) => {
                   const span = field.span ?? 4;
                   return (
                     <div
                       key={field.id}
-                      className="flex items-baseline gap-1 min-w-0 py-0.5"
+                      className="lims-rf-patient-cell min-w-0 flex flex-col"
                       style={{ gridColumn: `span ${span} / span ${span}` }}
                     >
-                      <label className="text-slate-500 font-semibold shrink-0 whitespace-nowrap">
-                        {field.label}:
-                        {field.required ? <span className="text-rose-600">*</span> : null}
+                      <label className="text-[9px] sm:text-[10px] print:text-[7px] font-semibold text-slate-500 uppercase tracking-wide leading-snug">
+                        {field.label}
+                        {field.required ? <span className="text-rose-600 normal-case"> *</span> : null}
                       </label>
-                      <div className="flex-1 min-w-0">
+                      <div className="mt-0.5 min-w-0">
                         <FieldControl
                           field={field}
                           value={values[field.id] || ''}
@@ -562,6 +607,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                   {sections.map((section) => {
                     const readFormParam = (paramId: string) =>
                       values[paramId] || values[`${paramId}_result`] || '';
+                    if (!isResultFormSectionApplicable(section, readFormParam)) return null;
                     const sectionHasAnyValue = section.rows.some((r) =>
                       isResultFormRowExamined(r, readFormParam)
                     );
@@ -702,7 +748,6 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                         </span>
                         {rh ? (
                           <>
-                            <span className="font-bold tracking-wider">RH:</span>
                             <select
                               value={values[`${rh.id}_result`] || ''}
                               onChange={(e) => setField(`${rh.id}_result`, e.target.value)}
@@ -851,20 +896,14 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
               </div>
             )}
 
-            {/* Signatures */}
-            <section className={`grid grid-cols-1 ${sigCols} gap-6 mt-6 pt-2`}>
-              {activeForm.signatures.map((sig) => (
-                <div key={sig.id} className="space-y-2 text-center">
-                  {sig.showSignatureLine && (
-                    <div className="h-8 border-0 border-b border-slate-500 print:border-slate-800 mb-1" />
-                  )}
-                  <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
-                    Signature
+            {/* Signatures — RF-05 blood typing footer on all forms */}
+            <section className="grid grid-cols-3 gap-6 mt-6 pt-10 print:pt-8">
+              {signatureSlots.map((sig, slotIndex) => (
+                <div key={sig.id} className="text-center space-y-1">
+                  <div className="text-[10px] print:text-[8px] font-semibold text-slate-500 uppercase tracking-wide">
+                    {sig.label}
                   </div>
-                  <div className="flex flex-col gap-0.5 text-left">
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">
-                      Name
-                    </label>
+                  <div className="border-b border-slate-700 min-h-[2rem] flex items-end justify-center pb-0.5 px-1">
                     <input
                       type="text"
                       value={values[`${sig.id}_name`] || ''}
@@ -872,41 +911,37 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                       placeholder={
                         sig.id.startsWith('medTech') && currentUserName
                           ? currentUserName
-                          : 'Full name'
+                          : 'Signatory name'
                       }
-                      className={inputUnderline}
+                      className="w-full font-serif italic text-sm print:text-xs text-center text-slate-900 bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-slate-400 placeholder:not-italic"
                     />
                   </div>
-                  {sig.showLicense && (
-                    <div className="flex flex-col gap-0.5 text-left">
-                      <label className="text-[10px] font-bold text-slate-600 uppercase">
-                        License No.
-                      </label>
+                  <div className="text-[11px] print:text-[9px] font-bold text-slate-800">
+                    {values[`${sig.id}_designation`] ||
+                      OFFICIAL_SIGNATURE_DESIGNATIONS[slotIndex] ||
+                      '—'}
+                  </div>
+                  {sig.showLicense !== false ? (
+                    <div className="text-[10px] print:text-[8px] text-slate-600">
+                      <span className="sr-only">License No.</span>
+                      Lic. No.{' '}
                       <input
                         type="text"
                         value={values[`${sig.id}_license`] || ''}
                         onChange={(e) => setField(`${sig.id}_license`, e.target.value)}
-                        placeholder="PRC / License number"
-                        className={inputUnderline}
+                        placeholder="____________"
+                        className="inline-block w-[5.5rem] max-w-full text-center font-mono bg-transparent border-0 border-b border-slate-400 focus:outline-none focus:border-[#0176d3] print:border-slate-600"
                       />
                     </div>
-                  )}
-                  {sig.showDate && (
-                    <div className="flex flex-col gap-0.5 text-left max-w-[10rem]">
-                      <label className="text-[10px] font-semibold text-slate-500 uppercase">
-                        Date
-                      </label>
-                      <input
-                        type="date"
-                        value={values[`${sig.id}_date`] || ''}
-                        onChange={(e) => setField(`${sig.id}_date`, e.target.value)}
-                        className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-xs text-slate-900 focus:outline-none focus:border-[#0176d3] print:border-slate-800"
-                      />
-                    </div>
-                  )}
-                  <div className="text-[11px] font-bold text-slate-800 pt-1">
-                    {sig.label}
-                  </div>
+                  ) : null}
+                  {sig.showDate ? (
+                    <input
+                      type="date"
+                      value={values[`${sig.id}_date`] || ''}
+                      onChange={(e) => setField(`${sig.id}_date`, e.target.value)}
+                      className="mx-auto w-full max-w-[9rem] border-0 border-b border-slate-400 bg-transparent px-0.5 py-0.5 text-[10px] text-slate-700 focus:outline-none focus:border-[#0176d3] print:border-slate-800"
+                    />
+                  ) : null}
                 </div>
               ))}
             </section>

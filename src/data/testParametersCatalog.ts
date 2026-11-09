@@ -720,8 +720,17 @@ export const DEFAULT_EXAMINATION_TEMPLATES: Record<string, ExaminationTemplate> 
     methodology: 'Electrochemical Biosensor Point-of-Care',
     specimenType: 'Capillary Whole Blood',
     parameters: [
-      // Result Form 1: open text result + fixed unit mg/dL
-      { id: 'p_hgt', code: 'HGT', name: 'HGT Result', unit: 'mg/dL', dataType: 'TEXT', normalText: '70 - 140 mg/dL (random / bedside)', defaultValue: '' },
+      {
+        id: 'p_hgt',
+        code: 'HGT',
+        name: 'HGT @',
+        unit: 'mg/dL',
+        dataType: 'NUMERIC',
+        specMin: 70,
+        specMax: 140,
+        normalText: '70 - 140 mg/dL (random / bedside)',
+        defaultValue: '105',
+      },
     ],
   },
   '1081': {
@@ -888,11 +897,25 @@ export const DEFAULT_EXAMINATION_TEMPLATES: Record<string, ExaminationTemplate> 
     methodology: '10-20% KOH Direct Smear Microscopy',
     specimenType: 'Skin Scrapings / Sputum / Exudate',
     parameters: [
-      // Result Form 2 options
+      {
+        id: 'sampleType',
+        code: 'SAMPLE',
+        name: 'Sample',
+        dataType: 'SELECT',
+        options: ['Sputum', 'Other'],
+        defaultValue: 'Sputum',
+      },
+      {
+        id: 'sampleType_other',
+        code: 'SAMPLE_OTH',
+        name: 'Sample (specify)',
+        dataType: 'TEXT',
+        defaultValue: '',
+      },
       {
         id: 'p_koh_res',
         code: 'KOH',
-        name: 'KOH Result',
+        name: 'KOH Examination',
         dataType: 'SELECT',
         options: ['Positive for Fungal Elements', 'Negative for Fungal Elements'],
         defaultValue: 'Negative for Fungal Elements',
@@ -1213,6 +1236,34 @@ export const STORAGE_KEY_TEMPLATES = 'aegis_examination_templates_v9';
 /**
  * Loads stored examination templates from localStorage or falls back to standard templates.
  */
+function mergeExaminationTemplates(
+  defaults: Record<string, ExaminationTemplate>,
+  stored: Record<string, ExaminationTemplate>
+): Record<string, ExaminationTemplate> {
+  const merged: Record<string, ExaminationTemplate> = { ...defaults };
+  Object.entries(stored).forEach(([code, storedTmpl]) => {
+    const base = defaults[code];
+    if (!base) {
+      merged[code] = {
+        ...storedTmpl,
+        parameters: Array.isArray(storedTmpl.parameters) ? storedTmpl.parameters : [],
+      };
+      return;
+    }
+    const byId = new Map<string, ParameterDef>();
+    (base.parameters || []).forEach((p) => byId.set(p.id, p));
+    (storedTmpl.parameters || []).forEach((p) => {
+      if (p?.id) byId.set(p.id, { ...byId.get(p.id), ...p });
+    });
+    merged[code] = {
+      ...base,
+      ...storedTmpl,
+      parameters: Array.from(byId.values()),
+    };
+  });
+  return merged;
+}
+
 export function loadStoredTemplates(): Record<string, ExaminationTemplate> {
   if (typeof window === 'undefined') return DEFAULT_EXAMINATION_TEMPLATES;
   try {
@@ -1220,8 +1271,7 @@ export function loadStoredTemplates(): Record<string, ExaminationTemplate> {
     if (!raw) return DEFAULT_EXAMINATION_TEMPLATES;
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
-      // Merge with default templates to guarantee completeness
-      return { ...DEFAULT_EXAMINATION_TEMPLATES, ...parsed };
+      return mergeExaminationTemplates(DEFAULT_EXAMINATION_TEMPLATES, parsed);
     }
   } catch (err) {
     console.error('Failed to load stored templates:', err);
@@ -1451,14 +1501,6 @@ export function getTemplateForExamination(
         dataType: 'TEXT',
         normalText: 'Normal / Reference Baseline',
         defaultValue: 'Normal',
-      },
-      {
-        id: `p_gen_remarks`,
-        code: 'REMARKS',
-        name: 'Clinical Remarks / Interpretation',
-        dataType: 'TEXT',
-        normalText: 'No abnormality detected',
-        defaultValue: 'No abnormality detected',
       },
     ],
   };

@@ -61,6 +61,12 @@ function demoTextValue(p: ParameterDef): string {
 
 /** Value for “Simulate ingestion” (numeric jitter where applicable). */
 export function simulateParameterValue(p: ParameterDef): string {
+  if (p.id === 'p_hgt' || p.code === 'HGT') {
+    const lo = p.specMin ?? 70;
+    const hi = p.specMax ?? 140;
+    const value = lo + Math.random() * (hi - lo);
+    return value.toFixed(0);
+  }
   if (p.dataType === 'CALCULATED') {
     return p.defaultValue?.trim() || '';
   }

@@ -1,18 +1,26 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import {
-  X,
-  Printer,
-  QrCode,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+import { X, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
 import { LabTestRequisition } from './NewRequisitionModal';
 import { ExamResultGroup, ExamExaminers, DEFAULT_EXAMINERS } from './ResultEntryModal';
 import { getTemplateForExamination, ExaminationTemplate } from '../../data/testParametersCatalog';
 import { getResultFormForExam, getResultFormById, resolveEntryForm } from '../../data/resultFormsCatalog';
 import { isSendOutExamination } from '../../data/examinationCatalog';
 import { NtpLabRequestForm, NTP_FIELD_KEYS } from '../forms/NtpLabRequestForm';
-import { hasEnteredResult, isResultFormRowExamined } from '../../utils/resultDisplay';
+import { mergeNtpFormDefaults } from '../../utils/ntpFormPrefill';
+import {
+  hasEnteredResult,
+  isResultFormRowExamined,
+  isResultFormSectionApplicable,
+} from '../../utils/resultDisplay';
+import {
+  OfficialResultPatientGrid,
+  buildOfficialResultPatientRows,
+} from '../common/OfficialResultPatientGrid';
+import { OfficialResultSignatureFooter } from '../common/OfficialResultSignatureFooter';
+import { formatSpecimenSampleDisplay } from '../common/OfficialResultSpecimenFields';
+import { OfficialResultVerificationQr } from '../common/OfficialResultVerificationQr';
+import { OfficialResultLetterhead } from '../common/OfficialResultLetterhead';
+import { resultFormShowsVerifyQr } from '../../utils/resultFormVerifyContext';
 
 interface CoAReportModalProps {
   isOpen: boolean;
@@ -67,7 +75,17 @@ const SingleExamFormSheet: React.FC<{
   formTotal: number;
   /** When printing all, add page break after each sheet except last */
   pageBreakAfter?: boolean;
-}> = ({ requisition, sheet, examiners, formIndex, formTotal, pageBreakAfter }) => {
+  /** Screen preview: omit redundant index line when tabs are shown */
+  hideFormIndexHint?: boolean;
+}> = ({
+  requisition,
+  sheet,
+  examiners,
+  formIndex,
+  formTotal,
+  pageBreakAfter,
+  hideFormIndexHint,
+}) => {
   const tmpl = sheet.template;
   const resultGroup = sheet.resultGroup;
   const rf =
@@ -77,181 +95,102 @@ const SingleExamFormSheet: React.FC<{
     String(resultGroup?.parameters?.[paramId]?.value ?? '');
 
   if (rf?.layoutStyle === 'ntp-request') {
-    const ntpValues = Object.fromEntries(
-      NTP_FIELD_KEYS.map((key) => [key, resultGroup?.parameters?.[key]?.value || ''])
+    const ntpValues = mergeNtpFormDefaults(
+      Object.fromEntries(
+        NTP_FIELD_KEYS.map((key) => [key, resultGroup?.parameters?.[key]?.value || ''])
+      ),
+      requisition,
+      null
     );
+    const ntpQr =
+      resultFormShowsVerifyQr(rf) ? (
+        <OfficialResultVerificationQr
+          requisition={requisition}
+          examKey={sheet.examKey}
+          formId={rf?.id || 'RF-10'}
+          formLabel={sheet.formLabel}
+          resultGroup={resultGroup}
+          compact
+          minimal
+        />
+      ) : null;
+
     return (
       <div
         className={`p-8 sm:p-10 text-slate-900 bg-white print:p-0 ${
           pageBreakAfter ? 'print-form-page' : 'print-form-page-last'
         }`}
       >
-        <NtpLabRequestForm values={ntpValues} onChange={() => undefined} readOnly />
+        <NtpLabRequestForm
+          values={ntpValues}
+          onChange={() => undefined}
+          readOnly
+          verificationQr={ntpQr}
+        />
       </div>
     );
   }
 
   return (
     <div
-      className={`p-8 sm:p-10 space-y-5 text-slate-900 bg-white print:p-0 print:space-y-3 ${
+      className={`coa-result-sheet p-4 sm:p-6 text-slate-900 bg-white print:p-0 flex flex-col print:min-h-[100vh] ${
         pageBreakAfter ? 'print-form-page' : 'print-form-page-last'
       }`}
     >
-      {/* Form index badge (screen only) */}
-      <div className="print:hidden text-[10px] font-mono text-slate-500 flex justify-between">
-        <span>
-          Separate result form {formIndex + 1} of {formTotal}
-        </span>
-        <span>{sheet.formLabel}</span>
-      </div>
+      <div className="coa-result-sheet-body space-y-2 print:space-y-1.5 flex-1 min-h-0">
+      {!hideFormIndexHint ? (
+        <div className="print:hidden text-[10px] font-mono text-slate-500 flex justify-between gap-2">
+          <span>
+            Form {formIndex + 1} of {formTotal}
+          </span>
+          <span className="truncate text-right">{sheet.formLabel}</span>
+        </div>
+      ) : null}
 
-      {/* Letterhead */}
-      <div className="border-b-2 border-slate-900 pb-4 print:pb-2">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <img
-              src="/ptsilogo.png"
-              alt="PTSI Official Seal"
-              className="h-20 w-auto print:h-14 object-contain shrink-0"
-              onError={(e) => {
-                (e.target as HTMLElement).style.display = 'none';
-              }}
+      <OfficialResultLetterhead
+        formIndex={formIndex}
+        formTotal={formTotal}
+        verificationQr={
+          resultFormShowsVerifyQr(rf) ? (
+            <OfficialResultVerificationQr
+              requisition={requisition}
+              examKey={sheet.examKey}
+              formId={rf?.id}
+              formLabel={sheet.formLabel}
+              resultGroup={resultGroup}
+              compact
+              minimal
             />
-            <div>
-              <h1 className="text-base sm:text-lg print:text-sm font-black tracking-tight text-slate-900 uppercase font-serif">
-                Philippine Tuberculosis Society, Inc.
-              </h1>
-              <h2 className="text-xs sm:text-sm print:text-[11px] font-bold text-slate-700 uppercase tracking-wide">
-                Clinical Diagnostic Laboratory &amp; Chest Center
-              </h2>
-              <p className="text-[11px] print:text-[9px] text-slate-600">
-                Quezon Institute Compound, E. Rodriguez Sr. Avenue, Quezon City · Tel: (02) 0000 - 0000
-              </p>
-            </div>
-          </div>
+          ) : null
+        }
+      />
 
-          <div className="text-right shrink-0">
-            <div className="inline-block px-3 py-1 bg-slate-900 text-white font-mono font-bold text-xs print:text-[9.5px] rounded uppercase tracking-wider">
-              OFFICIAL RESULT
-            </div>
-            <div className="text-xs print:text-[10px] font-mono font-bold text-slate-800 mt-1">
-              CASE: {requisition.caseNo || requisition.externalRef || 'CASE-2026-AUTO'}
-            </div>
-            <div className="text-[10px] print:text-[8.5px] text-slate-500 font-mono">
-              REF: {requisition.requisitionNumber}
-            </div>
-            <div className="text-[10px] print:text-[8px] text-slate-500 font-mono mt-0.5">
-              Form {formIndex + 1}/{formTotal}
-            </div>
-          </div>
-        </div>
-      </div>
+      <OfficialResultPatientGrid
+        rows={buildOfficialResultPatientRows(requisition, {
+          formNumber: rf?.formNumber,
+          specimenType: tmpl.specimenType,
+        })}
+      />
 
-      {/* Patient demographics — Form 5 compact; otherwise PTSI 3-column grid */}
-      <div className="text-[10px] print:text-[8px] leading-tight">
-        <div className="grid grid-cols-12 gap-x-2 gap-y-0.5">
-          {(rf?.formNumber === 9
-            ? ([
-                ['Lab. No.', requisition.caseNo || requisition.requisitionNumber || '—', 6],
-                [
-                  'Age/Sex',
-                  [
-                    requisition.patientAge != null ? String(requisition.patientAge) : '',
-                    requisition.patientGender || '',
-                  ]
-                    .filter(Boolean)
-                    .join(' / ') || '—',
-                  6,
-                ],
-                ['Name', (requisition.patientOrSubjectName || '—').toUpperCase(), 6],
-                ['Date Submitted', requisition.requestDate || '—', 6],
-                ['Requesting Physician', requisition.orderingPhysicianOrPI || '—', 6],
-                [
-                  'Date Released',
-                  new Date().toISOString().replace('T', ' ').substring(0, 16),
-                  6,
-                ],
-                ['Specimen', tmpl.specimenType || '—', 6],
-                [
-                  'Source',
-                  requisition.organizationOrClient && requisition.organizationOrClient !== 'N/A'
-                    ? requisition.organizationOrClient
-                    : '—',
-                  6,
-                ],
-              ] as [string, string, number][])
-            : rf?.layoutStyle === 'blood-typing' || rf?.layoutStyle === 'pregnancy'
-            ? ([
-                ['Name', (requisition.patientOrSubjectName || '—').toUpperCase(), 6],
-                [
-                  'Age',
-                  requisition.patientAge != null ? String(requisition.patientAge) : '—',
-                  3,
-                ],
-                ['Date', requisition.requestDate || '—', 3],
-                ['Requesting Physician', requisition.orderingPhysicianOrPI || '—', 6],
-                ['Sex', requisition.patientGender || '—', 3],
-                [
-                  'Ward',
-                  requisition.organizationOrClient && requisition.organizationOrClient !== 'N/A'
-                    ? requisition.organizationOrClient
-                    : requisition.patientCategory || '—',
-                  3,
-                ],
-              ] as [string, string, number][])
-            : ([
-                ['Patient Name', (requisition.patientOrSubjectName || '—').toUpperCase(), 4],
-                ['Phone#', '—', 4],
-                [
-                  'OR#',
-                  requisition.orNumber && requisition.orNumber !== 'N/A' ? requisition.orNumber : '—',
-                  4,
-                ],
-                ['Patient ID No', requisition.caseNo || requisition.externalRef || '—', 4],
-                [
-                  'Age',
-                  requisition.patientAge != null ? String(requisition.patientAge) : '—',
-                  4,
-                ],
-                ['Collected', requisition.requestDate || '—', 4],
-                [
-                  'Hospital/Clinic',
-                  requisition.organizationOrClient && requisition.organizationOrClient !== 'N/A'
-                    ? requisition.organizationOrClient
-                    : requisition.patientCategory || '—',
-                  4,
-                ],
-                ['Birthdate', requisition.patientDob || '—', 4],
-                [
-                  'Release date',
-                  new Date().toISOString().replace('T', ' ').substring(0, 16),
-                  4,
-                ],
-                ['Referring MD', requisition.orderingPhysicianOrPI || '—', 4],
-                ['Gender', requisition.patientGender || '—', 4],
-                ['Barcode', requisition.requisitionNumber || '—', 4],
-              ] as [string, string, number][])
-          ).map(([label, value, span]) => (
-            <div
-              key={label}
-              className="flex items-baseline gap-1 min-w-0 py-0.5"
-              style={{ gridColumn: `span ${span} / span ${span}` }}
-            >
-              <span className="text-slate-500 font-semibold shrink-0 whitespace-nowrap">
-                {label}:
-              </span>
-              <span className="font-bold text-slate-900 truncate uppercase">
-                {value}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
+      {(() => {
+        const sampleType = readParam('sampleType');
+        if (!sampleType?.trim()) return null;
+        const sampleLabel = formatSpecimenSampleDisplay(
+          sampleType,
+          readParam('sampleType_other')
+        );
+        return (
+          <p className="text-xs print:text-[10px] text-slate-800 px-0.5 pb-1">
+            <span className="font-semibold uppercase tracking-wide text-slate-600">Sample: </span>
+            <span className="font-medium">{sampleLabel}</span>
+          </p>
+        );
+      })()}
 
       {/* Single examination — PTSI forms: TEST | RESULT only (or blood typing centered) */}
       <div className="space-y-2 print:space-y-1">
         {rf?.layoutStyle !== 'blood-typing' && rf?.layoutStyle !== 'pregnancy' ? (
-          <h3 className="text-center text-sm print:text-xs font-black uppercase text-slate-900 tracking-widest border-b-2 border-slate-800 pb-1">
+          <h3 className="text-center text-sm print:text-xs font-bold uppercase text-slate-900 tracking-wide border-b border-slate-300 pb-1 mt-1">
             {sheet.formLabel.startsWith('RF-')
               ? (rf?.panelTitle || tmpl.examName)
               : tmpl.examName}
@@ -278,12 +217,13 @@ const SingleExamFormSheet: React.FC<{
                   : String(rh)
               : '—';
             return (
-              <div className="py-10 print:py-8 text-center space-y-4">
-                <h3 className="text-xs font-semibold tracking-[0.35em] text-slate-400 uppercase">
+              <div className="py-5 sm:py-7 print:py-8 text-center space-y-2 sm:space-y-3">
+                <h3 className="text-[10px] sm:text-xs font-semibold tracking-[0.35em] text-slate-400 uppercase">
                   {rf.panelTitle || 'HEMATOLOGY'}
                 </h3>
-                <div className="text-2xl print:text-xl font-bold text-slate-900 tracking-wide">
-                  &ldquo; {abo || '—'} &rdquo; RH: {rhDisplay}
+                <div className="text-xl sm:text-2xl print:text-xl font-bold text-slate-900 tracking-wide leading-tight">
+                  &ldquo; {abo || '—'} &rdquo;
+                  {rhDisplay !== '—' ? ` ${rhDisplay}` : ''}
                 </div>
               </div>
             );
@@ -329,6 +269,7 @@ const SingleExamFormSheet: React.FC<{
                   </div>
                 )}
                 {sections.map((section) => {
+                  if (!isResultFormSectionApplicable(section, readParam)) return null;
                   const visibleRows = section.rows.filter((r) =>
                     isResultFormRowExamined(r, readParam)
                   );
@@ -444,6 +385,37 @@ const SingleExamFormSheet: React.FC<{
             );
           }
 
+          const flatAnalytes =
+            rf?.analytes && rf.analytes.length > 0 && !(sections && sections.length > 0);
+
+          if (flatAnalytes && rf?.analytes) {
+            return (
+              <div className="lims-result-form-table overflow-hidden">
+                <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-[11px] print:text-[9px] font-bold uppercase tracking-wide text-slate-700">
+                  <div className="px-3 py-1.5">{rf.testColumnLabel || 'Test'}</div>
+                  <div className="px-3 py-1.5">{rf.resultColumnLabel || 'Result'}</div>
+                </div>
+                {rf.analytes.map((row) => {
+                  const val =
+                    resultGroup?.parameters?.[row.id]?.value ||
+                    (row.id === 'p_koh_res' ? resultGroup?.parameters?.koh?.value : '') ||
+                    '';
+                  if (!hasEnteredResult(val)) return null;
+                  return (
+                    <div key={row.id} className="lims-rf-grid-row grid grid-cols-2">
+                      <div className="px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-800">
+                        {row.label}
+                      </div>
+                      <div className="px-3 py-1.5 print:py-1 text-xs print:text-[9px] font-semibold text-slate-900">
+                        {val || '—'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          }
+
           return (
             <table className="w-full text-left text-xs print:text-[9px] border-collapse">
               <thead>
@@ -454,6 +426,7 @@ const SingleExamFormSheet: React.FC<{
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {tmpl.parameters.map((param) => {
+                  if (param.id === 'sampleType' || param.id === 'sampleType_other') return null;
                   const resItem = resultGroup?.parameters?.[param.id];
                   const val = resItem?.value || '';
                   if (!hasEnteredResult(val)) return null;
@@ -477,103 +450,19 @@ const SingleExamFormSheet: React.FC<{
         })()}
       </div>
 
-      <div className="p-3 print:p-2 bg-slate-50 print:bg-white rounded border border-slate-200 text-[10px] print:text-[8px] text-slate-600 font-mono leading-relaxed">
+      <div className="p-2.5 sm:p-3 print:p-2 bg-slate-50 print:bg-white rounded border border-slate-200 text-[9px] sm:text-[10px] print:text-[8px] text-slate-600 font-mono leading-relaxed">
         <strong>LABORATORY ADVISORY:</strong> This official diagnostic report has been verified under
         ISO 15189 / DOH clinical quality assurance standards. Results correspond directly to the
         submitted specimen. This form covers <strong>{tmpl.examName}</strong> only.
       </div>
+      </div>
 
-      {/* Signatures for THIS examination only */}
-      {rf?.layoutStyle === 'blood-typing' || rf?.layoutStyle === 'pregnancy' ? (
-        <div className="grid grid-cols-3 gap-6 print:gap-4 pt-10 print:pt-8 items-end">
-          {[
-            { name: examiners.rmtName || examiners.labTechName, license: examiners.rmtLicense, role: 'NAME, RMT' },
-            { name: examiners.rmtName, license: examiners.rmtLicense, role: 'NAME, RMT' },
-            { name: examiners.pathologistName, license: examiners.pathologistLicense, role: 'NAME, MD' },
-          ].map((sig, i) => (
-            <div key={i} className="text-center space-y-1">
-              <div className="border-b border-slate-700 min-h-[2rem] flex items-end justify-center pb-1">
-                <span className="font-serif italic text-sm print:text-xs text-slate-900">
-                  {sig.name || ''}
-                </span>
-              </div>
-              <div className="text-[11px] print:text-[9px] font-bold text-slate-800 uppercase tracking-wide">
-                {sig.role}
-              </div>
-              <div className="text-[10px] print:text-[8px] text-slate-600">
-                Lic. No. {sig.license || '____________'}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : rf?.formNumber === 9 ? (
-        <div className="grid grid-cols-3 gap-6 print:gap-4 pt-10 print:pt-8 items-end">
-          {(rf.signatures || []).map((sig) => (
-            <div key={sig.id} className="text-center space-y-1">
-              <div className="border-b border-slate-700 min-h-[2rem] flex items-end justify-center pb-1">
-                <span className="font-serif italic text-sm print:text-xs text-slate-900">
-                  {sig.defaultName || ''}
-                </span>
-              </div>
-              <div className="text-[11px] print:text-[9px] font-bold text-slate-800">
-                {sig.label}
-              </div>
-              <div className="text-[10px] print:text-[8px] text-slate-600">
-                License No. {sig.defaultLicense || '____________'}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 print:gap-3 pt-6 print:pt-3 border-t-2 border-slate-900 items-end">
-          <div className="space-y-1 text-center sm:text-left">
-            <span className="text-[10px] print:text-[8px] text-slate-500 font-mono uppercase block">
-              Laboratory Technician
-            </span>
-            <div className="font-serif italic font-bold text-sm print:text-xs text-slate-900 border-b border-slate-400 pb-1 min-h-[1.5rem]">
-              {examiners.labTechName || '—'}
-            </div>
-          </div>
-
-          <div className="space-y-1 text-center sm:text-left">
-            <span className="text-[10px] print:text-[8px] text-slate-500 font-mono uppercase block">
-              Medical Technologist
-            </span>
-            <div className="font-serif italic font-bold text-sm print:text-xs text-slate-900 border-b border-slate-400 pb-1">
-              {examiners.rmtName}
-            </div>
-            <p className="text-[10px] print:text-[8px] text-slate-500 font-mono">
-              {examiners.rmtLicense}
-            </p>
-          </div>
-
-          <div className="space-y-1 text-center sm:text-left">
-            <span className="text-[10px] print:text-[8px] text-slate-500 font-mono uppercase block">
-              Pathologist
-            </span>
-            <div className="font-serif italic font-bold text-sm print:text-xs text-slate-900 border-b border-slate-400 pb-1">
-              {examiners.pathologistName}
-            </div>
-            <p className="text-[10px] print:text-[8px] text-slate-500 font-mono">
-              {examiners.pathologistLicense || '—'}
-            </p>
-          </div>
-
-          <div className="flex items-center justify-center sm:justify-end gap-2 col-span-2 sm:col-span-1">
-            <div className="w-12 h-12 print:w-10 print:h-10 bg-white p-1 rounded border border-slate-300 flex items-center justify-center shrink-0">
-              <QrCode className="w-10 h-10 print:w-8 print:h-8 text-slate-900" />
-            </div>
-            <div className="text-[9px] print:text-[7.5px] text-slate-500 font-mono text-left">
-              <div className="font-bold text-slate-800">PTSI VERIFIED</div>
-              <div>Digital Cryptographic Seal</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <p className="text-[9px] text-slate-400 text-center font-mono pt-2">
-        - End of Report — {tmpl.examName} -
-      </p>
+      <footer className="coa-result-sheet-footer mt-6 sm:mt-8 print:mt-auto shrink-0 pt-4 print:pt-6 border-t border-slate-200 print:border-slate-300 space-y-2 print:space-y-1.5">
+        <OfficialResultSignatureFooter examiners={examiners} />
+        <p className="text-[9px] text-slate-400 text-center font-mono print:pb-1">
+          - End of Report — {tmpl.examName} -
+        </p>
+      </footer>
     </div>
   );
 };
@@ -669,24 +558,23 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
         className={`bg-white w-full overflow-hidden flex flex-col text-slate-900 font-sans print:border-none print:shadow-none print:max-h-none print:w-full print:rounded-none print-modal-container ${
           embedded
             ? 'h-full min-h-0 border-0 shadow-none rounded-none'
-            : 'rounded-xl shadow-2xl border border-slate-300 max-w-4xl max-h-[95vh]'
+            : 'rounded-xl shadow-2xl border border-slate-300 max-w-3xl max-h-[92vh]'
         }`}
       >
         {/* Toolbar — screen only */}
         {!embedded ? (
-        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 print:hidden">
-          <div className="space-y-1">
+        <div className="px-4 sm:px-5 py-3 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0 print:hidden">
+          <div className="space-y-0.5 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base font-bold text-slate-800">
+              <h2 className="text-sm sm:text-base font-bold text-slate-800">
                 Official Result Forms
               </h2>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono">
-                {formTotal} separate form{formTotal === 1 ? '' : 's'}
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono shrink-0">
+                {formTotal} form{formTotal === 1 ? '' : 's'}
               </span>
             </div>
-            <p className="text-[11px] text-slate-500">
-              Each examination prints as its own form (not combined). Preview one at a time; print
-              outputs all forms on separate pages.
+            <p className="text-[10px] sm:text-[11px] text-slate-500">
+              Preview matches print layout. Use tabs to switch forms; print includes every page.
             </p>
           </div>
 
@@ -750,20 +638,23 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
         )}
 
         {/* Screen preview: one form at a time */}
-        <div className="overflow-y-auto flex-1 print:hidden">
+        <div className="overflow-y-auto flex-1 min-h-0 print:hidden bg-slate-200/60 p-3 sm:p-4">
           {formTotal === 0 && (
-            <p className="p-8 text-sm text-slate-600">
+            <p className="p-8 text-sm text-slate-600 bg-white rounded-lg border border-slate-200 max-w-lg mx-auto">
               Every examination on this request is send-out. There is no in-house result form to print.
             </p>
           )}
           {activeSheet && (
-            <SingleExamFormSheet
-              requisition={requisition}
-              sheet={activeSheet}
-              examiners={resolveExaminers(activeSheet.resultGroup, medTechInfo)}
-              formIndex={activeIndex}
-              formTotal={formTotal}
-            />
+            <div className="max-w-[720px] mx-auto bg-white shadow-md ring-1 ring-slate-300/80 rounded-sm overflow-hidden">
+              <SingleExamFormSheet
+                requisition={requisition}
+                sheet={activeSheet}
+                examiners={resolveExaminers(activeSheet.resultGroup, medTechInfo)}
+                formIndex={activeIndex}
+                formTotal={formTotal}
+                hideFormIndexHint={formTotal > 1}
+              />
+            </div>
           )}
         </div>
 

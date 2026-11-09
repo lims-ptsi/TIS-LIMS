@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { 
   ChevronDown, 
   ChevronRight, 
@@ -38,14 +38,22 @@ import { getTemplateForExamination, ExaminationTemplate, ParameterDef } from '..
 import { getResultFormForExam, resolveEntryForm, type ResultFormAnalyteRow } from '../../data/resultFormsCatalog';
 import { findCatalogExamination, isSendOutExamination } from '../../data/examinationCatalog';
 import { NtpLabRequestForm, NTP_FIELD_KEYS } from '../forms/NtpLabRequestForm';
+import { applyNtpFormDefaultsToParamMap, mergeNtpFormDefaults } from '../../utils/ntpFormPrefill';
 import { determineResultFlag } from '../../utils/qcCalculations';
 import { baselineParameterValue, simulateParameterValue } from '../../utils/resultSimulate';
 import {
   hasEnteredResult,
   isResultFormRowExamined,
+  isResultFormSectionApplicable,
+  isTbCulturePositive,
+  TB_DST_PARAM_IDS,
   resultFormRowAppliesToExamCodes,
+  resultFormRowAppliesToPanel,
+  isRf09CultureEntryRow,
 } from '../../utils/resultDisplay';
 import { Barcode } from '../common/Barcode';
+import { ExaminerSignoffFields } from '../common/ExaminerSignoffFields';
+import { OfficialResultSpecimenFields } from '../common/OfficialResultSpecimenFields';
 import { formatResultsPickupWhen, isResultsPickedUp } from '../../utils/resultsPickup';
 import { DocumentSideDrawer } from '../modals/DocumentSideDrawer';
 
@@ -215,24 +223,24 @@ export interface SpecimenContainerItem {
 export function getExamContainerInfo(examName: string) {
   const clean = (examName || '').toUpperCase();
   if (clean.includes('CBC') || clean.includes('HEMATOLOGY') || clean.includes('PLATELET') || clean.includes('BLOOD TYPING') || clean.includes('ESR')) {
-    return { container: 'Lavender Top (K2-EDTA)', matrix: 'Whole Blood (EDTA)', abbr: 'CBC', temp: '+4°C', color: 'bg-purple-50 text-purple-800 border-purple-300' };
+    return { container: 'Lavender Top (K2-EDTA)', matrix: 'Whole Blood (EDTA)', abbr: 'CBC', temp: '+4Â°C', color: 'bg-purple-50 text-purple-800 border-purple-300' };
   }
   if (clean.includes('URIN') || clean.includes('PREGNANCY') || clean.includes('HCG')) {
-    return { container: 'Sterile Urine Cup', matrix: 'Clean Catch Urine', abbr: clean.includes('HCG') ? 'HCG' : 'URINE', temp: '+4°C', color: 'bg-amber-50 text-amber-800 border-amber-300' };
+    return { container: 'Sterile Urine Cup', matrix: 'Clean Catch Urine', abbr: clean.includes('HCG') ? 'HCG' : 'URINE', temp: '+4Â°C', color: 'bg-amber-50 text-amber-800 border-amber-300' };
   }
   if (clean.includes('FECA') || clean.includes('STOOL') || clean.includes('FOBT') || clean.includes('OCCULT')) {
-    return { container: 'Clean Stool Container', matrix: 'Fecal Specimen', abbr: 'STOOL', temp: '+4°C', color: 'bg-yellow-50 text-yellow-800 border-yellow-300' };
+    return { container: 'Clean Stool Container', matrix: 'Fecal Specimen', abbr: 'STOOL', temp: '+4Â°C', color: 'bg-yellow-50 text-yellow-800 border-yellow-300' };
   }
   if (clean.includes('SPUTUM') || clean.includes('DSSM') || clean.includes('AFB') || clean.includes('TB')) {
-    return { container: 'Sputum Specimen Jar', matrix: 'Early Morning Sputum', abbr: 'AFB', temp: '+4°C', color: 'bg-emerald-50 text-emerald-800 border-emerald-300' };
+    return { container: 'Sputum Specimen Jar', matrix: 'Early Morning Sputum', abbr: 'AFB', temp: '+4Â°C', color: 'bg-emerald-50 text-emerald-800 border-emerald-300' };
   }
   if (clean.includes('PTT') || clean.includes('PROTHROMBIN') || clean.includes('COAGULATION') || clean.includes('CITRATE')) {
-    return { container: 'Light Blue Top (3.2% Citrate)', matrix: 'Citrated Plasma', abbr: 'COAG', temp: '+4°C', color: 'bg-sky-50 text-sky-800 border-sky-300' };
+    return { container: 'Light Blue Top (3.2% Citrate)', matrix: 'Citrated Plasma', abbr: 'COAG', temp: '+4Â°C', color: 'bg-sky-50 text-sky-800 border-sky-300' };
   }
   if (clean.includes('CHEM') || clean.includes('GLUCOSE') || clean.includes('FBS') || clean.includes('LIPID') || clean.includes('CHOLESTEROL') || clean.includes('LIVER') || clean.includes('SGPT') || clean.includes('SGOT') || clean.includes('BUN') || clean.includes('CREAT') || clean.includes('URIC') || clean.includes('CMP')) {
-    return { container: 'Gold / Red SST Gel Tube', matrix: 'Separated Serum', abbr: getExamAbbreviation(examName), temp: '+4°C', color: 'bg-rose-50 text-rose-800 border-rose-300' };
+    return { container: 'Gold / Red SST Gel Tube', matrix: 'Separated Serum', abbr: getExamAbbreviation(examName), temp: '+4Â°C', color: 'bg-rose-50 text-rose-800 border-rose-300' };
   }
-  return { container: 'Primary Specimen Container', matrix: 'Biological Specimen', abbr: getExamAbbreviation(examName), temp: '+4°C', color: 'bg-slate-50 text-slate-800 border-slate-300' };
+  return { container: 'Primary Specimen Container', matrix: 'Biological Specimen', abbr: getExamAbbreviation(examName), temp: '+4Â°C', color: 'bg-slate-50 text-slate-800 border-slate-300' };
 }
 
 export function getSpecimenContainersForRequisition(exams: string[], sampleBarcode: string): SpecimenContainerItem[] {
@@ -249,7 +257,7 @@ export function getSpecimenContainersForRequisition(exams: string[], sampleBarco
       exams: ['CBC WITH PLATELET COUNT'],
       examAbbrs: ['CBC'],
       primaryAbbr: 'CBC',
-      temp: '+4°C',
+      temp: '+4Â°C',
       capColor: '#8b5cf6',
       dotBg: 'bg-purple-600',
       badgeColor: 'bg-purple-50 text-purple-800 border-purple-300',
@@ -399,7 +407,7 @@ export function getSpecimenContainersForRequisition(exams: string[], sampleBarco
       exams: hematologyExams,
       examAbbrs: hematologyExams.map(getExamAbbreviation),
       primaryAbbr: 'CBC',
-      temp: '+4°C',
+      temp: '+4Â°C',
       capColor: '#8b5cf6',
       dotBg: 'bg-purple-600',
       badgeColor: 'bg-purple-50 text-purple-800 border-purple-300',
@@ -420,7 +428,7 @@ export function getSpecimenContainersForRequisition(exams: string[], sampleBarco
       exams: chemistryExams,
       examAbbrs: abbrs,
       primaryAbbr: abbrs.length === 1 ? abbrs[0] : 'CHEM',
-      temp: '+4°C',
+      temp: '+4Â°C',
       capColor: '#ef4444',
       dotBg: 'bg-rose-600',
       badgeColor: 'bg-rose-50 text-rose-800 border-rose-300',
@@ -440,7 +448,7 @@ export function getSpecimenContainersForRequisition(exams: string[], sampleBarco
       exams: coagExams,
       examAbbrs: coagExams.map(getExamAbbreviation),
       primaryAbbr: 'COAG',
-      temp: '+4°C',
+      temp: '+4Â°C',
       capColor: '#0ea5e9',
       dotBg: 'bg-sky-600',
       badgeColor: 'bg-sky-50 text-sky-800 border-sky-300',
@@ -460,7 +468,7 @@ export function getSpecimenContainersForRequisition(exams: string[], sampleBarco
       exams: urinalysisExams,
       examAbbrs: urinalysisExams.map(getExamAbbreviation),
       primaryAbbr: 'URINE',
-      temp: '+4°C',
+      temp: '+4Â°C',
       capColor: '#f59e0b',
       dotBg: 'bg-amber-600',
       badgeColor: 'bg-amber-50 text-amber-800 border-amber-300',
@@ -480,7 +488,7 @@ export function getSpecimenContainersForRequisition(exams: string[], sampleBarco
       exams: fecalysisExams,
       examAbbrs: fecalysisExams.map(getExamAbbreviation),
       primaryAbbr: 'STOOL',
-      temp: '+4°C',
+      temp: '+4Â°C',
       capColor: '#84cc16',
       dotBg: 'bg-lime-700',
       badgeColor: 'bg-lime-50 text-lime-800 border-lime-300',
@@ -500,7 +508,7 @@ export function getSpecimenContainersForRequisition(exams: string[], sampleBarco
       exams: sputumExams,
       examAbbrs: sputumExams.map(getExamAbbreviation),
       primaryAbbr: 'DSSM',
-      temp: '+4°C',
+      temp: '+4Â°C',
       capColor: '#10b981',
       dotBg: 'bg-emerald-600',
       badgeColor: 'bg-emerald-50 text-emerald-800 border-emerald-300',
@@ -520,7 +528,7 @@ export function getSpecimenContainersForRequisition(exams: string[], sampleBarco
       exams: microExams,
       examAbbrs: microExams.map(getExamAbbreviation),
       primaryAbbr: 'MICRO',
-      temp: '+4°C',
+      temp: '+4Â°C',
       capColor: '#14b8a6',
       dotBg: 'bg-teal-600',
       badgeColor: 'bg-teal-50 text-teal-800 border-teal-300',
@@ -542,7 +550,7 @@ export function getSpecimenContainersForRequisition(exams: string[], sampleBarco
         exams: [exam],
         examAbbrs: [abbr],
         primaryAbbr: abbr,
-        temp: '+4°C',
+        temp: '+4Â°C',
         capColor: '#64748b',
         dotBg: 'bg-slate-600',
         badgeColor: 'bg-slate-50 text-slate-800 border-slate-300',
@@ -562,7 +570,7 @@ export function getSpecimenContainersForRequisition(exams: string[], sampleBarco
     exams: ['CBC WITH PLATELET COUNT'],
     examAbbrs: ['CBC'],
     primaryAbbr: 'CBC',
-    temp: '+4°C',
+    temp: '+4Â°C',
     capColor: '#8b5cf6',
     dotBg: 'bg-purple-600',
     badgeColor: 'bg-purple-50 text-purple-800 border-purple-300',
@@ -637,7 +645,6 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
   const [orderExpanded, setOrderExpanded] = useState(true);
   const [aliquotsExpanded, setAliquotsExpanded] = useState(true);
 
-  const [generalRemarks, setGeneralRemarks] = useState('Results verified and cross-referenced with daily internal QC run.');
   const [saveToast, setSaveToast] = useState<string | null>(null);
   // Must be declared before any conditional return (rules-of-hooks)
   const [localExamResults, setLocalExamResults] = useState<Record<string, ExamResultGroup>>({});
@@ -689,8 +696,6 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
     if (!hasStored && hydratedFor.current === token) return;
     hydratedFor.current = hasStored ? `${token}:stored` : token;
 
-    if (storedMedTech?.remarks) setGeneralRemarks(storedMedTech.remarks);
-
     if (hasStored && storedResults) {
       const withExaminers: Record<string, ExamResultGroup> = {};
       Object.entries(storedResults).forEach(([key, group]) => {
@@ -709,6 +714,20 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
             isCalculated: p.dataType === 'CALCULATED',
           };
         });
+        const storedEntryForm = resolveEntryForm(group.examName || key, key, requisition?.patientGender);
+        if (storedEntryForm?.layoutStyle === 'ntp-request') {
+          applyNtpFormDefaultsToParamMap(mergedParams, requisition, sample, (paramKey, val) => {
+            mergedParams[paramKey] = {
+              paramId: paramKey,
+              paramCode: paramKey.toUpperCase(),
+              paramName: paramKey,
+              unit: '',
+              value: val,
+              flag: 'NORMAL',
+              isCalculated: false,
+            };
+          });
+        }
         withExaminers[key] = {
           ...group,
           parameters: mergedParams,
@@ -745,6 +764,20 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
             isCalculated: p.dataType === 'CALCULATED',
           };
         });
+        const entryForm = resolveEntryForm(examName, examKey, requisition?.patientGender);
+        if (entryForm?.layoutStyle === 'ntp-request') {
+          applyNtpFormDefaultsToParamMap(paramMap, requisition, sample, (key, val) => {
+            paramMap[key] = {
+              paramId: key,
+              paramCode: key.toUpperCase(),
+              paramName: key,
+              unit: '',
+              value: val,
+              flag: 'NORMAL',
+              isCalculated: false,
+            };
+          });
+        }
         withExaminers[examKey] = {
           examCode: examKey,
           examName: template.examName || examName,
@@ -780,7 +813,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
       const paramMap: Record<string, ResultParamValue> = {};
       const paramsList = Array.isArray(template.parameters) ? template.parameters : [];
 
-      paramsList.forEach((p) => {
+        paramsList.forEach((p) => {
         if (!p) return;
         const val = p.defaultValue || '';
         const flag = calculateFlag(p, val);
@@ -794,6 +827,20 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
           isCalculated: p.dataType === 'CALCULATED',
         };
       });
+      const entryForm = resolveEntryForm(examName, examKey, requisition?.patientGender);
+      if (entryForm?.layoutStyle === 'ntp-request') {
+        applyNtpFormDefaultsToParamMap(paramMap, requisition, sample, (key, val) => {
+          paramMap[key] = {
+            paramId: key,
+            paramCode: key.toUpperCase(),
+            paramName: key,
+            unit: '',
+            value: val,
+            flag: 'NORMAL',
+            isCalculated: false,
+          };
+        });
+      }
       const storedGroup = storedResults?.[examKey];
       initialGroups[examKey] = {
         examCode: template.examCode || `EXAM-${idx}`,
@@ -802,7 +849,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
         methodology: template.methodology || 'Standard Clinical Assay',
         specimenType: template.specimenType || 'Biological Specimen',
         parameters: storedGroup?.parameters || paramMap,
-        remarks: storedGroup?.remarks || 'Direct on-page analytical verification.',
+        remarks: storedGroup?.remarks || '',
         examiners:
           storedGroup?.examiners ||
           DEFAULT_EXAMINERS(currentUserName || 'Dr. Katherine Zhang, MD, FPSP'),
@@ -828,7 +875,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
       rmtLicense: summaryEx.rmtLicense,
       pathologistName: summaryEx.pathologistName,
       pathologistLicense: summaryEx.pathologistLicense,
-      remarks: generalRemarks,
+      remarks: '',
     };
     const timer = window.setTimeout(() => {
       onSaveRef.current?.(effectiveReqId, localExamResults, false, payload, { silent: true });
@@ -839,7 +886,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
         onSaveRef.current?.(effectiveReqId, localExamResults, false, payload, { silent: true });
       }
     };
-  }, [localExamResults, generalRemarks, sample, requisition, currentUserName]);
+  }, [localExamResults, sample, requisition, currentUserName]);
 
   if (!sample) {
     return (
@@ -889,7 +936,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
           <div className="space-y-2 max-w-xl mx-auto">
             <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              Stage 2 · Pending Laboratory Receiving
+              Stage 2 Â· Pending Laboratory Receiving
             </span>
             <h2 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">
               Specimen not yet received by laboratory
@@ -1001,7 +1048,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
     return isInHouseResultExam(examName, code);
   });
 
-  /** One panel per assigned result form. Exams that share a form (e.g. CBC + CBC Microtainer → RF-06) are entered once. */
+  /** One panel per assigned result form. Exams that share a form (e.g. CBC + CBC Microtainer â†’ RF-06) are entered once. */
   const resultPanels = (() => {
     type Member = { examName: string; examCode: string; template: ExaminationTemplate };
     type Panel = {
@@ -1084,7 +1131,24 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
 
       const template = getTemplateForExamination(group.examName || examKey);
       const paramsList = Array.isArray(template?.parameters) ? template.parameters : [];
-      const paramDef = paramsList.find((p) => p.id === paramId);
+      const entryForm = resolveEntryForm(
+        group.examName || examKey,
+        examKey,
+        requisition?.patientGender
+      );
+      const specimenField =
+        entryForm?.specimenFields?.find((f) => f.id === paramId) ||
+        entryForm?.specimenFields?.find((f) => `${f.id}_other` === paramId);
+      const paramDef =
+        paramsList.find((p) => p.id === paramId) ||
+        (specimenField
+          ? {
+              id: paramId,
+              code: paramId.toUpperCase(),
+              name: specimenField.label,
+              dataType: 'TEXT' as const,
+            }
+          : undefined);
 
       const updatedParams = { ...group.parameters };
       const existing = updatedParams[paramId];
@@ -1241,7 +1305,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
     });
   };
 
-  // Save Direct On-Page Handler — request summary uses first exam with a pathologist name
+  // Save Direct On-Page Handler â€” request summary uses first exam with a pathologist name
   const handleDirectSave = (isFinalize: boolean) => {
     const effectiveReqId = requisition?.id || sample.id;
     const groups = Object.values(localExamResults);
@@ -1257,14 +1321,14 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
         rmtLicense: summaryEx.rmtLicense,
         pathologistName: summaryEx.pathologistName,
         pathologistLicense: summaryEx.pathologistLicense,
-        remarks: generalRemarks,
+        remarks: '',
       });
     }
 
     setSaveToast(
       isFinalize
-        ? '✓ Results officially completed & validated on this page!'
-        : '✓ Saved draft results in-testing on this page.'
+        ? 'âœ“ Results officially completed & validated on this page!'
+        : 'âœ“ Saved draft results in-testing on this page.'
     );
     setTimeout(() => setSaveToast(null), 4000);
   };
@@ -1318,7 +1382,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border bg-slate-100 text-slate-700 border-slate-200"
                       title={
                         requisition.resultsPickedUpBy
-                          ? `Picked up by ${requisition.resultsPickedUpBy}${formatResultsPickupWhen(requisition.resultsPickedUpAt) ? ` · ${formatResultsPickupWhen(requisition.resultsPickedUpAt)}` : ''}`
+                          ? `Picked up by ${requisition.resultsPickedUpBy}${formatResultsPickupWhen(requisition.resultsPickedUpAt) ? ` Â· ${formatResultsPickupWhen(requisition.resultsPickedUpAt)}` : ''}`
                           : formatResultsPickupWhen(requisition.resultsPickedUpAt) || 'Picked up'
                       }
                     >
@@ -1535,16 +1599,16 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                 <DetailField label="Requisition number" value={reqNumber} />
                 <DetailField
                   label="Age and gender"
-                  value={`${requisition?.patientAge || 35} yrs · ${requisition?.patientGender || 'Male'}`}
+                  value={`${requisition?.patientAge || 35} yrs Â· ${requisition?.patientGender || 'Male'}`}
                 />
                 <DetailField label="Civil status" value={requisition?.civilStatus || 'Single'} />
                 <DetailField
                   label="Mobile (SMS)"
-                  value={requisition?.patientPhone?.trim() || '—'}
+                  value={requisition?.patientPhone?.trim() || 'â€”'}
                 />
                 <DetailField
                   label="Email"
-                  value={requisition?.patientEmail?.trim() || '—'}
+                  value={requisition?.patientEmail?.trim() || 'â€”'}
                 />
                 <DetailField label="Sample barcode" value={sample.barcode} emphasize="accent" />
                 <DetailField label="Specimen type" value={sample.sampleType} />
@@ -1734,8 +1798,8 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                 }`}
                 title={
                   examinedResultsOnly
-                    ? 'Showing tests with results only — click to show all parameters'
-                    : 'Showing all parameters — click to show examined tests only'
+                    ? 'Showing tests with results only â€” click to show all parameters'
+                    : 'Showing all parameters â€” click to show examined tests only'
                 }
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1809,6 +1873,13 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                 panel.members.forEach((m) =>
                   handleInlineParamChange(m.examCode, paramId, value)
                 );
+                if (paramId === 'p_tb_culture' && !isTbCulturePositive(value)) {
+                  TB_DST_PARAM_IDS.forEach((dstId) => {
+                    panel.members.forEach((m) =>
+                      handleInlineParamChange(m.examCode, dstId, '')
+                    );
+                  });
+                }
               };
               const readParam = (paramId: string) => {
                 for (const m of panel.members) {
@@ -1831,20 +1902,22 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                 !isPregnancy;
               const panelExamCodes = panel.members.map((m) => m.examCode);
               const filterFormRow = (row: ResultFormAnalyteRow) => {
-                if (!resultFormRowAppliesToExamCodes(row, panelExamCodes)) return false;
+                if (!resultFormRowAppliesToPanel(row, panelExamCodes, resultForm?.id)) return false;
+                if (isRf09CultureEntryRow(resultForm?.id, row)) return true;
                 if (!examinedResultsOnly) return true;
                 return isResultFormRowExamined(row, readParam);
               };
 
               const renderResultInput = (param: ParameterDef, currentValue: string) => {
                 if (param.dataType === 'SELECT' && param.options) {
+                  const selectValue =
+                    currentValue || param.defaultValue || param.options[0] || '';
                   return (
                     <select
-                      value={currentValue}
+                      value={selectValue}
                       onChange={(e) => writeParam(param.id, e.target.value)}
                       className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
                     >
-                      <option value="">—</option>
                       {param.options.map((opt) => (
                         <option key={opt} value={opt}>{opt}</option>
                       ))}
@@ -1886,7 +1959,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                       ) : null}
                       {panel.members.length > 1 ? (
                         <span className="text-[10px] text-slate-500 truncate">
-                          {panel.members.map((m) => m.examName).join(' · ')}
+                          {panel.members.map((m) => m.examName).join(' Â· ')}
                         </span>
                       ) : null}
                     </div>
@@ -1895,7 +1968,13 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                   {isNtpRequest ? (
                     <div className="p-4 bg-white">
                       <NtpLabRequestForm
-                        values={Object.fromEntries(NTP_FIELD_KEYS.map((key) => [key, readParam(key)]))}
+                        layout="workflow"
+                        assignedExaminations={panel.members.map((m) => m.examName)}
+                        values={mergeNtpFormDefaults(
+                          Object.fromEntries(NTP_FIELD_KEYS.map((key) => [key, readParam(key)])),
+                          requisition,
+                          sample
+                        )}
                         onChange={writeParam}
                       />
                     </div>
@@ -1912,18 +1991,19 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                           const isRh = param.id === 'bt_rh' || param.code === 'RH';
                           return (
                             <React.Fragment key={param.id}>
-                              {isRh ? (
-                                <span className="font-bold tracking-wider">RH:</span>
-                              ) : null}
                               <select
-                                value={currentValue}
+                                value={
+                                  currentValue ||
+                                  param.defaultValue ||
+                                  param.options?.[0] ||
+                                  ''
+                                }
                                 onChange={(e) => writeParam(param.id, e.target.value)}
                                 className={`border-0 border-b-2 border-slate-700 bg-transparent px-2 py-1 text-center font-bold text-slate-900 focus:outline-none focus:border-[#0176d3] ${
                                   isRh ? 'min-w-[11rem] text-lg' : 'min-w-[4.5rem] text-xl'
                                 }`}
                                 aria-label={param.name}
                               >
-                                <option value="">—</option>
                                 {(param.options || []).map((opt) => (
                                   <option key={opt} value={opt}>
                                     {opt}
@@ -1948,12 +2028,16 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                           return (
                             <select
                               key={param.id}
-                              value={currentValue}
+                              value={
+                                currentValue ||
+                                param.defaultValue ||
+                                param.options?.[0] ||
+                                'NEGATIVE'
+                              }
                               onChange={(e) => writeParam(param.id, e.target.value)}
                               className="min-w-[12rem] border-0 border-b-2 border-slate-700 bg-transparent px-3 py-1 text-center text-xl font-bold tracking-wide text-slate-900 focus:outline-none focus:border-[#0176d3]"
                               aria-label="Pregnancy test result"
                             >
-                              <option value="">—</option>
                               {(param.options || ['POSITIVE', 'NEGATIVE']).map((opt) => (
                                 <option key={opt} value={opt}>
                                   {opt}
@@ -1965,12 +2049,14 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                       </div>
                     </div>
                   ) : useSimpleTestResult && resultForm?.resultSections ? (
-                    /* PTSI Form 3/4: TEST|RESULT · Form 6: TEST|RESULT|UNIT|REF */
+                    /* PTSI Form 3/4: TEST|RESULT Â· Form 6: TEST|RESULT|UNIT|REF */
                     (() => {
-                      const visibleSectionRows = resultForm.resultSections.map((section) => ({
-                        section,
-                        rows: section.rows.filter(filterFormRow),
-                      }));
+                      const visibleSectionRows = resultForm.resultSections
+                        .filter((section) => isResultFormSectionApplicable(section, readParam))
+                        .map((section) => ({
+                          section,
+                          rows: section.rows.filter(filterFormRow),
+                        }));
                       const anyVisible = visibleSectionRows.some((s) => s.rows.length > 0);
                       if (examinedResultsOnly && !anyVisible) {
                         return (
@@ -2047,10 +2133,10 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                                     {renderResultInput(param, currentValue)}
                                   </div>
                                   <div className="col-span-2 px-4 py-2.5 text-sm tabular-nums text-slate-800">
-                                    {row.unit || param.unit || '—'}
+                                    {row.unit || param.unit || 'â€”'}
                                   </div>
                                   <div className="col-span-3 px-4 py-2.5 text-sm tabular-nums text-slate-800">
-                                    {row.refRange || param.normalText || '—'}
+                                    {row.refRange || param.normalText || 'â€”'}
                                   </div>
                                 </div>
                               );
@@ -2073,7 +2159,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                                 <div className="px-4 py-2.5 text-sm text-slate-800">
                                   {row.examOptions ? (
                                     <select
-                                      value={methodValue}
+                                      value={methodValue || row.examOptions[0] || ''}
                                       onChange={(e) => {
                                         const next = e.target.value;
                                         writeParam(methodKey, next);
@@ -2085,7 +2171,6 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                                       className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
                                       aria-label="Culture method"
                                     >
-                                      <option value="">—</option>
                                       {row.examOptions.map((opt) => (
                                         <option key={opt} value={opt}>
                                           {opt}
@@ -2130,7 +2215,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                                 param.normalText ||
                                 (param.specMin !== undefined && param.specMax !== undefined
                                   ? `${param.specMin} - ${param.specMax}`
-                                  : '—');
+                                  : 'â€”');
                               if (fourCol) {
                                 return (
                                   <div
@@ -2144,7 +2229,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                                       {renderResultInput(param, currentValue)}
                                     </div>
                                     <div className="col-span-2 px-4 py-2.5 text-sm tabular-nums text-slate-800">
-                                      {param.unit || '—'}
+                                      {param.unit || 'â€”'}
                                     </div>
                                     <div className="col-span-3 px-4 py-2.5 text-sm tabular-nums text-slate-800">
                                       {refText}
@@ -2173,11 +2258,34 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                       );
                     })()
                   ) : useFlatAnalytes && resultForm?.analytes ? (
+                    <>
+                    {resultForm.specimenFields && resultForm.specimenFields.length > 0 ? (
+                      <OfficialResultSpecimenFields
+                        fields={resultForm.specimenFields}
+                        readValue={readParam}
+                        writeValue={writeParam}
+                      />
+                    ) : null}
                     <div className="lims-result-form-table">
-                      <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-xs font-semibold text-slate-600">
-                        <div className="px-4 py-2">Test</div>
-                        <div className="px-4 py-2">Result</div>
-                      </div>
+                      {resultForm.tableColumns === 'test-result-unit-ref' ? (
+                        <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-xs font-semibold text-slate-600">
+                          <div className="col-span-4 px-4 py-2">Test</div>
+                          <div className="col-span-3 px-4 py-2">Result</div>
+                          <div className="col-span-2 px-4 py-2">Unit</div>
+                          <div className="col-span-3 px-4 py-2">Ref. Range</div>
+                        </div>
+                      ) : resultForm.tableColumns === 'test-result-unit' ? (
+                        <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-xs font-semibold text-slate-600">
+                          <div className="col-span-5 px-4 py-2">Test</div>
+                          <div className="col-span-4 px-4 py-2">Result</div>
+                          <div className="col-span-3 px-4 py-2">Unit</div>
+                        </div>
+                      ) : (
+                        <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-xs font-semibold text-slate-600">
+                          <div className="px-4 py-2">Test</div>
+                          <div className="px-4 py-2">Result</div>
+                        </div>
+                      )}
                       {resultForm.analytes.map((row) => {
                         const param =
                           paramsList.find((p) => p.id === row.id) ||
@@ -2185,6 +2293,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                             id: row.id,
                             code: row.id.toUpperCase(),
                             name: row.label,
+                            unit: row.unit,
                             dataType: (row.resultType === 'select'
                               ? 'SELECT'
                               : row.resultType === 'numeric'
@@ -2192,9 +2301,58 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                                 : 'TEXT') as ParameterDef['dataType'],
                             options: row.options,
                           } as ParameterDef);
-                        const resItem = ({ value: readParam(param.id) });
-                        const currentValue = resItem?.value ?? '';
+                        const legacyHgt =
+                          row.id === 'p_hgt' ? readParam('hgt') : '';
+                        const legacyKoh =
+                          row.id === 'p_koh_res' ? readParam('koh') : '';
+                        const currentValue =
+                          readParam(param.id) || legacyHgt || legacyKoh || '';
                         if (examinedResultsOnly && !hasEnteredResult(currentValue)) return null;
+                        const refText =
+                          row.refRange ||
+                          param.normalText ||
+                          (param.specMin !== undefined && param.specMax !== undefined
+                            ? `${param.specMin} - ${param.specMax}`
+                            : 'â€”');
+                        if (resultForm.tableColumns === 'test-result-unit-ref') {
+                          return (
+                            <div
+                              key={row.id}
+                              className="lims-rf-grid-row grid grid-cols-12 hover:bg-slate-50/50"
+                            >
+                              <div className="col-span-4 px-4 py-2.5 text-sm text-slate-800">
+                                {row.label}
+                              </div>
+                              <div className="col-span-3 px-3 py-1.5">
+                                {renderResultInput(param, currentValue)}
+                              </div>
+                              <div className="col-span-2 px-4 py-2.5 text-sm tabular-nums text-slate-800">
+                                {row.unit || param.unit || 'â€”'}
+                              </div>
+                              <div className="col-span-3 px-4 py-2.5 text-sm tabular-nums text-slate-800">
+                                {refText}
+                              </div>
+                            </div>
+                          );
+                        }
+                        if (resultForm.tableColumns === 'test-result-unit') {
+                          return (
+                            <div
+                              key={row.id}
+                              className="lims-rf-grid-row grid grid-cols-12 hover:bg-slate-50/50"
+                            >
+                              <div className="col-span-5 px-4 py-2.5 text-sm text-slate-800">
+                                {row.label}
+                              </div>
+                              <div className="col-span-4 px-3 py-1.5">
+                                {renderResultInput(param, currentValue)}
+                              </div>
+                              <div className="col-span-3 px-4 py-2.5 text-sm tabular-nums text-slate-800">
+                                {row.unit || param.unit || 'â€”'}
+                              </div>
+                            </div>
+                          );
+                        }
                         return (
                           <div
                             key={row.id}
@@ -2210,6 +2368,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                         );
                       })}
                     </div>
+                    </>
                   ) : (
                   /* Same TEST | RESULT | UNIT | REF. RANGE layout as the assigned result forms */
                   <div className="lims-result-form-table">
@@ -2227,7 +2386,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                         param.normalText ||
                         (param.specMin !== undefined && param.specMax !== undefined
                           ? `${param.specMin} - ${param.specMax}`
-                          : '—');
+                          : 'â€”');
                       return (
                         <div
                           key={param.id}
@@ -2240,7 +2399,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                             {renderResultInput(param, currentValue)}
                           </div>
                           <div className="col-span-2 px-4 py-2.5 text-sm tabular-nums text-slate-800">
-                            {param.unit || '—'}
+                            {param.unit || 'â€”'}
                           </div>
                           <div className="col-span-3 px-4 py-2.5 text-sm tabular-nums text-slate-800">
                             {refText}
@@ -2290,76 +2449,11 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                             </button>
                           )}
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                          <div>
-                            <label className="block text-[10px] font-semibold text-slate-600 mb-1">
-                              Laboratory Technician
-                            </label>
-                            <input
-                              type="text"
-                              value={ex.labTechName || ''}
-                              onChange={(e) =>
-                                patchExaminers( { labTechName: e.target.value })
-                              }
-                              placeholder="Full name"
-                              className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold text-slate-900 shadow-2xs"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-semibold text-slate-600 mb-1">
-                              Medical Technologist *
-                            </label>
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                value={ex.rmtName}
-                                onChange={(e) =>
-                                  patchExaminers( { rmtName: e.target.value })
-                                }
-                                placeholder="Full Name, RMT"
-                                className="flex-1 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold text-slate-900 shadow-2xs"
-                              />
-                              <input
-                                type="text"
-                                value={ex.rmtLicense}
-                                onChange={(e) =>
-                                  patchExaminers( { rmtLicense: e.target.value })
-                                }
-                                placeholder="License No."
-                                className="w-24 px-2.5 py-1.5 bg-white border border-slate-300 rounded-md tabular-nums text-slate-800 text-sm"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-semibold text-slate-600 mb-1">
-                              Pathologist * (Name, License No.)
-                            </label>
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                value={ex.pathologistName}
-                                onChange={(e) =>
-                                  patchExaminers( {
-                                    pathologistName: e.target.value,
-                                  })
-                                }
-                                placeholder="Pathologist Name, MD, FPSP"
-                                className="flex-1 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-semibold text-slate-900 shadow-2xs"
-                              />
-                              <input
-                                type="text"
-                                value={ex.pathologistLicense || ''}
-                                onChange={(e) =>
-                                  patchExaminers( {
-                                    pathologistLicense: e.target.value,
-                                  })
-                                }
-                                placeholder="License No."
-                                className="w-24 px-2.5 py-1.5 bg-white border border-slate-300 rounded-md tabular-nums text-slate-800 text-sm"
-                              />
-                            </div>
-                          </div>
-                        </div>
+                        <ExaminerSignoffFields
+                          examiners={ex}
+                          onChange={patchExaminers}
+                          compact
+                        />
                       </div>
                     );
                   })()}
@@ -2370,24 +2464,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
 
           {resultPanels.length > 0 ? (
           <div className="p-5 rounded-xl border border-slate-200 bg-slate-50 space-y-4">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                Clinical Remarks / Diagnostic Interpretation (Optional)
-              </label>
-              <textarea
-                rows={2}
-                value={generalRemarks}
-                onChange={(e) => {
-                  dirtyRef.current = true;
-                  setGeneralRemarks(e.target.value);
-                }}
-                placeholder="e.g. Repeated test in duplicate. Specimen integrity verified."
-                className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 shadow-2xs"
-              />
-            </div>
-
-            {/* Direct Bottom Save Action Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-200">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="text-xs text-slate-500 flex items-center gap-1.5 tabular-nums">
                 <Info className="w-3.5 h-3.5 text-slate-400" />
                 <span>Edits save to the database automatically. Save Draft still records the audit entry.</span>
@@ -2448,7 +2525,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
         return (
           <DocumentSideDrawer
             title="Zebra cryo label"
-            subtitle={`${patientDisplayName} · ${sample.barcode} · Case ${caseNumber}`}
+            subtitle={`${patientDisplayName} Â· ${sample.barcode} Â· Case ${caseNumber}`}
             onClose={() => setCryoLabelOpen(false)}
             onPrint={() => window.print()}
             panelClassName="sm:w-[min(100%,480px)]"
@@ -2505,7 +2582,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                       : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  {printAllMode ? '✓ Showing All' : `Show All (${containers.length})`}
+                  {printAllMode ? 'âœ“ Showing All' : `Show All (${containers.length})`}
                 </button>
               </div>
             </div>
@@ -2516,7 +2593,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                 <div className="text-xs font-semibold text-slate-700 flex items-center justify-between gap-2">
                   <span>Select specimen container</span>
                   <span className="text-[11px] font-medium text-slate-500 tabular-nums text-right">
-                    {safeContainerIndex + 1} of {containers.length} · {activeContainer.categoryName}
+                    {safeContainerIndex + 1} of {containers.length} Â· {activeContainer.categoryName}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -2637,7 +2714,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                         </span>
                       </div>
                       <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
-                        {activeContainer.tubeBarcode} · T{activeContainer.tubeNumber}
+                        {activeContainer.tubeBarcode} Â· T{activeContainer.tubeNumber}
                       </div>
                     </div>
                   </div>
@@ -2746,7 +2823,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                             <span className="text-[7px] text-[#0176d3] font-bold mt-0.5">{c.primaryAbbr}</span>
                           </div>
                           <div className="text-[11px] font-mono text-slate-600">
-                            Cap Dot: <strong>{c.tubeBarcode}</strong> · Tube #{c.tubeNumber} · [{c.primaryAbbr}] · <span className="font-sans font-medium">{c.shortContainer}</span>
+                            Cap Dot: <strong>{c.tubeBarcode}</strong> Â· Tube #{c.tubeNumber} Â· [{c.primaryAbbr}] Â· <span className="font-sans font-medium">{c.shortContainer}</span>
                           </div>
                         </div>
 

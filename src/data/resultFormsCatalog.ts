@@ -38,6 +38,8 @@ export interface ResultFormSpecimenField {
   span?: number;
   /** When select value equals this, show an extra "specify" text input */
   otherSpecifyOption?: string;
+  /** Show on Sample Detail / Result Entry analytical tab (default true). */
+  workflowEntry?: boolean;
 }
 
 export interface ResultFormAnalyteRow {
@@ -135,9 +137,10 @@ export interface ResultFormDefinition {
   /**
    * Section table column layout:
    * - test-result (Forms 3–4)
+   * - test-result-unit (Form 1 HGT — unit only)
    * - test-result-unit-ref (Form 6 Hematology CBC)
    */
-  tableColumns?: 'test-result' | 'test-result-unit-ref';
+  tableColumns?: 'test-result' | 'test-result-unit' | 'test-result-unit-ref';
   /** Left result-table header. Default "Test". */
   testColumnLabel?: string;
   /** Right result-table header. Default "Result". */
@@ -186,13 +189,14 @@ export const RESULT_FORM_1: ResultFormDefinition = {
     showQr: true,
   },
   headerFields: PTSI_PATIENT_HEADER_FIELDS,
+  tableColumns: 'test-result-unit',
   analytes: [
     {
-      id: 'hgt',
-      label: 'Examination HGT',
+      id: 'p_hgt',
+      label: 'HGT @',
       examCode: '1043',
       unit: 'mg/dL',
-      resultType: 'text',
+      resultType: 'numeric',
       hasAtTime: true,
       placeholder: 'Enter result',
     },
@@ -218,8 +222,23 @@ export const RESULT_FORM_2: ResultFormDefinition = {
   },
   headerFields: PTSI_PATIENT_HEADER_FIELDS,
   specimenFields: [
-    { id: 'labNumber', label: 'Laboratory Number', type: 'text', required: true, span: 6, placeholder: 'Lab accession / case no.' },
-    { id: 'dateSpecimenExamined', label: 'Date Specimen Examined', type: 'date', required: true, span: 6 },
+    {
+      id: 'labNumber',
+      label: 'Laboratory Number',
+      type: 'text',
+      required: true,
+      span: 6,
+      placeholder: 'Lab accession / case no.',
+      workflowEntry: false,
+    },
+    {
+      id: 'dateSpecimenExamined',
+      label: 'Date Specimen Examined',
+      type: 'date',
+      required: true,
+      span: 6,
+      workflowEntry: false,
+    },
     {
       id: 'sampleType',
       label: 'Sample',
@@ -233,7 +252,7 @@ export const RESULT_FORM_2: ResultFormDefinition = {
   ],
   analytes: [
     {
-      id: 'koh',
+      id: 'p_koh_res',
       label: 'KOH Examination',
       examCode: '1025',
       hideUnit: true,
@@ -272,7 +291,7 @@ export const RESULT_FORM_3: ResultFormDefinition = {
     showQr: true,
   },
   panelTitle: 'URINALYSIS',
-  showRemarks: true,
+  showRemarks: false,
   hideEmptyResultsOnPrint: true,
   footerNote:
     'This laboratory result is best interpreted by your attending physician in correlation with your other diagnostic procedures. This is an electronically generated report.',
@@ -354,7 +373,7 @@ export const RESULT_FORM_4: ResultFormDefinition = {
     showQr: true,
   },
   panelTitle: 'FECALYSIS',
-  showRemarks: true,
+  showRemarks: false,
   hideEmptyResultsOnPrint: true,
   footerNote:
     'This laboratory result is best interpreted by your attending physician in correlation with your other diagnostic procedures. This is an electronically generated report.',
@@ -437,7 +456,7 @@ export const RESULT_FORM_5: ResultFormDefinition = {
     name: 'PHILIPPINE TUBERCULOSIS SOCIETY, INC.',
     subtitle: '*CENTRAL LABORATORY*',
     address: '',
-    showQr: false,
+    showQr: true,
   },
   panelTitle: 'HEMATOLOGY',
   layoutStyle: 'blood-typing',
@@ -496,7 +515,7 @@ export const RESULT_FORM_7: ResultFormDefinition = {
     name: 'PHILIPPINE TUBERCULOSIS SOCIETY, INC.',
     subtitle: '*CENTRAL LABORATORY*',
     address: '',
-    showQr: false,
+    showQr: true,
   },
   panelTitle: 'PREGNANCY TEST',
   layoutStyle: 'pregnancy',
@@ -550,7 +569,7 @@ export const RESULT_FORM_6: ResultFormDefinition = {
   panelTitle: 'HEMATOLOGY',
   tableColumns: 'test-result-unit-ref',
   genderVariant: 'male',
-  showRemarks: true,
+  showRemarks: false,
   hideEmptyResultsOnPrint: true,
   footerNote:
     'This laboratory result is best interpreted by your attending physician in correlation with your other diagnostic procedures. This is an electronically generated report.',
@@ -716,7 +735,7 @@ export const RESULT_FORM_6F: ResultFormDefinition = {
   shortName: 'RF-06 Hematology (Female)',
   description: 'CBC with differential — female reference ranges (PTSI Form 6)',
   genderVariant: 'female',
-  showRemarks: true,
+  showRemarks: false,
   resultSections: (RESULT_FORM_6.resultSections || []).map((section) => ({
     ...section,
     rows: section.rows.map((row) => {
@@ -940,6 +959,12 @@ export const RESULT_FORM_10: ResultFormDefinition = {
   examCodes: ['1086', '1017'],
   layoutStyle: 'ntp-request',
   panelTitle: 'Form 2a. LABORATORY REQUEST AND RESULT FORM',
+  orgHeader: {
+    name: 'PHILIPPINE TUBERCULOSIS SOCIETY, INC.',
+    subtitle: 'Laboratory Section',
+    address: 'Quezon Institute Compound, E. Rodriguez Sr. Avenue, Quezon City',
+    showQr: true,
+  },
   headerFields: [],
   signatures: [],
   footerNote: 'A separate result form for LPA, Culture and DST will be issued',

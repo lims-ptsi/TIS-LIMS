@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   canReviseRequest,
   hasExaminationOrder,
@@ -6,6 +6,7 @@ import {
   needsLaboratoryExamSelection,
   readyForLaboratory,
   requiresCashier,
+  isCorporatePatientCategory,
 } from './data/requestDesk';
 import { TopNavbar } from './components/layout/TopNavbar';
 import { HomeDashboardView } from './components/views/HomeDashboardView';
@@ -39,6 +40,7 @@ import { PatientNotifyDrawer } from './components/modals/PatientNotifyDrawer';
 import { ResultsPickupDrawer } from './components/modals/ResultsPickupDrawer';
 import { limsService } from './services/limsService';
 import { LoginPage } from './components/auth/LoginPage';
+import { isPublicVerifyResultUrl, PublicVerifyResultView } from './components/views/PublicVerifyResultView';
 import { LockScreenModal } from './components/auth/LockScreenModal';
 import { ToastAlert, ToastMessage } from './components/common/ToastAlert';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
@@ -117,6 +119,15 @@ import { playNotificationChime, triggerDesktopNotification } from './utils/notif
 import { hasPermission, permissionDeniedMessage } from './utils/permissions';
 import { canOpenTab, defaultTabForRole, isAppRole, tabsForRole } from './data/roleAccess';
 import { readAppNav, writeAppNav } from './utils/appNavigation';
+import {
+  mergePullTestResults,
+  mergeRemoteRequisitions,
+  pushNewerLocalTestResultsToRemote,
+  TAB_DATA_REFRESH_MS,
+  tabShouldPullRequisitions,
+  tabShouldPullTestResults,
+} from './utils/remoteLimsSync';
+import { normalizeExamResultsForPersistence } from './utils/resultPersistence';
 
 function MainLimsContent() {
   const { isAuthenticated, user, terminalInfo } = useAuth();
@@ -420,42 +431,82 @@ function MainLimsContent() {
     setNotifications((prev) => reconcilePipelineNotifications(requisitions, prev));
   }, [requisitions]);
 
-  // Load initial requisitions from Supabase if connected
-  useEffect(() => {
-    limsService.fetchRequisitions().then((data) => {
-      if (data && data.length > 0) {
-        setRequisitions((prev) => {
-          const prevMap = new Map(prev.map((r) => [r.id, r]));
-          const prevByNum = new Map(prev.map((r) => [r.requisitionNumber, r]));
+  const lastRemotePullAtRef = useRef(0);
+  const remotePullInFlightRef = useRef<Promise<void> | null>(null);
+  const initialResultsPushDoneRef = useRef(false);
 
-          const merged = data.map((remote) => {
-            const local = prevMap.get(remote.id) || prevByNum.get(remote.requisitionNumber);
-            if (local) {
-              const localOr = (local.orNumber || '').trim();
-              const hasLocalOr = localOr.length > 0 && localOr.toUpperCase() !== 'N/A';
-              const remoteOr = (remote.orNumber || '').trim();
-              const hasRemoteOr = remoteOr.length > 0 && remoteOr.toUpperCase() !== 'N/A';
+  const pullRemoteLimsData = useCallback(
+    async (options: { force?: boolean; tab: string; pushLocalResultsOnce?: boolean }) => {
+      if (!limsService.isLive) return;
 
-              return {
-                ...remote,
-                patientCategory: remote.patientCategory || local.patientCategory || 'OPD',
-                orNumber: hasLocalOr && !hasRemoteOr ? local.orNumber : (hasRemoteOr ? remote.orNumber : (local.orNumber || remote.orNumber)),
-                status: (local.status !== 'SUBMITTED' && remote.status === 'SUBMITTED') ? local.status : remote.status,
-              };
-            }
-            return remote;
-          });
+      const pullReqs = tabShouldPullRequisitions(options.tab, options.force);
+      const pullResults = tabShouldPullTestResults(options.tab, options.pushLocalResultsOnce);
+      if (!pullReqs && !pullResults) return;
 
-          // Also retain any local-only requisitions not present in remote
-          const remoteIds = new Set(data.map((r) => r.id));
-          const remoteNums = new Set(data.map((r) => r.requisitionNumber));
-          const localOnly = prev.filter((r) => !remoteIds.has(r.id) && !remoteNums.has(r.requisitionNumber));
+      const now = Date.now();
+      if (!options.force && now - lastRemotePullAtRef.current < TAB_DATA_REFRESH_MS) return;
 
-          return [...localOnly, ...merged];
-        });
+      if (remotePullInFlightRef.current) {
+        await remotePullInFlightRef.current;
+        if (!options.force && Date.now() - lastRemotePullAtRef.current < TAB_DATA_REFRESH_MS) return;
       }
+
+      const job = (async () => {
+        lastRemotePullAtRef.current = Date.now();
+
+        const [reqData, resultRows] = await Promise.all([
+          pullReqs ? limsService.fetchRequisitions() : Promise.resolve(null),
+          pullResults ? limsService.fetchTestResults() : Promise.resolve(null),
+        ]);
+
+        if (reqData && reqData.length > 0) {
+          setRequisitions((prev) => mergeRemoteRequisitions(prev, reqData));
+        }
+
+        if (resultRows) {
+          const local = loadStoredTestResults();
+          const merged = mergePullTestResults(local, resultRows);
+          setStoredResults(merged.results);
+          setStoredMedTechInfo(merged.medtech);
+          setResultUpdatedAt(merged.updatedAt);
+
+          if (options.pushLocalResultsOnce && !initialResultsPushDoneRef.current) {
+            initialResultsPushDoneRef.current = true;
+            await pushNewerLocalTestResultsToRemote(local, resultRows);
+          }
+        }
+      })();
+
+      remotePullInFlightRef.current = job;
+      try {
+        await job;
+      } finally {
+        if (remotePullInFlightRef.current === job) {
+          remotePullInFlightRef.current = null;
+        }
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!user) {
+      initialResultsPushDoneRef.current = false;
+      lastRemotePullAtRef.current = 0;
+      return;
+    }
+    void pullRemoteLimsData({
+      force: true,
+      tab: currentTab,
+      pushLocalResultsOnce: true,
     });
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- login bootstrap only
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user) return;
+    void pullRemoteLimsData({ tab: currentTab });
+  }, [currentTab, user?.id, pullRemoteLimsData]);
 
   useEffect(() => {
     saveStoredTestResults({
@@ -465,57 +516,44 @@ function MainLimsContent() {
     });
   }, [storedResults, storedMedTechInfo, resultUpdatedAt]);
 
-  // Load examination result forms. A newer browser copy is pushed up; the database wins when it is newer.
+  const corporateBacklogAdvancedRef = useRef(new Set<string>());
+  const corporateAutoAccessionRef = useRef<{
+    receive: (
+      req: LabTestRequisition,
+      accessionData?: unknown,
+      options?: {
+        skipAccessionToast?: boolean;
+        skipNavigation?: boolean;
+        notificationTargetTab?: string;
+      }
+    ) => void;
+    inferDefaults: (req: LabTestRequisition) => unknown;
+  } | null>(null);
+
+  /** Corporate requests with exams skip Request queue; advance any legacy SUBMITTED rows once. */
   useEffect(() => {
-    const local = loadStoredTestResults();
-    limsService.fetchTestResults().then((rows) => {
-      if (!rows) return;
-
-      const dbById = new Map(rows.map((row) => [row.requisitionId, row]));
-
-      const applyRow = <T,>(prev: Record<string, T>, pick: (row: NonNullable<typeof rows>[number]) => T) => {
-        const next = { ...prev };
-        rows.forEach((row) => {
-          const localStamp = local.updatedAt[row.requisitionId] || '';
-          if (localStamp && row.updatedAt && localStamp > row.updatedAt) return;
-          next[row.requisitionId] = pick(row);
-          const numberKey = requisitionNumberKey(row.requisitionNumber);
-          if (numberKey) next[numberKey] = pick(row);
-        });
-        return next;
-      };
-
-      setStoredResults((prev) => applyRow(prev, (row) => row.results as Record<string, ExamResultGroup>));
-      setStoredMedTechInfo((prev) => applyRow(prev, (row) => row.medtechInfo));
-      setResultUpdatedAt((prev) => {
-        const next = { ...prev };
-        rows.forEach((row) => {
-          const localStamp = local.updatedAt[row.requisitionId] || '';
-          if (!row.updatedAt) return;
-          if (localStamp && localStamp > row.updatedAt) return;
-          next[row.requisitionId] = row.updatedAt;
-          const numberKey = requisitionNumberKey(row.requisitionNumber);
-          if (numberKey) next[numberKey] = row.updatedAt;
-        });
-        return next;
-      });
-
-      Object.entries(local.results).forEach(([id, results]) => {
-        if (!id || id.startsWith('rn:')) return;
-        if (!results || Object.keys(results).length === 0) return;
-        const db = dbById.get(id);
-        const localStamp = local.updatedAt[id] || '';
-        if (db && db.updatedAt && localStamp && localStamp <= db.updatedAt) return;
-        void limsService.upsertTestResults({
-          requisitionId: id,
-          requisitionNumber: db?.requisitionNumber || null,
-          results,
-          medtechInfo: local.medtech[id] || {},
-          status: db?.status || 'IN_TESTING',
-        });
+    if (!user || !hasPermission(user, 'canAccessionSamples')) return;
+    const runner = corporateAutoAccessionRef.current;
+    if (!runner) return;
+    requisitions.forEach((req) => {
+      const key = req.id || req.requisitionNumber;
+      if (!key || corporateBacklogAdvancedRef.current.has(key)) return;
+      if (!isCorporatePatientCategory(req.patientCategory)) return;
+      if (req.status !== 'SUBMITTED' || !hasExaminationOrder(req)) return;
+      if (!readyForLaboratory(req)) return;
+      if (findSampleForRequisition(req, samples)) return;
+      corporateBacklogAdvancedRef.current.add(key);
+      runner.receive(req, runner.inferDefaults(req), {
+        skipAccessionToast: true,
+        skipNavigation: true,
+        notificationTargetTab: 'testing-queue',
       });
     });
-  }, []);
+  }, [requisitions, samples, user]);
+
+  if (isPublicVerifyResultUrl()) {
+    return <PublicVerifyResultView />;
+  }
 
   // If user is not authenticated, render the dedicated LoginPage
   if (!isAuthenticated || !user) {
@@ -544,6 +582,10 @@ function MainLimsContent() {
       const res = await limsService.createRequisition(newReq);
       const hasExams = hasExaminationOrder(newReq);
 
+      const savedReq: LabTestRequisition = res.createdId ? { ...newReq, id: res.createdId } : newReq;
+      const corporateAutoTesting =
+        hasExams && isCorporatePatientCategory(savedReq.patientCategory) && savedReq.status === 'SUBMITTED';
+
       if (res.success) {
         if (res.createdId) {
           setRequisitions((prev) =>
@@ -555,9 +597,11 @@ function MainLimsContent() {
           title: 'SUCCESSFULLY SUBMITTED',
           message: !hasExams
             ? `Request ${newReq.requisitionNumber} saved. Send the patient to the laboratory desk — staff will select examinations next.`
-            : newReq.patientCategory === 'OPD'
-              ? `Laboratory Test Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.caseNo}) is saved. Send the patient to the cashier.`
-              : `Laboratory Test Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.caseNo}) is saved. Send the patient to the laboratory.`,
+            : corporateAutoTesting
+              ? `Corporate request ${savedReq.requisitionNumber} for ${savedReq.patientOrSubjectName} is on the Testing queue — enter results when ready.`
+              : newReq.patientCategory === 'OPD'
+                ? `Laboratory Test Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.caseNo}) is saved. Send the patient to the cashier.`
+                : `Laboratory Test Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.caseNo}) is saved. Send the patient to the laboratory.`,
           duration: 5000,
         });
       } else {
@@ -569,17 +613,26 @@ function MainLimsContent() {
         });
       }
 
-      notifyWorkflowMove(newReq);
+      notifyWorkflowMove(corporateAutoTesting ? { ...savedReq, status: 'IN_TESTING' } : newReq);
 
-      if (
-        hasExams &&
-        newReq.patientCategory === 'OPD' &&
-        hasPermission(user, 'canAssignOrNumber')
-      ) {
-        setOpdPaymentModalReq(newReq);
+      if (corporateAutoTesting) {
+        handleReceiveAndAccession(savedReq, inferAccessionDefaults(savedReq), {
+          skipAccessionToast: true,
+          skipNavigation: true,
+          notificationTargetTab: 'testing-queue',
+        });
+        setCurrentTab(canOpenTab(user.roleType, 'testing-queue') ? 'testing-queue' : 'home');
+      } else {
+        if (
+          hasExams &&
+          newReq.patientCategory === 'OPD' &&
+          hasPermission(user, 'canAssignOrNumber')
+        ) {
+          setOpdPaymentModalReq(newReq);
+        }
+
+        setCurrentTab(canOpenTab(user.roleType, 'lab-requests') ? 'lab-requests' : 'home');
       }
-
-      setCurrentTab(canOpenTab(user.roleType, 'lab-requests') ? 'lab-requests' : 'home');
     } catch (err: any) {
       addToast({
         type: 'error',
@@ -946,14 +999,17 @@ function MainLimsContent() {
       );
     }
 
-    const foundReq = requisitions.find((r) => r.id === reqId);
+    const foundReq = requisitions.find(
+      (r) => r.id === reqId || r.requisitionNumber === reqId
+    );
     const numberKey = requisitionNumberKey(foundReq?.requisitionNumber);
     const savedAt = new Date().toISOString();
+    const completeResults = normalizeExamResultsForPersistence(resultsData, foundReq ?? null);
 
     // 2. Store every examination input (template parameters and form-only fields)
     setStoredResults((prev) => {
-      const next = { ...prev, [reqId]: resultsData };
-      if (numberKey) next[numberKey] = resultsData;
+      const next = { ...prev, [reqId]: completeResults };
+      if (numberKey) next[numberKey] = completeResults;
       return next;
     });
     setStoredMedTechInfo((prev) => {
@@ -971,7 +1027,7 @@ function MainLimsContent() {
       .upsertTestResults({
         requisitionId: reqId,
         requisitionNumber: foundReq?.requisitionNumber || null,
-        results: resultsData,
+        results: completeResults,
         medtechInfo: medTechInfo,
         status: newStatus,
       })
@@ -1575,6 +1631,15 @@ function MainLimsContent() {
     }
   };
 
+  corporateAutoAccessionRef.current = {
+    receive: handleReceiveAndAccession as NonNullable<
+      typeof corporateAutoAccessionRef.current
+    >['receive'],
+    inferDefaults: inferAccessionDefaults as NonNullable<
+      typeof corporateAutoAccessionRef.current
+    >['inferDefaults'],
+  };
+
   const handleAssignExaminations = async (req: LabTestRequisition, examNames: string[]) => {
     const updated: LabTestRequisition = {
       ...req,
@@ -1884,6 +1949,7 @@ function MainLimsContent() {
             editingRequest={editingRequest}
             hidePriorVisitExaminations={user.roleType === 'STAFF'}
             examinationStepDeferred={user.roleType === 'STAFF'}
+            restrictToCorporateCategory={user.roleType === 'LAB_STAFF'}
             onViewOfficialSlip={(req) => setSlipModalReq(req)}
             onCancel={() => {
               setEditingRequest(null);

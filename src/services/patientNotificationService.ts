@@ -72,6 +72,18 @@ export function buildResultsReadyEmail(req: LabTestRequisition): {
   return { subject, body };
 }
 
+function resolvePatientNotifyWebhookUrl(): string | undefined {
+  const raw = import.meta.env.VITE_PATIENT_NOTIFY_WEBHOOK_URL as string | undefined;
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (typeof window !== 'undefined') {
+    const path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    return new URL(path, window.location.origin).href;
+  }
+  return trimmed;
+}
+
 function appendNotificationLog(entry: ResultsReadyNotificationPayload): void {
   try {
     const raw = localStorage.getItem(NOTIFICATION_LOG_KEY);
@@ -84,11 +96,11 @@ function appendNotificationLog(entry: ResultsReadyNotificationPayload): void {
 }
 
 async function dispatchChannel(payload: ResultsReadyNotificationPayload): Promise<{ ok: boolean; error?: string }> {
-  const webhook = import.meta.env.VITE_PATIENT_NOTIFY_WEBHOOK_URL as string | undefined;
+  const webhook = resolvePatientNotifyWebhookUrl();
 
-  if (webhook?.trim()) {
+  if (webhook) {
     try {
-      const res = await fetch(webhook.trim(), {
+      const res = await fetch(webhook, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

@@ -5,6 +5,10 @@ export function requiresCashier(category?: PatientCategory | string): boolean {
   return (category || 'OPD') === 'OPD';
 }
 
+export function isCorporatePatientCategory(category?: PatientCategory | string): boolean {
+  return (category || '') === 'Corporate';
+}
+
 export function examinationList(
   req: Pick<LabTestRequisition, 'kindOfExamination' | 'selectedTestNames'>
 ): string[] {
@@ -64,7 +68,21 @@ export function onLaboratoryDesk(
   return needsLaboratoryExamSelection(req) || readyForLaboratory(req);
 }
 
-/** Request queue tab: intake, OPD at cashier, and OPD ready to receive (manual receive). Non-OPD leaves after exams are ordered. */
+/** SUBMITTED with exams ordered — laboratory can receive (OPD only after OR; other categories skip cashier). */
+export function readyForSpecimenReceive(
+  req: Pick<
+    LabTestRequisition,
+    'patientCategory' | 'status' | 'orNumber' | 'kindOfExamination' | 'selectedTestNames'
+  >
+): boolean {
+  if (req.status !== 'SUBMITTED') return false;
+  if (needsLaboratoryExamSelection(req)) return false;
+  if (waitingAtCashier(req)) return false;
+  if (isCorporatePatientCategory(req.patientCategory)) return false;
+  return readyForLaboratory(req);
+}
+
+/** Request queue tab: intake, at cashier (OPD), and ready to receive (all categories). */
 export function onLabRequestDesk(
   req: Pick<
     LabTestRequisition,
@@ -74,7 +92,7 @@ export function onLabRequestDesk(
   if (req.status !== 'SUBMITTED') return false;
   if (needsLaboratoryExamSelection(req)) return true;
   if (readyForCashierSettlement(req)) return true;
-  if (requiresCashier(req.patientCategory) && readyForLaboratory(req)) return true;
+  if (readyForSpecimenReceive(req)) return true;
   return false;
 }
 
@@ -99,7 +117,7 @@ export function requestTrackingPhase(
   if (req.status !== 'SUBMITTED') return 'OTHER';
   if (needsLaboratoryExamSelection(req)) return 'NEEDS_EXAMS';
   if (waitingAtCashier(req)) return 'AT_CASHIER';
-  if (readyForLaboratory(req) && requiresCashier(req.patientCategory)) return 'READY_RECEIVE';
+  if (readyForSpecimenReceive(req)) return 'READY_RECEIVE';
   return 'OTHER';
 }
 

@@ -23,6 +23,7 @@ import {
   onTestingDesk,
   readyForCashierSettlement,
   readyForLaboratory,
+  readyForSpecimenReceive,
   requiresCashier,
   waitingAtCashier,
   requestTrackingPhase,
@@ -237,11 +238,30 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>(isPayments ? 'UNPAID' : 'ALL');
 
+  /** Pipeline pills differ per desk; reusing a filter from another tab hides every row while counts stay full. */
+  useEffect(() => {
+    if (isPayments) setStatusFilter('UNPAID');
+    else if (isTestingQueue) setStatusFilter('ALL');
+    else if (isLabRequests || isAllRequests) setStatusFilter('ALL');
+  }, [deskVariant, isPayments, isTestingQueue, isLabRequests, isAllRequests]);
+
   useEffect(() => {
     if (!pipelineFilter) return;
     setStatusFilter(pipelineFilter);
     onPipelineFilterApplied?.();
   }, [pipelineFilter, onPipelineFilterApplied]);
+
+  const allowedStatusFilters = isPayments
+    ? new Set(['UNPAID', 'PAID', 'ALL'])
+    : isAllRequests
+      ? new Set(['ALL', 'NEEDS_EXAMS', 'AT_CASHIER', 'READY_RECEIVE', 'IN_TESTING', 'COMPLETED'])
+      : isLabRequests
+        ? new Set(['ALL', 'NEEDS_EXAMS', 'AT_CASHIER', 'READY_RECEIVE'])
+        : isTestingQueue
+          ? new Set(['ALL', 'IN_TESTING'])
+          : new Set(['ALL']);
+
+  const activeStatusFilter = allowedStatusFilters.has(statusFilter) ? statusFilter : 'ALL';
   const [docPanel, setDocPanel] = useState<{
     kind: 'slip' | 'payment' | 'print';
     req: LabTestRequisition;
@@ -279,8 +299,9 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
   );
 
   const filtered = deskRequests.filter((r) => {
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
     const matchesSearch =
+      !query ||
       (r.requisitionNumber && r.requisitionNumber.toLowerCase().includes(query)) ||
       (r.patientOrSubjectName && r.patientOrSubjectName.toLowerCase().includes(query)) ||
       (r.caseNo && r.caseNo.toLowerCase().includes(query)) ||
@@ -290,28 +311,27 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
       (r.kindOfExamination && Array.isArray(r.kindOfExamination) && r.kindOfExamination.some((k) => k && k.toLowerCase().includes(query)));
 
     const matchesStatus = isPayments
-      ? statusFilter === 'ALL' || (statusFilter === 'PAID' ? hasOfficialReceipt(r.orNumber) : !hasOfficialReceipt(r.orNumber))
+      ? activeStatusFilter === 'ALL' ||
+        (activeStatusFilter === 'PAID' ? hasOfficialReceipt(r.orNumber) : !hasOfficialReceipt(r.orNumber))
       : isAllRequests
-        ? statusFilter === 'ALL' || requestTrackingPhase(r) === statusFilter
+        ? activeStatusFilter === 'ALL' || requestTrackingPhase(r) === activeStatusFilter
         : isLabRequests
-          ? statusFilter === 'NEEDS_EXAMS'
+          ? activeStatusFilter === 'NEEDS_EXAMS'
             ? needsLaboratoryExamSelection(r)
-            : statusFilter === 'AT_CASHIER'
+            : activeStatusFilter === 'AT_CASHIER'
               ? waitingAtCashier(r)
-              : statusFilter === 'READY_RECEIVE'
-                ? readyForLaboratory(r) &&
-                  r.status === 'SUBMITTED' &&
-                  requiresCashier(r.patientCategory)
-                : statusFilter === 'ALL' || r.status === statusFilter
+              : activeStatusFilter === 'READY_RECEIVE'
+                ? readyForSpecimenReceive(r)
+                : activeStatusFilter === 'ALL' || r.status === activeStatusFilter
           : isTestingQueue
-            ? statusFilter === 'ALL' ||
-              (statusFilter === 'IN_TESTING' &&
+            ? activeStatusFilter === 'ALL' ||
+              (activeStatusFilter === 'IN_TESTING' &&
                 (r.status === 'IN_TESTING' || r.status === 'RECEIVED'))
-            : statusFilter === 'ALL' || r.status === statusFilter;
+            : activeStatusFilter === 'ALL' || r.status === activeStatusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const pagination = usePagination(filtered.length, [searchQuery, statusFilter, deskVariant], 15);
+  const pagination = usePagination(filtered.length, [searchQuery, activeStatusFilter, deskVariant], 15);
   const pagedRequests = paginateSlice(filtered, pagination.page, pagination.pageSize);
 
   const openDocPanel = (kind: 'slip' | 'payment' | 'print', req: LabTestRequisition) => {
@@ -326,13 +346,7 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
     all: deskRequests.length,
     needsExams: deskRequests.filter((r) => needsLaboratoryExamSelection(r)).length,
     atCashier: deskRequests.filter((r) => waitingAtCashier(r)).length,
-    readyReceive: deskRequests.filter(
-      (r) =>
-        r.status === 'SUBMITTED' &&
-        readyForLaboratory(r) &&
-        !needsLaboratoryExamSelection(r) &&
-        requiresCashier(r.patientCategory)
-    ).length,
+    readyReceive: deskRequests.filter((r) => readyForSpecimenReceive(r)).length,
     inTesting: deskRequests.filter((r) => r.status === 'IN_TESTING' || r.status === 'RECEIVED').length,
     completed: deskRequests.filter((r) => r.status === 'COMPLETED').length,
     other: deskRequests.filter((r) => requestTrackingPhase(r) === 'OTHER').length,
@@ -349,7 +363,7 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
         return;
       }
       if (waitingAtCashier(req)) return;
-      if (requiresCashier(req.patientCategory) && canAccession && readyForLaboratory(req)) {
+      if (canAccession && readyForSpecimenReceive(req)) {
         setSelectedReceiveReq(req);
         return;
       }
@@ -414,7 +428,7 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                   ? 'Specimens already received — enter and finalize analytical results here.'
                   : isAllRequests
                     ? 'Monitor every request from intake through testing and completion. Open a row to view details or the next action.'
-                    : 'Start with Info desk intake (select examinations). OPD then goes to the cashier for OR before receive. Non-OPD advances to the Testing queue after exams are ordered.'}
+                    : 'Info desk intake and OPD cashier/receive. Corporate requests skip this queue and go straight to Testing after create.'}
             </p>
           </div>
         </div>
@@ -482,14 +496,14 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                 key={tab.key}
                 onClick={() => setStatusFilter(tab.key)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                  statusFilter === tab.key
+                  activeStatusFilter === tab.key
                     ? 'bg-[#0176d3] text-white shadow-2xs'
                     : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
                 <span>{tab.label}</span>
                 <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
-                  statusFilter === tab.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                  activeStatusFilter === tab.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
                 }`}>
                   {tab.count}
                 </span>
@@ -615,7 +629,7 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                           : req.status === 'IN_TESTING'
                             ? 'In testing'
                             : req.status === 'SUBMITTED'
-                              ? readyForLaboratory(req) && requiresCashier(req.patientCategory)
+                              ? readyForSpecimenReceive(req)
                                 ? 'Ready to receive'
                                 : waitingAtCashier(req)
                                   ? 'At cashier'
@@ -641,11 +655,7 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                             return;
                           }
                           if (waitingAtCashier(req)) return;
-                          if (
-                            requiresCashier(req.patientCategory) &&
-                            canAccession &&
-                            readyForLaboratory(req)
-                          ) {
+                          if (canAccession && readyForSpecimenReceive(req)) {
                             setSelectedReceiveReq(req);
                             return;
                           }
@@ -664,10 +674,8 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                               ? 'Filed by Information Staff — click to select examinations'
                               : waitingAtCashier(req)
                                 ? 'Patient at cashier — waiting for official receipt'
-                                : requiresCashier(req.patientCategory) &&
-                                    canAccession &&
-                                    readyForLaboratory(req)
-                                  ? 'Click to receive & accession (OPD after OR)'
+                                : canAccession && readyForSpecimenReceive(req)
+                                  ? 'Click to receive & accession specimen'
                                   : 'View request slip'
                             : 'View request'
                       }
@@ -758,19 +766,15 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                               </span>
                             </>
                           ) : null}
-                          {(isLabRequests || isAllRequests) &&
-                          req.status === 'SUBMITTED' &&
-                          !needsLaboratoryExamSelection(req) &&
-                          !waitingAtCashier(req) &&
-                          requiresCashier(req.patientCategory) ? (
+                          {(isLabRequests || isAllRequests) && readyForSpecimenReceive(req) ? (
                             <>
                               <NextStepDot />
                               <NextStepLink
                                 tone="receive"
-                                disabled={!canAccession || !readyForLaboratory(req)}
+                                disabled={!canAccession}
                                 title="Receive & accession"
                                 onClick={() => {
-                                  if (!canAccession || !readyForLaboratory(req)) return;
+                                  if (!canAccession) return;
                                   setSelectedReceiveReq(req);
                                 }}
                               >

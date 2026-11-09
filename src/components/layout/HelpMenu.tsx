@@ -35,7 +35,8 @@ const SCREEN_HELP: Record<string, string> = {
 const DESK_HELP: Record<string, string> = {
   STAFF: 'The information desk creates a lab test request. It does not receive a specimen, enter a result, or assign a receipt.',
   CASHIER: 'The cashier assigns the official receipt for OPD only. Other categories go to the laboratory. This desk does not create a request, receive a specimen, or enter a result.',
-  LAB_STAFF: 'The laboratory creates a request, receives the specimen, enters the result, and prints the label and the report. It does not assign the official receipt.',
+  LAB_STAFF:
+    'The laboratory creates Corporate requests only (sending facility + HIS tariff), receives the specimen, enters results, and prints labels and reports. It does not assign the official receipt.',
   ADMIN: 'Administration can open every screen, including the catalog, result templates, and the audit trail.',
 };
 

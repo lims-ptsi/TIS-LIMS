@@ -310,14 +310,14 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
     }
     return (
       <div className={scrollable ? 'overflow-x-auto max-h-[min(28rem,55vh)] overflow-y-auto' : 'overflow-x-auto'}>
-        <table className="w-full text-left table-fixed">
+        <table className="w-full min-w-[40rem] text-left table-fixed">
           <colgroup>
-            <col className="w-[min(14rem,22%)]" />
-            <col className="w-[7.5rem]" />
-            <col className="w-[5.5rem]" />
-            {!hideExaminations ? <col /> : null}
-            <col className="w-[6.5rem]" />
-            <col className="w-[7.5rem]" />
+            <col className={hideExaminations ? 'w-[34%]' : 'w-[min(14rem,26%)]'} />
+            <col className="w-[8.5rem]" />
+            <col className={hideExaminations ? 'w-[11rem]' : 'w-[9.5rem]'} />
+            {!hideExaminations ? <col className="w-auto" /> : null}
+            <col className="w-[7rem]" />
+            <col className="w-[8.25rem]" />
           </colgroup>
           <thead className={scrollable ? 'sticky top-0 z-[1]' : undefined}>
             <tr className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -337,21 +337,33 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
                 item.status === 'SUBMITTED' ? submittedNextDeskLabel(item) : null;
               const cells = (
                 <>
-                  <td className="px-5 py-2.5 text-sm font-medium text-slate-900 truncate" title={item.patientOrSubjectName || 'Patient'}>
+                  <td
+                    className="px-5 py-2.5 text-sm font-medium text-slate-900 truncate overflow-hidden max-w-0"
+                    title={item.patientOrSubjectName || 'Patient'}
+                  >
                     {item.patientOrSubjectName || 'Patient'}
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap tabular-nums">
+                  <td
+                    className="px-3 py-2.5 text-xs text-slate-600 tabular-nums truncate overflow-hidden max-w-0"
+                    title={item.caseNo || item.requisitionNumber}
+                  >
                     {item.caseNo || item.requisitionNumber}
                   </td>
-                  <td className="px-3 py-2.5 text-[11px] font-normal text-slate-600 whitespace-nowrap uppercase">
+                  <td
+                    className="px-3 py-2.5 text-[11px] font-normal text-slate-600 uppercase truncate overflow-hidden max-w-0"
+                    title={item.patientCategory || 'OPD'}
+                  >
                     {item.patientCategory || 'OPD'}
                   </td>
                   {!hideExaminations ? (
-                    <td className="px-3 py-2.5 text-xs text-slate-600 truncate" title={examSummary(item)}>
+                    <td
+                      className="px-3 py-2.5 text-xs text-slate-600 truncate overflow-hidden max-w-0"
+                      title={examSummary(item)}
+                    >
                       {examSummary(item)}
                     </td>
                   ) : null}
-                  <td className="px-3 py-2.5 text-xs text-slate-500 whitespace-nowrap">
+                  <td className="px-3 py-2.5 text-xs text-slate-500 whitespace-nowrap overflow-hidden">
                     {formatRequestDate(item.requestDate)}
                   </td>
                   <td className="px-5 py-2.5 text-right">

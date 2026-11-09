@@ -27,13 +27,21 @@ import {
 import { getResultFormForExam, resolveEntryForm } from '../../data/resultFormsCatalog';
 import { isSendOutExamination } from '../../data/examinationCatalog';
 import { NtpLabRequestForm, NTP_FIELD_KEYS } from '../forms/NtpLabRequestForm';
+import { applyNtpFormDefaultsToParamMap, mergeNtpFormDefaults } from '../../utils/ntpFormPrefill';
 import { determineResultFlag } from '../../utils/qcCalculations';
 import { baselineParameterValue, simulateParameterValue } from '../../utils/resultSimulate';
+import { OfficialResultSpecimenFields } from '../common/OfficialResultSpecimenFields';
 import {
   hasEnteredResult,
   isResultFormRowExamined,
+  isResultFormSectionApplicable,
+  isTbCulturePositive,
   resultFormRowAppliesToExamCodes,
+  resultFormRowAppliesToPanel,
+  isRf09CultureEntryRow,
+  TB_DST_PARAM_IDS,
 } from '../../utils/resultDisplay';
+import { ExaminerSignoffFields } from '../common/ExaminerSignoffFields';
 
 export interface ResultParamValue {
   paramId: string;
@@ -48,9 +56,13 @@ export interface ResultParamValue {
 /** Sign-off personnel for a single examination (not the whole request) */
 export interface ExamExaminers {
   labTechName?: string;
+  labTechDesignation?: string;
+  labTechLicense?: string;
   rmtName: string;
+  rmtDesignation?: string;
   rmtLicense: string;
   pathologistName: string;
+  pathologistDesignation?: string;
   pathologistLicense?: string;
 }
 
@@ -67,12 +79,17 @@ export interface ExamResultGroup {
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
 }
 
-export const DEFAULT_EXAMINERS = (pathologistName = 'Dr. Katherine Zhang, MD, FPSP'): ExamExaminers => ({
+/** Empty signatory slots — staff choose from roster on result entry (no pre-filled Verified / Pathologist). */
+export const DEFAULT_EXAMINERS = (_legacyPathologistArg?: string): ExamExaminers => ({
   labTechName: '',
-  rmtName: 'Maria Santos, RMT',
-  rmtLicense: 'PRC #0089124',
-  pathologistName,
-  pathologistLicense: 'PRC #0045189',
+  labTechDesignation: 'Laboratory Technician',
+  labTechLicense: '',
+  rmtName: '',
+  rmtDesignation: 'Medical Technologist',
+  rmtLicense: '',
+  pathologistName: '',
+  pathologistDesignation: 'Pathologist',
+  pathologistLicense: '',
 });
 
 export type ResultSaveOptions = { silent?: boolean };
@@ -114,7 +131,6 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
 }) => {
   const [activeExamIndex, setActiveExamIndex] = useState<number>(0);
   const [examResults, setExamResults] = useState<Record<string, ExamResultGroup>>({});
-  const [generalRemarks, setGeneralRemarks] = useState('');
   const [isSavedSuccess, setIsSavedSuccess] = useState(false);
   const [examinedResultsOnly, setExaminedResultsOnly] = useState(false);
   const dirtyRef = useRef(false);
@@ -167,6 +183,21 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
         });
       }
 
+      const entryForm = resolveEntryForm(examName, examKey, requisition.patientGender);
+      if (entryForm?.layoutStyle === 'ntp-request') {
+        applyNtpFormDefaultsToParamMap(paramMap, requisition, null, (key, val) => {
+          paramMap[key] = {
+            paramId: key,
+            paramCode: key.toUpperCase(),
+            paramName: key,
+            unit: '',
+            value: val,
+            flag: 'NORMAL',
+            isCalculated: false,
+          };
+        });
+      }
+
       initialGroups[examKey] = {
         examCode: template.examCode,
         examName: template.examName,
@@ -174,7 +205,7 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
         methodology: template.methodology,
         specimenType: template.specimenType,
         parameters: paramMap,
-        remarks: saved?.remarks || 'Results verified and cross-referenced with daily internal QC run.',
+        remarks: saved?.remarks || '',
         examiners: saved?.examiners || DEFAULT_EXAMINERS(currentUserName || 'Dr. Katherine Zhang, MD, FPSP'),
         status: requisition.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS',
       };
@@ -188,7 +219,6 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
     }
 
     setExamResults(initialGroups);
-    setGeneralRemarks(savedRemarks || '');
     setActiveExamIndex(0);
     setIsSavedSuccess(false);
   }, [requisition, savedExamResults, savedRemarks, currentUserName]);
@@ -206,7 +236,7 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
       rmtLicense: active.rmtLicense,
       pathologistName: active.pathologistName,
       pathologistLicense: active.pathologistLicense,
-      remarks: generalRemarks,
+      remarks: '',
     };
     const timer = window.setTimeout(() => {
       onSaveRef.current(requisition.id, examResults, false, payload, { silent: true });
@@ -217,7 +247,7 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
         onSaveRef.current(requisition.id, examResults, false, payload, { silent: true });
       }
     };
-  }, [examResults, generalRemarks, requisition, activeExamIndex, currentUserName]);
+  }, [examResults, requisition, activeExamIndex, currentUserName]);
 
   if (!isOpen || !requisition) return null;
 
@@ -270,6 +300,14 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
         value: newValue,
         flag: paramDef ? calculateFlag(paramDef, newValue) : 'NORMAL',
       };
+
+      if (paramId === 'p_tb_culture' && !isTbCulturePositive(newValue)) {
+        for (const dstId of TB_DST_PARAM_IDS) {
+          const dstExisting = updatedParams[dstId];
+          if (!dstExisting) continue;
+          updatedParams[dstId] = { ...dstExisting, value: '', flag: 'NORMAL' };
+        }
+      }
 
       // Auto-recalculate dependent formulas in the same examination group
       // 1. CBC: Hematocrit = RBC * MCV / 10
@@ -422,7 +460,7 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
       rmtLicense: active.rmtLicense,
       pathologistName: active.pathologistName,
       pathologistLicense: active.pathologistLicense,
-      remarks: generalRemarks,
+      remarks: '',
     };
   };
 
@@ -608,11 +646,20 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                 };
 
                 if (isNtpRequest) {
-                  const ntpValues = Object.fromEntries(
-                    NTP_FIELD_KEYS.map((key) => [key, currentGroup.parameters[key]?.value || ''])
+                  const ntpValues = mergeNtpFormDefaults(
+                    Object.fromEntries(
+                      NTP_FIELD_KEYS.map((key) => [key, currentGroup.parameters[key]?.value || ''])
+                    ),
+                    requisition,
+                    null
                   );
                   return (
-                    <NtpLabRequestForm values={ntpValues} onChange={handleParamChange} />
+                    <NtpLabRequestForm
+                      layout="workflow"
+                      assignedExaminations={[currentGroup.examName].filter(Boolean)}
+                      values={ntpValues}
+                      onChange={handleParamChange}
+                    />
                   );
                 }
 
@@ -631,18 +678,19 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                           const isRh = param.id === 'bt_rh' || param.code === 'RH';
                           return (
                             <React.Fragment key={param.id}>
-                              {isRh ? (
-                                <span className="font-bold tracking-wider">RH:</span>
-                              ) : null}
                               <select
-                                value={currentValue}
+                                value={
+                                  currentValue ||
+                                  param.defaultValue ||
+                                  param.options?.[0] ||
+                                  ''
+                                }
                                 onChange={(e) => handleParamChange(param.id, e.target.value)}
                                 className={`border-0 border-b-2 border-slate-700 bg-transparent px-2 py-1 text-center font-bold text-slate-900 focus:outline-none focus:border-[#0176d3] ${
                                   isRh ? 'min-w-[11rem] text-lg' : 'min-w-[4.5rem] text-xl'
                                 }`}
                                 aria-label={param.name}
                               >
-                                <option value="">—</option>
                                 {(param.options || []).map((opt) => (
                                   <option key={opt} value={opt}>
                                     {opt}
@@ -674,12 +722,16 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                       {param ? (
                         <div className="mt-8 flex justify-center">
                           <select
-                            value={currentValue}
+                            value={
+                              currentValue ||
+                              param.defaultValue ||
+                              param.options?.[0] ||
+                              'NEGATIVE'
+                            }
                             onChange={(e) => handleParamChange(param.id, e.target.value)}
                             className="min-w-[12rem] border-0 border-b-2 border-slate-700 bg-transparent px-3 py-1 text-center text-xl font-bold tracking-wide text-slate-900 focus:outline-none focus:border-[#0176d3]"
                             aria-label="Pregnancy test result"
                           >
-                            <option value="">—</option>
                             {(param.options || ['POSITIVE', 'NEGATIVE']).map((opt) => (
                               <option key={opt} value={opt}>
                                 {opt}
@@ -714,11 +766,17 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                       {resultForm.resultSections.map((section) => {
                         const readParam = (paramId: string) =>
                           currentGroup.parameters[paramId]?.value ?? '';
+                        if (!isResultFormSectionApplicable(section, readParam)) return null;
                         const sectionRows = section.rows
                           .filter((row) =>
-                            resultFormRowAppliesToExamCodes(row, [currentGroup.examCode])
+                            resultFormRowAppliesToPanel(
+                              row,
+                              [currentGroup.examCode],
+                              resultForm.id
+                            )
                           )
                           .filter((row) => {
+                            if (isRf09CultureEntryRow(resultForm.id, row)) return true;
                             if (!examinedResultsOnly) return true;
                             return isResultFormRowExamined(row, readParam);
                           });
@@ -784,7 +842,7 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                                 <div className="px-4 py-2.5 text-sm text-slate-800">
                                   {row.examOptions ? (
                                     <select
-                                      value={methodValue}
+                                      value={methodValue || row.examOptions[0] || ''}
                                       onChange={(e) => {
                                         const next = e.target.value;
                                         handleParamChange(methodKey, next);
@@ -796,7 +854,6 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                                       className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
                                       aria-label="Culture method"
                                     >
-                                      <option value="">—</option>
                                       {row.examOptions.map((opt) => (
                                         <option key={opt} value={opt}>
                                           {opt}
@@ -810,13 +867,17 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                                 <div className="px-3 py-1.5">
                                   {row.resultType === 'select' ? (
                                     <select
-                                      value={currentValue}
+                                      value={
+                                        currentValue ||
+                                        param?.defaultValue ||
+                                        resultChoices[0] ||
+                                        ''
+                                      }
                                       onChange={(e) =>
                                         handleParamChange(param?.id || row.id, e.target.value)
                                       }
                                       className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
                                     >
-                                      <option value="">—</option>
                                       {resultChoices.map((opt) => (
                                         <option key={opt} value={opt}>
                                           {opt}
@@ -846,23 +907,119 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                 }
 
                 if (useFlatAnalytes && resultForm?.analytes) {
+                  const fourCol = resultForm.tableColumns === 'test-result-unit-ref';
+                  const threeColUnit = resultForm.tableColumns === 'test-result-unit';
                   return (
+                    <>
+                    {resultForm.specimenFields && resultForm.specimenFields.length > 0 ? (
+                      <OfficialResultSpecimenFields
+                        fields={resultForm.specimenFields}
+                        readValue={(id) => currentGroup.parameters[id]?.value || ''}
+                        writeValue={handleParamChange}
+                      />
+                    ) : null}
                     <div className="lims-result-form-table overflow-hidden">
-                      <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
-                        <div className="px-4 py-2">Test</div>
-                        <div className="px-4 py-2">Result</div>
-                      </div>
+                      {fourCol ? (
+                        <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                          <div className="col-span-4 px-4 py-2">Test</div>
+                          <div className="col-span-3 px-4 py-2">Result</div>
+                          <div className="col-span-2 px-4 py-2">Unit</div>
+                          <div className="col-span-3 px-4 py-2">Ref. Range</div>
+                        </div>
+                      ) : threeColUnit ? (
+                        <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                          <div className="col-span-5 px-4 py-2">Test</div>
+                          <div className="col-span-4 px-4 py-2">Result</div>
+                          <div className="col-span-3 px-4 py-2">Unit</div>
+                        </div>
+                      ) : (
+                        <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                          <div className="px-4 py-2">Test</div>
+                          <div className="px-4 py-2">Result</div>
+                        </div>
+                      )}
                       {resultForm.analytes.map((row) => {
                         const param = currentTemplate.parameters.find((p) => p.id === row.id);
+                        const paramId = param?.id || row.id;
                         const currentValue =
+                          currentGroup.parameters[paramId]?.value ||
                           currentGroup.parameters[row.id]?.value ||
-                          (param ? currentGroup.parameters[param.id]?.value : '') ||
+                          (row.id === 'p_hgt' ? currentGroup.parameters.hgt?.value : '') ||
+                          (row.id === 'p_koh_res' ? currentGroup.parameters.koh?.value : '') ||
                           '';
                         if (examinedResultsOnly && !hasEnteredResult(currentValue)) return null;
                         const isSelect =
                           row.resultType === 'select' || param?.dataType === 'SELECT';
                         const isNumeric =
                           row.resultType === 'numeric' || param?.dataType === 'NUMERIC';
+                        const refText =
+                          row.refRange ||
+                          param?.normalText ||
+                          (param?.specMin !== undefined && param?.specMax !== undefined
+                            ? `${param.specMin} - ${param.specMax}`
+                            : '—');
+                        const selectOptions = row.options || param?.options || [];
+                        const resultControl = isSelect ? (
+                          <select
+                            value={
+                              currentValue ||
+                              param?.defaultValue ||
+                              selectOptions[0] ||
+                              ''
+                            }
+                            onChange={(e) => handleParamChange(paramId, e.target.value)}
+                            className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                          >
+                            {selectOptions.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type={isNumeric ? 'number' : 'text'}
+                            step={isNumeric ? 'any' : undefined}
+                            value={currentValue}
+                            onChange={(e) => handleParamChange(paramId, e.target.value)}
+                            className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                          />
+                        );
+                        if (fourCol) {
+                          return (
+                            <div
+                              key={row.id}
+                              className="lims-rf-grid-row grid grid-cols-12"
+                            >
+                              <div className="col-span-4 px-4 py-2.5 text-sm text-slate-800">
+                                {row.label}
+                              </div>
+                              <div className="col-span-3 px-3 py-1.5">{resultControl}</div>
+                              <div className="col-span-2 px-4 py-2.5 text-sm tabular-nums text-slate-800">
+                                {row.unit || param?.unit || '—'}
+                              </div>
+                              <div className="col-span-3 px-4 py-2.5 text-sm tabular-nums text-slate-800">
+                                {refText}
+                              </div>
+                            </div>
+                          );
+                        }
+                        if (threeColUnit) {
+                          return (
+                            <div
+                              key={row.id}
+                              className="lims-rf-grid-row grid grid-cols-12"
+                            >
+                              <div className="col-span-5 px-4 py-2.5 text-sm text-slate-800">
+                                {row.label}
+                              </div>
+                              <div className="col-span-4 px-3 py-1.5">{resultControl}</div>
+                              <div className="col-span-3 px-4 py-2.5 text-sm tabular-nums text-slate-800">
+                                {row.unit || param?.unit || '—'}
+                              </div>
+                            </div>
+                          );
+                        }
                         return (
                           <div
                             key={row.id}
@@ -871,38 +1028,12 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                             <div className="px-4 py-2.5 text-sm text-slate-800">
                               {row.label}
                             </div>
-                            <div className="px-3 py-1.5">
-                              {isSelect ? (
-                                <select
-                                  value={currentValue}
-                                  onChange={(e) =>
-                                    handleParamChange(param?.id || row.id, e.target.value)
-                                  }
-                                  className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
-                                >
-                                  <option value="">—</option>
-                                  {(row.options || param?.options || []).map((opt) => (
-                                    <option key={opt} value={opt}>
-                                      {opt}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <input
-                                  type={isNumeric ? 'number' : 'text'}
-                                  step={isNumeric ? 'any' : undefined}
-                                  value={currentValue}
-                                  onChange={(e) =>
-                                    handleParamChange(param?.id || row.id, e.target.value)
-                                  }
-                                  className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
-                                />
-                              )}
-                            </div>
+                            <div className="px-3 py-1.5">{resultControl}</div>
                           </div>
                         );
                       })}
                     </div>
+                    </>
                   );
                 }
 
@@ -928,11 +1059,12 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                       <div className="col-span-3 px-3 py-1.5">
                         {param.dataType === 'SELECT' && param.options ? (
                           <select
-                            value={currentValue}
+                            value={
+                              currentValue || param.defaultValue || param.options[0] || ''
+                            }
                             onChange={(e) => handleParamChange(param.id, e.target.value)}
                             className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
                           >
-                            <option value="">—</option>
                             {param.options.map((opt) => (
                               <option key={opt} value={opt}>
                                 {opt}
@@ -990,82 +1122,7 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Laboratory Technician
-                    </label>
-                    <input
-                      type="text"
-                      value={ex.labTechName || ''}
-                      onChange={(e) => updateCurrentExaminers({ labTechName: e.target.value })}
-                      placeholder="Full name"
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md font-semibold text-slate-900"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Medical Technologist *
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={ex.rmtName}
-                        onChange={(e) => updateCurrentExaminers({ rmtName: e.target.value })}
-                        placeholder="Full Name, RMT"
-                        className="flex-1 px-2.5 py-1.5 bg-white border border-slate-300 rounded-md font-semibold text-slate-900"
-                      />
-                      <input
-                        type="text"
-                        value={ex.rmtLicense}
-                        onChange={(e) => updateCurrentExaminers({ rmtLicense: e.target.value })}
-                        placeholder="License No."
-                        className="w-28 px-2.5 py-1.5 bg-white border border-slate-300 rounded-md font-mono text-slate-700"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Pathologist * (Name, License No.)
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={ex.pathologistName}
-                        onChange={(e) => updateCurrentExaminers({ pathologistName: e.target.value })}
-                        placeholder="Pathologist Name, MD, FPSP"
-                        className="flex-1 px-2.5 py-1.5 bg-white border border-slate-300 rounded-md font-semibold text-slate-900"
-                      />
-                      <input
-                        type="text"
-                        value={ex.pathologistLicense || ''}
-                        onChange={(e) =>
-                          updateCurrentExaminers({ pathologistLicense: e.target.value })
-                        }
-                        placeholder="License No."
-                        className="w-28 px-2.5 py-1.5 bg-white border border-slate-300 rounded-md font-mono text-slate-700"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    Clinical Remarks / Diagnostic Notes (Optional)
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={generalRemarks}
-                    onChange={(e) => {
-                      dirtyRef.current = true;
-                      setGeneralRemarks(e.target.value);
-                    }}
-                    placeholder="e.g. Repeated test in duplicate. Specimen integrity verified."
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-xs text-slate-900"
-                  />
-                </div>
+                <ExaminerSignoffFields examiners={ex} onChange={updateCurrentExaminers} />
               </div>
             );
           })()}

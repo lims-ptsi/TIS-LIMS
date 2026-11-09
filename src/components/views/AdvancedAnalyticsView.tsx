@@ -1,17 +1,29 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   BarChart3,
   ClipboardList,
   FileDown,
+  Filter,
   Layers,
   PieChart,
   Printer,
   TestTubes,
   TrendingUp,
   Wallet,
+  X,
 } from 'lucide-react';
 import { LabTestRequisition, Sample } from '../../types/lims';
-import { computeLabAnalytics, CountRow } from '../../utils/labAnalytics';
+import { formatCurrency } from '../../data/examinationCatalog';
+import {
+  computeLabAnalytics,
+  computeRevenueAnalytics,
+  CountRow,
+  DEFAULT_ANALYTICS_FILTERS,
+  filterRequisitionsForAnalytics,
+  REVENUE_DAILY_DEFAULT_DAYS,
+  RevenueGranularity,
+  type AnalyticsFilters,
+} from '../../utils/labAnalytics';
 
 interface AdvancedAnalyticsViewProps {
   requisitions: LabTestRequisition[];
@@ -90,15 +102,56 @@ function KpiCard({
   );
 }
 
+type AnalyticsMainTab = 'operations' | 'revenue';
+
+const MAIN_TABS: { id: AnalyticsMainTab; label: string }[] = [
+  { id: 'operations', label: 'Operations' },
+  { id: 'revenue', label: 'Revenue' },
+];
+
+const REVENUE_PERIODS: { id: RevenueGranularity; label: string }[] = [
+  { id: 'daily', label: 'Daily' },
+  { id: 'weekly', label: 'Weekly' },
+  { id: 'monthly', label: 'Monthly' },
+  { id: 'annual', label: 'Annual' },
+];
+
 export const AdvancedAnalyticsView: React.FC<AdvancedAnalyticsViewProps> = ({
   requisitions,
   samples,
   onNavigate,
 }) => {
-  const snapshot = useMemo(
-    () => computeLabAnalytics(requisitions, samples),
-    [requisitions, samples]
+  const [mainTab, setMainTab] = useState<AnalyticsMainTab>('operations');
+  const [revenuePeriod, setRevenuePeriod] = useState<RevenueGranularity>('daily');
+  const [filters, setFilters] = useState<AnalyticsFilters>(() => DEFAULT_ANALYTICS_FILTERS());
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const filteredRequisitions = useMemo(
+    () => filterRequisitionsForAnalytics(requisitions, filters),
+    [requisitions, filters]
   );
+
+  const snapshot = useMemo(
+    () => computeLabAnalytics(filteredRequisitions, samples),
+    [filteredRequisitions, samples]
+  );
+
+  const revenueSnapshot = useMemo(() => {
+    if (mainTab !== 'revenue') return null;
+    return computeRevenueAnalytics(requisitions, revenuePeriod, filters);
+  }, [requisitions, mainTab, revenuePeriod, filters]);
+
+  const activeFilterCount = useMemo(() => {
+    const defaults = DEFAULT_ANALYTICS_FILTERS();
+    let n = 0;
+    if (filters.category) n += 1;
+    if (filters.status) n += 1;
+    if (filters.priority) n += 1;
+    if (filters.opdWithOrOnly) n += 1;
+    if (filters.query.trim()) n += 1;
+    if (filters.dateFrom !== defaults.dateFrom || filters.dateTo !== defaults.dateTo) n += 1;
+    return n;
+  }, [filters]);
 
   const generatedLabel = useMemo(() => {
     const d = new Date(snapshot.generatedAt);
@@ -166,6 +219,283 @@ export const AdvancedAnalyticsView: React.FC<AdvancedAnalyticsViewProps> = ({
         </div>
       </header>
 
+      <div className="print:hidden space-y-3">
+        <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-0.5">
+          {MAIN_TABS.map((tab) => {
+            const active = mainTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setMainTab(tab.id)}
+                className={`px-3 py-2 text-xs font-semibold rounded-t-md border-b-2 -mb-px transition-colors cursor-pointer ${
+                  active
+                    ? 'border-[#0176d3] text-[#0176d3] bg-white'
+                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left hover:bg-slate-50 cursor-pointer"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <Filter className="w-4 h-4 text-[#0176d3]" />
+              Advanced filters
+              {activeFilterCount > 0 ? (
+                <span className="text-[10px] font-bold uppercase tracking-wide bg-[#0176d3] text-white px-1.5 py-0.5 rounded">
+                  {activeFilterCount} active
+                </span>
+              ) : null}
+            </span>
+            <span className="text-[11px] text-slate-500">
+              {filters.dateFrom} → {filters.dateTo}
+              {filteredRequisitions.length !== requisitions.length
+                ? ` · ${filteredRequisitions.length} of ${requisitions.length} requests`
+                : ''}
+            </span>
+          </button>
+          {filtersOpen ? (
+            <div className="px-4 pb-4 pt-1 border-t border-slate-100 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <label className="flex flex-col gap-1 text-[11px]">
+                <span className="font-semibold text-slate-600 uppercase">From date</span>
+                <input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))}
+                  className="border border-slate-300 rounded px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-[11px]">
+                <span className="font-semibold text-slate-600 uppercase">To date</span>
+                <input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))}
+                  className="border border-slate-300 rounded px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-[11px]">
+                <span className="font-semibold text-slate-600 uppercase">Patient category</span>
+                <select
+                  value={filters.category}
+                  onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))}
+                  className="border border-slate-300 rounded px-2 py-1.5 text-sm"
+                >
+                  <option value="">All categories</option>
+                  <option value="OPD">OPD</option>
+                  <option value="Corporate">Corporate</option>
+                  <option value="Indigent">Indigent</option>
+                  <option value="PhilHealth">PhilHealth</option>
+                  <option value="Pre-Employment / Employee">Pre-Employment / Employee</option>
+                  <option value="Projects">Projects</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-[11px]">
+                <span className="font-semibold text-slate-600 uppercase">Request status</span>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
+                  className="border border-slate-300 rounded px-2 py-1.5 text-sm"
+                >
+                  <option value="">All statuses</option>
+                  <option value="SUBMITTED">Submitted</option>
+                  <option value="RECEIVED">Received</option>
+                  <option value="IN_TESTING">In testing</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-[11px]">
+                <span className="font-semibold text-slate-600 uppercase">Priority</span>
+                <select
+                  value={filters.priority}
+                  onChange={(e) => setFilters((f) => ({ ...f, priority: e.target.value }))}
+                  className="border border-slate-300 rounded px-2 py-1.5 text-sm"
+                >
+                  <option value="">All priorities</option>
+                  <option value="ROUTINE">Routine</option>
+                  <option value="PRIORITY">Priority</option>
+                  <option value="STAT">Stat</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-[11px] sm:col-span-2">
+                <span className="font-semibold text-slate-600 uppercase">Search</span>
+                <input
+                  type="search"
+                  value={filters.query}
+                  placeholder="Patient, case, OR, requisition no., facility…"
+                  onChange={(e) => setFilters((f) => ({ ...f, query: e.target.value }))}
+                  className="border border-slate-300 rounded px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-[11px] sm:col-span-2 lg:col-span-1 self-end pb-2">
+                <input
+                  type="checkbox"
+                  checked={filters.opdWithOrOnly}
+                  onChange={(e) => setFilters((f) => ({ ...f, opdWithOrOnly: e.target.checked }))}
+                  className="h-4 w-4"
+                />
+                <span className="text-slate-700">OPD with official receipt only (paid)</span>
+              </label>
+              <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-4">
+                <button
+                  type="button"
+                  onClick={() => setFilters(DEFAULT_ANALYTICS_FILTERS())}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Reset filters
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {revenueSnapshot ? (
+        <section className="space-y-3">
+          <div className="flex flex-wrap gap-1 print:hidden">
+            {REVENUE_PERIODS.map((p) => {
+              const active = revenuePeriod === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setRevenuePeriod(p.id)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md cursor-pointer ${
+                    active
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+            <KpiCard
+              title="Gross revenue (filtered)"
+              value={formatCurrency(revenueSnapshot.totalAmount)}
+              hint={`${revenueSnapshot.totalRequests} billable request(s) in range`}
+              icon={<Wallet className="w-4 h-4 text-emerald-700" />}
+              accent="bg-emerald-50"
+            />
+            <KpiCard
+              title="Avg revenue / request"
+              value={
+                revenueSnapshot.totalRequests > 0
+                  ? formatCurrency(revenueSnapshot.totalAmount / revenueSnapshot.totalRequests)
+                  : formatCurrency(0)
+              }
+              hint="Examination tariff by patient category"
+              icon={<TrendingUp className="w-4 h-4 text-[#0176d3]" />}
+              accent="bg-sky-50"
+            />
+            <KpiCard
+              title="Requests in filter"
+              value={filteredRequisitions.length}
+              hint={`Of ${requisitions.length} total in system`}
+              icon={<Layers className="w-4 h-4 text-slate-700" />}
+              accent="bg-slate-100"
+            />
+          </div>
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-emerald-600" />
+              {revenuePeriod === 'daily'
+                ? `Daily revenue (last ${REVENUE_DAILY_DEFAULT_DAYS} days in filter)`
+                : revenuePeriod === 'weekly'
+                  ? 'Weekly revenue (Mon–Sun)'
+                  : revenuePeriod === 'monthly'
+                    ? 'Monthly revenue'
+                    : 'Annual revenue'}
+            </h2>
+            <p className="text-[11px] text-slate-500 mt-1 mb-1">
+              {filters.dateFrom} → {filters.dateTo}. Sum of catalog examination fees by request date. Corporate
+              uses HIS tariff; OPD uses standard price
+              {filters.opdWithOrOnly ? ' (paid OPD only).' : '.'}
+            </p>
+            <p className="text-[11px] text-emerald-800 font-medium mb-4 tabular-nums">
+              {revenuePeriod === 'daily' ? (
+                <>
+                  Last {REVENUE_DAILY_DEFAULT_DAYS} days in chart:{' '}
+                  {formatCurrency(revenueSnapshot.buckets.reduce((s, b) => s + b.amount, 0))} · Full filter
+                  gross: {formatCurrency(revenueSnapshot.totalAmount)}
+                </>
+              ) : (
+                <>
+                  Chart &amp; table total:{' '}
+                  {formatCurrency(revenueSnapshot.buckets.reduce((s, b) => s + b.amount, 0))} (matches gross
+                  revenue above)
+                </>
+              )}
+            </p>
+            {revenueSnapshot.buckets.every((b) => b.amount === 0) ? (
+              <p className="text-sm text-slate-500 py-8 text-center">No billable revenue in this period.</p>
+            ) : (
+              <>
+                <div className="flex items-end gap-1 h-44 pt-2">
+                  {(() => {
+                    const max = Math.max(...revenueSnapshot.buckets.map((b) => b.amount), 1);
+                    return revenueSnapshot.buckets.map((bucket) => {
+                      const h = bucket.amount > 0 ? Math.max(8, (bucket.amount / max) * 100) : 4;
+                      return (
+                        <div key={bucket.key} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                          <span className="text-[8px] tabular-nums text-slate-500 truncate w-full text-center">
+                            {bucket.amount > 0 ? formatCurrency(bucket.amount) : ''}
+                          </span>
+                          <div
+                            className={`w-full rounded-t ${bucket.amount ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                            style={{ height: `${h}%` }}
+                            title={`${bucket.label}: ${formatCurrency(bucket.amount)} (${bucket.requestCount} req.)`}
+                          />
+                          <span className="text-[8px] text-slate-400 truncate w-full text-center">
+                            {bucket.label}
+                          </span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+                <div className="overflow-x-auto mt-4">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="text-left text-[10px] uppercase tracking-wide text-slate-500 border-b border-slate-200">
+                        <th className="py-2 pr-4 font-normal">Period</th>
+                        <th className="py-2 pr-4 font-normal w-28">Requests</th>
+                        <th className="py-2 font-normal text-right">Revenue</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...revenueSnapshot.buckets].reverse().map((bucket) => (
+                        <tr key={bucket.key} className="border-b border-slate-50">
+                          <td className="py-2 pr-4 text-slate-800">{bucket.label}</td>
+                          <td className="py-2 pr-4 tabular-nums">{bucket.requestCount}</td>
+                          <td className="py-2 text-right tabular-nums font-medium text-emerald-800">
+                            {formatCurrency(bucket.amount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </article>
+        </section>
+      ) : null}
+
+      {mainTab === 'operations' ? (
+      <>
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <KpiCard
           title="Total requests"
@@ -401,6 +731,8 @@ export const AdvancedAnalyticsView: React.FC<AdvancedAnalyticsViewProps> = ({
           </div>
         </article>
       </section>
+      </>
+      ) : null}
     </div>
   );
 };

@@ -60,6 +60,24 @@
     border: none !important;
     box-shadow: none !important;
   }
+
+  .lims-verify-qr--compact .lims-verify-qr__img,
+  .lims-verify-qr--compact .lims-verify-qr__fallback {
+    width: 64px !important;
+    height: 64px !important;
+    max-width: 64px !important;
+    max-height: 64px !important;
+    object-fit: contain;
+  }
+
+  .lims-verify-qr--full .lims-verify-qr__img,
+  .lims-verify-qr--full .lims-verify-qr__fallback {
+    width: 80px !important;
+    height: 80px !important;
+    max-width: 80px !important;
+    max-height: 80px !important;
+    object-fit: contain;
+  }
 }
 
 /* Chevron Lifecycle Pipeline Bar Styling */
@@ -438,6 +456,49 @@
     visibility: visible !important;
     page-break-after: auto !important;
     break-after: auto !important;
+  }
+
+  /* Verification QR — minimum ~15mm quiet zone for reliable scans */
+  .lims-verify-qr--compact .lims-verify-qr__img,
+  .lims-verify-qr--compact .lims-verify-qr__fallback {
+    width: 17mm !important;
+    height: 17mm !important;
+    max-width: 17mm !important;
+    max-height: 17mm !important;
+  }
+
+  .lims-verify-qr--full .lims-verify-qr__img,
+  .lims-verify-qr--full .lims-verify-qr__fallback {
+    width: 20mm !important;
+    height: 20mm !important;
+    max-width: 20mm !important;
+    max-height: 20mm !important;
+  }
+
+  .lims-verify-qr {
+    border: 1px solid #cbd5e1 !important;
+    padding: 1mm !important;
+    background: #ffffff !important;
+  }
+
+  /* Official CoA: signatures + end line pinned to bottom of printed page */
+  .coa-result-sheet-body {
+    padding-bottom: 42mm !important;
+  }
+
+  .coa-result-sheet-footer {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 4mm 10mm 6mm 10mm !important;
+    background: #ffffff !important;
+    border-top: 1px solid #cbd5e1 !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    box-sizing: border-box !important;
   }
 
   /* Ensure print-only stack is visible when parent uses Tailwind `hidden` */

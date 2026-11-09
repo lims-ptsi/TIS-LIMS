@@ -21,7 +21,8 @@ import {
   Layers,
   Sparkles,
   History,
-  FlaskConical
+  FlaskConical,
+  Building2,
 } from 'lucide-react';
 import { TestDefinition, PriorityLevel, LabTestRequisition, CivilStatus, PatientCategory } from '../../types/lims';
 import { LifecycleChevronBar } from '../layout/LifecycleChevronBar';
@@ -43,6 +44,14 @@ import {
   isStandardSchemeExam,
 } from '../../data/examinationCatalog';
 import { buildPatientDirectory, patientRecordIdFor, PatientRecord, searchPatients, splitPatientName } from '../../data/patientDirectory';
+import {
+  CORPORATE_SENDER_OTHER_ID,
+  CORPORATE_SENDER_REGIONS,
+  CorporateSenderRegionId,
+  corporateSendersForRegion,
+  parseCorporateSenderOrganization,
+  resolveCorporateOrganizationForSave,
+} from '../../data/quezonCityCorporateSenders';
 import { canReviseRequest, reviseLockReason } from '../../data/requestDesk';
 
 const WIZARD_STEPS: { id: 1 | 2 | 3; label: string; detail: string }[] = [
@@ -69,6 +78,8 @@ interface CreateRequisitionViewProps {
   hidePriorVisitExaminations?: boolean;
   /** Information desk stops at step 2; laboratory staff orders examinations later. */
   examinationStepDeferred?: boolean;
+  /** Laboratory staff may only register new requests under Corporate. */
+  restrictToCorporateCategory?: boolean;
   onViewOfficialSlip?: (requisition: LabTestRequisition) => void;
 }
 
@@ -82,6 +93,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
   editingRequest = null,
   hidePriorVisitExaminations = false,
   examinationStepDeferred = false,
+  restrictToCorporateCategory = false,
   onViewOfficialSlip,
 }) => {
   const maxWizardStep: 2 | 3 = examinationStepDeferred ? 2 : 3;
@@ -101,7 +113,13 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
   const [requestDate, setRequestDate] = useState<string>(todayDate);
 
   // 2. Patient Demographics - All Upper Case
-  const [patientCategory, setPatientCategory] = useState<PatientCategory>('OPD');
+  const [patientCategory, setPatientCategory] = useState<PatientCategory>(
+    restrictToCorporateCategory ? 'Corporate' : 'OPD'
+  );
+  const [corporateSenderRegion, setCorporateSenderRegion] =
+    useState<CorporateSenderRegionId>('QUEZON CITY');
+  const [corporateSenderId, setCorporateSenderId] = useState('');
+  const [corporateSenderOther, setCorporateSenderOther] = useState('');
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -180,7 +198,36 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
     setSpecimenType(editingRequest.specimenTypes?.[0] || 'WHOLE BLOOD (K2-EDTA)');
     setTubeCount(editingRequest.tubeCount || 1);
     setClinicalNotes(editingRequest.clinicalNotes || '');
+    if (editingRequest.patientCategory === 'Corporate') {
+      const parsed = parseCorporateSenderOrganization(editingRequest.organizationOrClient);
+      setCorporateSenderRegion(parsed.region);
+      setCorporateSenderId(parsed.senderId);
+      setCorporateSenderOther(parsed.otherText);
+    } else {
+      setCorporateSenderRegion('QUEZON CITY');
+      setCorporateSenderId('');
+      setCorporateSenderOther('');
+    }
   }, [editingRequest, todayDate]);
+
+  useEffect(() => {
+    if (patientCategory !== 'Corporate') {
+      setCorporateSenderRegion('QUEZON CITY');
+      setCorporateSenderId('');
+      setCorporateSenderOther('');
+    }
+  }, [patientCategory]);
+
+  useEffect(() => {
+    if (restrictToCorporateCategory && !editingRequest) {
+      setPatientCategory('Corporate');
+    }
+  }, [restrictToCorporateCategory, editingRequest]);
+
+  const corporateFacilitiesForRegion = useMemo(
+    () => corporateSendersForRegion(corporateSenderRegion),
+    [corporateSenderRegion]
+  );
 
   useEffect(() => {
     if (step !== 2) return;
@@ -322,6 +369,17 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
       }
       if (!address.trim()) {
         return 'Enter the patient address.';
+      }
+      if (patientCategory === 'Corporate') {
+        if (!corporateSenderId) {
+          return 'Select the Quezon City corporation / health facility that sent the samples.';
+        }
+        if (
+          corporateSenderId === CORPORATE_SENDER_OTHER_ID &&
+          !corporateSenderOther.trim()
+        ) {
+          return 'Enter the corporation name under Other.';
+        }
       }
     }
     if (current === 2) {
@@ -478,13 +536,21 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
       patientAge: Number(age) || 0,
       patientGender: sex,
       civilStatus,
-      patientCategory: patientCategory,
+      patientCategory:
+        restrictToCorporateCategory && !editingRequest ? 'Corporate' : patientCategory,
       kindOfExamination: finalTestNames,
       orderingPhysicianOrPI: formattedPhysician,
       orNumber: effectiveOrNumber,
       chargeSlipNumber: effectiveChargeSlip,
       
-      organizationOrClient: 'PHILIPPINE TUBERCULOSIS SOCIETY, INC.',
+      organizationOrClient:
+        patientCategory === 'Corporate'
+          ? resolveCorporateOrganizationForSave(
+              corporateSenderRegion,
+              corporateSenderId,
+              corporateSenderOther
+            ) || 'N/A'
+          : 'PHILIPPINE TUBERCULOSIS SOCIETY, INC.',
       externalRef: effectiveCaseNo,
       priority,
       selectedTestIds: examinationStepDeferred ? [] : selectedTestIds.length > 0 ? selectedTestIds : ['test-cbc'],
@@ -946,18 +1012,36 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   </label>
                   <span className="text-[10px] text-blue-700 font-semibold">(Classification)</span>
                 </div>
-                <select
-                  value={patientCategory}
-                  onChange={(e) => setPatientCategory(e.target.value as PatientCategory)}
-                  className="w-full px-3 py-1.5 rounded border border-[#0176d3] bg-blue-50/50 text-slate-900 font-bold text-xs uppercase focus:outline-none focus:ring-1 focus:ring-[#0176d3] cursor-pointer"
-                >
-                  <option value="OPD">OPD</option>
-                  <option value="PhilHealth">PhilHealth</option>
-                  <option value="Indigent">Indigent</option>
-                  <option value="Corporate">Corporate</option>
-                  <option value="Pre-Employment / Employee">Pre-Employment / Employee</option>
-                  <option value="Projects">Projects</option>
-                </select>
+                {restrictToCorporateCategory ? (
+                  <div
+                    className="w-full px-3 py-1.5 rounded border border-amber-400 bg-amber-50/60 text-slate-900 font-bold text-xs uppercase"
+                    title={
+                      editingRequest
+                        ? 'Category is fixed for this existing request'
+                        : 'Laboratory staff register Corporate requests only'
+                    }
+                  >
+                    {editingRequest ? patientCategory : 'Corporate'}
+                  </div>
+                ) : (
+                  <select
+                    value={patientCategory}
+                    onChange={(e) => setPatientCategory(e.target.value as PatientCategory)}
+                    className="w-full px-3 py-1.5 rounded border border-[#0176d3] bg-blue-50/50 text-slate-900 font-bold text-xs uppercase focus:outline-none focus:ring-1 focus:ring-[#0176d3] cursor-pointer"
+                  >
+                    <option value="OPD">OPD</option>
+                    <option value="PhilHealth">PhilHealth</option>
+                    <option value="Indigent">Indigent</option>
+                    <option value="Corporate">Corporate</option>
+                    <option value="Pre-Employment / Employee">Pre-Employment / Employee</option>
+                    <option value="Projects">Projects</option>
+                  </select>
+                )}
+                {restrictToCorporateCategory && !editingRequest ? (
+                  <p className="text-[10px] text-amber-900 mt-1 font-semibold">
+                    Laboratory intake: Corporate scheme only (HIS tariff + sending facility).
+                  </p>
+                ) : null}
               </div>
 
               <BirthdateAgePicker
@@ -999,6 +1083,69 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                 </select>
               </div>
             </div>
+
+            {patientCategory === 'Corporate' ? (
+              <div className="pt-2 space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-slate-700 font-semibold block mb-1 text-[11px]">
+                      REGION / PROVINCE *
+                    </label>
+                    <select
+                      value={corporateSenderRegion}
+                      onChange={(e) => {
+                        setCorporateSenderRegion(e.target.value as CorporateSenderRegionId);
+                        setCorporateSenderId('');
+                        setCorporateSenderOther('');
+                      }}
+                      className="w-full px-3 py-1.5 rounded border border-amber-300 bg-amber-50/40 text-slate-900 font-semibold text-xs uppercase focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                    >
+                      {CORPORATE_SENDER_REGIONS.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.label.toUpperCase()}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-slate-700 font-semibold block mb-1 text-[11px] flex items-center gap-1">
+                      <Building2 className="w-3.5 h-3.5 text-amber-700" />
+                      <span>SENDING HEALTH FACILITY *</span>
+                    </label>
+                    <select
+                      value={corporateSenderId}
+                      onChange={(e) => setCorporateSenderId(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded border border-amber-300 bg-amber-50/40 text-slate-900 font-semibold text-xs uppercase focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                    >
+                      <option value="">— SELECT FACILITY —</option>
+                      {corporateFacilitiesForRegion.map((sender) => (
+                        <option key={sender.id} value={sender.id}>
+                          {sender.name}
+                        </option>
+                      ))}
+                      <option value={CORPORATE_SENDER_OTHER_ID}>OTHER (SPECIFY)</option>
+                    </select>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Links this Corporate request to the partner facility that sent the specimen(s).
+                </p>
+                {corporateSenderId === CORPORATE_SENDER_OTHER_ID ? (
+                  <div>
+                    <label className="text-slate-700 font-semibold block mb-1 text-[11px]">
+                      OTHER CORPORATION NAME *
+                    </label>
+                    <input
+                      type="text"
+                      value={corporateSenderOther}
+                      onChange={(e) => setCorporateSenderOther(e.target.value.toUpperCase())}
+                      placeholder="FACILITY NAME"
+                      className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] text-xs uppercase"
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             {/* Address */}
             <div className="pt-1">
@@ -1079,6 +1226,15 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                 <div className="text-[10px] font-semibold text-slate-400 uppercase">Patient</div>
                 <div className="font-bold text-slate-900 mt-0.5">{composeFullName()}</div>
                 <div className="text-slate-600 mt-0.5">{patientCategory} · {sex} · {age === '' ? '—' : `${age} yrs`}</div>
+                {patientCategory === 'Corporate' && corporateSenderId ? (
+                  <div className="text-slate-600 mt-0.5 text-[11px]">
+                    {resolveCorporateOrganizationForSave(
+                      corporateSenderRegion,
+                      corporateSenderId,
+                      corporateSenderOther
+                    ) || '—'}
+                  </div>
+                ) : null}
                 {selectedPatient && (
                   <div className="text-[11px] text-emerald-700 font-semibold mt-0.5">
                     Existing record · {selectedPatient.visits.length} previous request{selectedPatient.visits.length === 1 ? '' : 's'}
