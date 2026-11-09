@@ -6,6 +6,7 @@ import {
   type ResolvedVerifyMatch,
 } from '../../utils/officialResultVerification';
 import { loadVerifyRequisitionRecord } from '../../utils/verifyResultDataLoader';
+import { resolveVerifyStatusOnFile } from '../../utils/verifyStatusOnFile';
 import { LabTestRequisition } from '../modals/NewRequisitionModal';
 import { ExamResultGroup } from '../modals/ResultEntryModal';
 
@@ -31,6 +32,7 @@ export function PublicVerifyResultView() {
   const [req, setReq] = useState<LabTestRequisition | null>(null);
   const [group, setGroup] = useState<ExamResultGroup | undefined>();
   const [match, setMatch] = useState<ResolvedVerifyMatch | null>(null);
+  const [resultsRecordStatus, setResultsRecordStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (!params?.rn || !params.tok) {
@@ -51,11 +53,12 @@ export function PublicVerifyResultView() {
         return;
       }
 
-      const { requisition: found, resultMap } = loaded;
+      const { requisition: found, resultMap, resultsRecordStatus: recordStatus } = loaded;
 
       if (!resultMap || Object.keys(resultMap).length === 0) {
         if (!cancelled) {
           setReq(found);
+          setResultsRecordStatus(recordStatus ?? null);
           setNotFoundDetail(
             'This requisition is on file, but no examination results are stored on the server yet. Finalize and save results in Lab-TIS, then scan again.'
           );
@@ -71,6 +74,7 @@ export function PublicVerifyResultView() {
 
       if (cancelled) return;
       setReq(found);
+      setResultsRecordStatus(recordStatus ?? null);
       setMatch(resolved);
       setGroup(resolved?.group);
       setStatus(resolved ? 'valid' : 'invalid');
@@ -84,6 +88,16 @@ export function PublicVerifyResultView() {
   const resultLines = useMemo(
     () => (status === 'valid' ? summarizeVerifiedResultParameters(group, 14) : []),
     [status, group]
+  );
+
+  const statusOnFile = useMemo(
+    () =>
+      resolveVerifyStatusOnFile({
+        requisition: req,
+        resultsRecordStatus,
+        examGroup: group,
+      }),
+    [req, resultsRecordStatus, group]
   );
 
   if (!params) return null;
@@ -147,10 +161,10 @@ export function PublicVerifyResultView() {
                   <dd className="font-semibold text-slate-900 text-right">{req.patientOrSubjectName}</dd>
                 </div>
               ) : null}
-              {group?.status ? (
+              {statusOnFile ? (
                 <div className="flex justify-between gap-2">
                   <dt className="text-slate-500">Status on file</dt>
-                  <dd className="font-semibold text-slate-900 text-right">{group.status}</dd>
+                  <dd className="font-semibold text-slate-900 text-right">{statusOnFile}</dd>
                 </div>
               ) : null}
               <div className="flex justify-between gap-2">
@@ -206,7 +220,7 @@ export function PublicVerifyResultView() {
             <dl className="w-full text-xs space-y-1 border-t border-slate-200 pt-3 font-mono text-slate-600">
               <div>Req: {params.rn}</div>
               <div>Token: {params.tok}</div>
-              {group?.status ? <div>Status on file: {group.status}</div> : null}
+              {statusOnFile ? <div>Status on file: {statusOnFile}</div> : null}
             </dl>
           </div>
         ) : null}

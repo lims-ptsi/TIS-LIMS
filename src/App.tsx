@@ -128,6 +128,7 @@ import {
   tabShouldPullTestResults,
 } from './utils/remoteLimsSync';
 import { normalizeExamResultsForPersistence } from './utils/resultPersistence';
+import { syncExamResultsWorkflowStatus } from './utils/verifyStatusOnFile';
 
 function MainLimsContent() {
   const { isAuthenticated, user, terminalInfo } = useAuth();
@@ -990,7 +991,14 @@ function MainLimsContent() {
       return;
     }
 
-    const newStatus = isFinalize ? 'COMPLETED' : 'IN_TESTING';
+    const foundReq = requisitions.find(
+      (r) => r.id === reqId || r.requisitionNumber === reqId
+    );
+    const newStatus: 'IN_TESTING' | 'COMPLETED' = isFinalize
+      ? 'COMPLETED'
+      : foundReq?.status === 'COMPLETED'
+        ? 'COMPLETED'
+        : 'IN_TESTING';
 
     // Autosave writes the form values only. Status changes on Save Draft / Finalize.
     if (!options?.silent) {
@@ -999,12 +1007,10 @@ function MainLimsContent() {
       );
     }
 
-    const foundReq = requisitions.find(
-      (r) => r.id === reqId || r.requisitionNumber === reqId
-    );
     const numberKey = requisitionNumberKey(foundReq?.requisitionNumber);
     const savedAt = new Date().toISOString();
-    const completeResults = normalizeExamResultsForPersistence(resultsData, foundReq ?? null);
+    const withWorkflowStatus = syncExamResultsWorkflowStatus(resultsData, newStatus);
+    const completeResults = normalizeExamResultsForPersistence(withWorkflowStatus, foundReq ?? null);
 
     // 2. Store every examination input (template parameters and form-only fields)
     setStoredResults((prev) => {

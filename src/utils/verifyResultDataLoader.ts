@@ -12,6 +12,7 @@ export type VerifyDataSource = 'supabase' | 'local';
 export type VerifyLoadedRecord = {
   requisition: LabTestRequisition;
   resultMap: Record<string, ExamResultGroup> | undefined;
+  resultsRecordStatus?: string | null;
   source: VerifyDataSource;
 };
 
@@ -41,10 +42,11 @@ export async function loadVerifyRequisitionRecord(
   if (limsService.isLive) {
     const remoteReq = await limsService.fetchRequisitionByNumber(trimmedRn);
     if (remoteReq) {
-      const resultMap = await limsService.fetchTestResultsMapByRequisitionNumber(trimmedRn);
+      const resultRow = await limsService.fetchTestResultsByRequisitionNumber(trimmedRn);
       return {
         requisition: remoteReq,
-        resultMap: resultMap || undefined,
+        resultMap: resultRow?.results || undefined,
+        resultsRecordStatus: resultRow?.recordStatus ?? null,
         source: 'supabase',
       };
     }

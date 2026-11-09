@@ -176,27 +176,38 @@ export const limsService = {
     }
   },
 
-  async fetchTestResultsMapByRequisitionNumber(
-    requisitionNumber: string
-  ): Promise<Record<string, ExamResultGroup> | null> {
+  async fetchTestResultsByRequisitionNumber(requisitionNumber: string): Promise<{
+    results: Record<string, ExamResultGroup>;
+    recordStatus: string;
+  } | null> {
     const num = requisitionNumber.trim();
     if (!num || !supabase || !isSupabaseConfigured) return null;
     try {
       const { data, error } = await supabase
         .from('test_results')
-        .select('results')
+        .select('results, status')
         .eq('requisition_number', num)
         .maybeSingle();
       if (error) {
-        console.warn('[Supabase] fetchTestResultsMapByRequisitionNumber warning:', error.message);
+        console.warn('[Supabase] fetchTestResultsByRequisitionNumber warning:', error.message);
         return null;
       }
       if (!data?.results || typeof data.results !== 'object') return null;
-      return data.results as Record<string, ExamResultGroup>;
+      return {
+        results: data.results as Record<string, ExamResultGroup>,
+        recordStatus: data.status || 'IN_TESTING',
+      };
     } catch (err) {
-      console.warn('[Supabase] fetchTestResultsMapByRequisitionNumber exception:', err);
+      console.warn('[Supabase] fetchTestResultsByRequisitionNumber exception:', err);
       return null;
     }
+  },
+
+  async fetchTestResultsMapByRequisitionNumber(
+    requisitionNumber: string
+  ): Promise<Record<string, ExamResultGroup> | null> {
+    const row = await this.fetchTestResultsByRequisitionNumber(requisitionNumber);
+    return row?.results ?? null;
   },
 
   async createRequisition(req: LabTestRequisition): Promise<{ success: boolean; error?: string; isOffline?: boolean; createdId?: string }> {
