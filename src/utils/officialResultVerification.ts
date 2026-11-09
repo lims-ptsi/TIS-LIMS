@@ -2,17 +2,55 @@ import { LabTestRequisition } from '../components/modals/NewRequisitionModal';
 import { ExamResultGroup } from '../components/modals/ResultEntryModal';
 import { getResultFormForExam } from '../data/resultFormsCatalog';
 import { generateSha256Hash } from './qcCalculations';
+import { buildVerifyExamCandidates } from './verifyResultCandidates';
 
 const VERIFY_PEPPER =
   (import.meta.env.VITE_RESULT_VERIFY_PEPPER as string | undefined) ||
   'ptsi-lab-tis-official-result-v1';
 
-export function resultGroupFingerprint(group?: ExamResultGroup): string {
+const VERIFY_FINGERPRINT_SKIP = new Set([
+  'res_diagnostic_test',
+  'res_ck_xpert',
+  'res_ck_xpert_ultra',
+  'res_ck_truenat_plus',
+  'res_ck_truenat_rif',
+  'res_ck_tblamp',
+  'res_ck_smear',
+]);
+
+function legacyResultGroupFingerprint(group?: ExamResultGroup): string {
   if (!group) return '';
   return Object.entries(group.parameters || {})
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, val]) => `${key}=${String(val?.value ?? '').trim()}`)
     .join(';');
+}
+
+/** Non-empty clinically relevant fields (stable after DB normalization). */
+function meaningfulResultGroupFingerprint(group?: ExamResultGroup): string {
+  if (!group) return '';
+  return Object.entries(group.parameters || {})
+    .filter(([key, val]) => {
+      const value = String(val?.value ?? '').trim();
+      if (!value) return false;
+      if (VERIFY_FINGERPRINT_SKIP.has(key)) return false;
+      if (key.endsWith('_license') || key.endsWith('_date')) return false;
+      return true;
+    })
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, val]) => `${key}=${String(val?.value ?? '').trim()}`)
+    .join(';');
+}
+
+function fingerprintVariants(group?: ExamResultGroup): string[] {
+  const meaningful = meaningfulResultGroupFingerprint(group);
+  const legacy = legacyResultGroupFingerprint(group);
+  return meaningful === legacy ? [meaningful] : [meaningful, legacy];
+}
+
+/** Fingerprint used when generating new QR codes (meaningful fields only). */
+export function resultGroupFingerprint(group?: ExamResultGroup): string {
+  return meaningfulResultGroupFingerprint(group);
 }
 
 export async function buildOfficialResultVerifyToken(input: {
@@ -97,42 +135,55 @@ export async function resolveVerifiedExamGroup(
   const tok = token.trim().toUpperCase();
   const caseIds = requisitionCaseNoCandidates(requisition);
 
-  const tryKey = async (examKey: string, group: ExamResultGroup) => {
+  const tryCandidate = async (examKey: string, group: ExamResultGroup, preferredFormId?: string) => {
     const form = getResultFormForExam(group.examCode || examKey, requisition.patientGender);
     const formIds = new Set<string>();
     if (hint?.formId) formIds.add(hint.formId);
+    if (preferredFormId) formIds.add(preferredFormId);
     if (form?.id) formIds.add(form.id);
     formIds.add('');
 
-    for (const formId of formIds) {
-      for (const caseNo of caseIds) {
-        const ok = await verifyOfficialResultToken({
-          requisitionNumber: rn,
-          caseNo,
-          examKey,
-          formId: formId || undefined,
-          token: tok,
-          resultGroup: group,
-        });
-        if (!ok) continue;
-        return {
-          examKey,
-          group,
-          formId: formId || form?.id,
-          formLabel: form?.shortName || group.examName,
-        } satisfies ResolvedVerifyMatch;
+    const examKeys = new Set<string>();
+    examKeys.add(examKey);
+    if (group.examCode) examKeys.add(group.examCode);
+
+    for (const key of examKeys) {
+      for (const formId of formIds) {
+        for (const caseNo of caseIds) {
+          const ok = await verifyOfficialResultToken({
+            requisitionNumber: rn,
+            caseNo,
+            examKey: key,
+            formId: formId || undefined,
+            token: tok,
+            resultGroup: group,
+          });
+          if (!ok) continue;
+          return {
+            examKey: key,
+            group,
+            formId: formId || form?.id || preferredFormId,
+            formLabel: form?.shortName || group.examName,
+          } satisfies ResolvedVerifyMatch;
+        }
       }
     }
     return null;
   };
 
-  if (hint?.examKey && resultMap[hint.examKey]) {
-    const hit = await tryKey(hint.examKey, resultMap[hint.examKey]);
-    if (hit) return hit;
+  const candidates = buildVerifyExamCandidates(requisition, resultMap);
+
+  if (hint?.examKey) {
+    const hinted = candidates.filter((c) => c.examKey === hint.examKey);
+    for (const c of hinted.length ? hinted : candidates) {
+      if (hint.examKey && c.examKey !== hint.examKey && !hinted.length) continue;
+      const hit = await tryCandidate(c.examKey, c.group, c.formId);
+      if (hit) return hit;
+    }
   }
 
-  for (const [examKey, group] of Object.entries(resultMap)) {
-    const hit = await tryKey(examKey, group);
+  for (const c of candidates) {
+    const hit = await tryCandidate(c.examKey, c.group, c.formId);
     if (hit) return hit;
   }
   return null;
@@ -175,12 +226,16 @@ export async function verifyOfficialResultToken(input: {
   token: string;
   resultGroup?: ExamResultGroup;
 }): Promise<boolean> {
-  const expected = await buildOfficialResultVerifyToken({
-    requisitionNumber: input.requisitionNumber,
-    caseNo: input.caseNo,
-    examKey: input.examKey,
-    formId: input.formId,
-    resultFingerprint: resultGroupFingerprint(input.resultGroup),
-  });
-  return expected === input.token.trim().toUpperCase();
+  const tok = input.token.trim().toUpperCase();
+  for (const fp of fingerprintVariants(input.resultGroup)) {
+    const expected = await buildOfficialResultVerifyToken({
+      requisitionNumber: input.requisitionNumber,
+      caseNo: input.caseNo,
+      examKey: input.examKey,
+      formId: input.formId,
+      resultFingerprint: fp,
+    });
+    if (expected === tok) return true;
+  }
+  return false;
 }

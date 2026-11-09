@@ -210,13 +210,17 @@ export function PublicVerifyResultView() {
             <ShieldAlert className="w-12 h-12 text-rose-600" />
             <p className="text-base font-bold text-rose-800">Could not verify authenticity</p>
             <p className="text-xs text-slate-600 text-center leading-relaxed">
-              The QR code does not match current laboratory records, or the result may have been changed after
-              printing. Contact the laboratory before relying on this document.
+              The QR seal does not match the result data on file (values may have been edited after printing, or this
+              printout is from an older save). Reprint from Lab-TIS after finalize, or contact the laboratory.
             </p>
             <dl className="w-full text-xs space-y-1 border-t border-slate-200 pt-3 font-mono text-slate-600">
               <div>Req: {params.rn}</div>
               <div>Token: {params.tok}</div>
-              {statusOnFile ? <div>Status on file: {statusOnFile}</div> : null}
+              {statusOnFile ? (
+                <div className="font-sans text-slate-500">
+                  Workflow on server: {statusOnFile} (seal not verified)
+                </div>
+              ) : null}
             </dl>
           </div>
         ) : null}
