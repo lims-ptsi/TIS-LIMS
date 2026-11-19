@@ -39,7 +39,7 @@ function targetTabForKey(key: string): string {
   if (key.endsWith(':NEEDS_EXAMS') || key.endsWith(':READY_RECEIVE')) return 'lab-requests';
   if (key.endsWith(':AT_CASHIER')) return 'payments';
   if (key.endsWith(':IN_TESTING')) return 'testing-queue';
-  if (key.endsWith(':COMPLETED')) return 'coa-reports';
+  if (key.endsWith(':COMPLETED')) return 'pickup-management';
   return 'lab-requests';
 }
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
+  ArrowRight,
   Calendar,
   Check,
   ChevronRight,
@@ -14,6 +15,7 @@ import {
   User,
   Users,
   X,
+  type LucideIcon,
 } from 'lucide-react';
 import { LabTestRequisition, PatientCategory, Sample } from '../../types/lims';
 import {
@@ -28,8 +30,56 @@ import {
   formatResultsPickupWhen,
   isResultsPickedUp,
 } from '../../utils/resultsPickup';
+import { DashboardHeroArtwork } from '../common/LimsDashboardArtwork';
 
 const PATIENT_SELECT_KEY = 'labtis_selected_patient_id';
+
+function HomeMetricCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  iconWrap,
+  iconColor,
+  valueClass = 'text-[var(--lims-navy)]',
+}: {
+  label: string;
+  value: string | number;
+  hint: string;
+  icon: LucideIcon;
+  iconWrap: string;
+  iconColor: string;
+  valueClass?: string;
+}) {
+  return (
+    <article className="lims-card h-full p-4 sm:px-5 sm:py-4 shadow-sm transition-all hover:shadow-md hover:border-[#0878e8]/35">
+      <div className="flex items-center gap-3 sm:gap-4 w-full min-h-[4.5rem]">
+        <span className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${iconWrap}`}>
+          <Icon className={`w-6 h-6 ${iconColor}`} strokeWidth={1.75} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1 pr-2">
+          <p className="text-[11px] sm:text-xs font-bold uppercase tracking-wide text-[var(--lims-navy)] leading-snug">
+            {label}
+          </p>
+          <p className="text-[10px] sm:text-[11px] text-slate-500 mt-1 leading-snug line-clamp-2">{hint}</p>
+        </div>
+        <span className={`text-2xl sm:text-[1.75rem] font-bold tabular-nums leading-none shrink-0 ${valueClass}`}>
+          {value}
+        </span>
+      </div>
+    </article>
+  );
+}
+
+const CATEGORY_BADGE: Record<string, string> = {
+  PhilHealth: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  Indigent: 'bg-violet-50 text-violet-800 border-violet-200',
+  Corporate: 'bg-amber-50 text-amber-800 border-amber-200',
+  'Pre-Employment / Employee': 'bg-cyan-50 text-cyan-800 border-cyan-200',
+  Employee: 'bg-cyan-50 text-cyan-800 border-cyan-200',
+  Projects: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+  OPD: 'bg-sky-50 text-sky-800 border-sky-200',
+};
 
 const STATUS_LABEL: Record<string, string> = {
   SUBMITTED: 'Submitted',
@@ -50,7 +100,7 @@ const STATUS_TONE: Record<string, string> = {
 const STATUS_DOT: Record<string, string> = {
   SUBMITTED: 'bg-amber-500',
   RECEIVED: 'bg-sky-500',
-  IN_TESTING: 'bg-[#0176d3]',
+  IN_TESTING: 'bg-[#0878e8]',
   COMPLETED: 'bg-emerald-500',
   CANCELLED: 'bg-slate-400',
 };
@@ -103,7 +153,7 @@ function CopyChip({ label, value }: { label: string; value: string }) {
     >
       <span className="text-slate-500 font-medium">{label}</span>
       <span
-        className={`font-semibold tabular-nums ${label === 'Barcode' ? 'text-[#0176d3]' : 'text-slate-900'}`}
+        className={`font-semibold tabular-nums ${label === 'Barcode' ? 'text-[#0878e8]' : 'text-slate-900'}`}
       >
         {value}
       </span>
@@ -151,7 +201,7 @@ function VisitTimelineItem({
         <span className="absolute left-[9px] top-5 bottom-0 w-px bg-slate-200" aria-hidden />
       ) : null}
       <span
-        className="absolute left-0 top-1 w-[18px] h-[18px] rounded-full border-2 border-white bg-[#0176d3] shadow-sm ring-2 ring-[#c5daf8]"
+        className="absolute left-0 top-1 w-[18px] h-[18px] rounded-full border-2 border-white bg-[#0878e8] shadow-sm ring-2 ring-[#c5daf8]"
         aria-hidden
       />
 
@@ -284,7 +334,7 @@ function VisitTimelineItem({
                 <button
                   type="button"
                   onClick={() => setExamsExpanded(!examsExpanded)}
-                  className="mt-1.5 text-xs font-semibold text-[#0176d3] hover:underline cursor-pointer"
+                  className="mt-1.5 text-xs font-semibold text-[#0878e8] hover:underline cursor-pointer"
                 >
                   {examsExpanded ? 'Show fewer examinations' : `Show ${exams.length - 5} more examinations`}
                 </button>
@@ -387,7 +437,7 @@ function PatientDetailDrawer({
         <div className="shrink-0 px-4 py-3.5 border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#0176d3]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#0878e8]">
                 Patient history
               </p>
               <h2
@@ -468,7 +518,7 @@ function PatientDetailDrawer({
                 <button
                   type="button"
                   onClick={() => handleOpenSpecimen({ id: latestVisit.sampleId! } as Sample, latestReq)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md bg-[#0176d3] hover:bg-[#0060b2] text-white cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md bg-[#0878e8] hover:bg-[#0669c9] text-white cursor-pointer"
                 >
                   <FlaskConical className="w-3.5 h-3.5" />
                   Latest specimen
@@ -594,40 +644,117 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
     searchRef.current?.focus();
   };
 
-  return (
-    <div className="lims-page-shell">
-      <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm overflow-hidden">
-          <div className="px-3 py-2.5 sm:px-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-md bg-[#eef4ff] border border-[#c5daf8] flex items-center justify-center text-[#0176d3] shrink-0">
-                <Users className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-base sm:text-lg font-semibold text-slate-900 tracking-tight leading-tight">
-                  Patient records
-                </h1>
-                <p className="text-[11px] text-slate-500 truncate">
-                  {filtered.length} of {directory.length} patients · click a row for full history
-                </p>
-              </div>
-            </div>
-            <dl className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] sm:justify-end shrink-0">
-              {[
-                { label: 'Patients', value: summary.totalPatients },
-                { label: 'Visits', value: summary.totalVisits },
-                { label: 'Completed', value: summary.completed, accent: 'text-emerald-700' },
-                { label: 'This month', value: summary.visitsThisMonth, accent: 'text-[#0176d3]' },
-              ].map((item, i) => (
-                <div key={item.label} className="flex items-center gap-1.5">
-                  {i > 0 ? <span className="hidden sm:inline text-slate-300" aria-hidden>|</span> : null}
-                  <dt className="text-slate-500">{item.label}</dt>
-                  <dd className={`font-semibold tabular-nums text-slate-900 ${item.accent || ''}`}>{item.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
+  const activePatients = useMemo(
+    () =>
+      directory.filter((r) =>
+        r.visits.some((v) => ['SUBMITTED', 'RECEIVED', 'IN_TESTING'].includes(v.status))
+      ).length,
+    [directory]
+  );
 
-          <div className="px-3 py-2 sm:px-4 border-b border-slate-200 bg-slate-50/60 flex flex-col lg:flex-row lg:items-center gap-2">
+  const focusSearch = () => {
+    window.setTimeout(() => searchRef.current?.focus(), 0);
+  };
+
+  return (
+    <div className="lims-page-shell space-y-4">
+      <section className="lims-card relative overflow-hidden border-[var(--lims-border)] bg-gradient-to-br from-white via-white to-sky-50/30">
+        <DashboardHeroArtwork />
+        <div className="relative z-[1] px-5 py-5 sm:px-6 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-[#0878e8] text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-200/50">
+            <Users className="w-7 h-7" strokeWidth={1.75} aria-hidden />
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#0878e8] bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
+              Patient directory
+            </span>
+            <h1 className="text-xl sm:text-2xl font-bold text-[var(--lims-navy)] mt-2 tracking-tight">
+              Patient records
+            </h1>
+            <p className="text-sm text-slate-600 mt-1 max-w-2xl">
+              Visit history, billing category, and latest case status — select a row to open full timeline.
+            </p>
+          </div>
+          <div className="sm:text-right shrink-0 sm:pl-6 border-l border-[var(--lims-border)]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Showing</p>
+            <p className="text-2xl font-bold text-[var(--lims-navy)] tabular-nums leading-none mt-1">
+              {filtered.length}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">of {directory.length} patients</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <HomeMetricCard
+          label="Patients"
+          value={summary.totalPatients}
+          hint="Unique patients in the directory"
+          icon={Users}
+          iconWrap="bg-sky-50"
+          iconColor="text-sky-600"
+        />
+        <HomeMetricCard
+          label="Total visits"
+          value={summary.totalVisits}
+          hint="All laboratory requests linked to patients"
+          icon={FileText}
+          iconWrap="bg-slate-100"
+          iconColor="text-slate-700"
+        />
+        <HomeMetricCard
+          label="Completed visits"
+          value={summary.completed}
+          hint="Released results on record"
+          icon={Check}
+          iconWrap="bg-emerald-50"
+          iconColor="text-emerald-600"
+          valueClass="text-emerald-700"
+        />
+        <HomeMetricCard
+          label="Active patients"
+          value={activePatients}
+          hint={`${summary.visitsThisMonth} visit(s) this month`}
+          icon={Activity}
+          iconWrap="bg-blue-50"
+          iconColor="text-[#0878e8]"
+          valueClass="text-[#0878e8]"
+        />
+      </section>
+
+      <button
+        type="button"
+        onClick={() => {
+          setVisitStatus('ACTIVE');
+          focusSearch();
+        }}
+        className="relative overflow-hidden w-full text-left rounded-xl bg-gradient-to-r from-[var(--lims-navy)] via-[#0c2d55] to-[#0a2240] hover:from-[#0c2d55] hover:to-[#081a33] text-white shadow-md px-5 py-4 flex items-center justify-between gap-4 cursor-pointer border border-[#0a2240]"
+      >
+        <span className="relative z-[1] flex items-center gap-3 min-w-0">
+          <span className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+            <Search className="w-5 h-5 text-sky-200" strokeWidth={1.75} />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-base font-semibold">Find patients with active visits</span>
+            <span className="block text-sm text-slate-300 mt-0.5">
+              Filter to open cases and jump to name, case, or barcode search.
+            </span>
+          </span>
+        </span>
+        <span className="relative z-[1] inline-flex items-center gap-2 text-sm font-semibold bg-white text-[var(--lims-navy)] px-4 py-2 rounded-lg shrink-0 shadow-sm">
+          Search
+          <ArrowRight className="w-4 h-4" />
+        </span>
+      </button>
+
+      <div className="lims-card overflow-hidden shadow-sm">
+          <div className="px-5 py-4 border-b border-[var(--lims-border)]">
+            <h2 className="text-base font-semibold text-[var(--lims-navy)]">Patient directory</h2>
+            <p className="text-xs text-slate-500 mt-1">
+              {filtered.length} of {directory.length} patients — click a row for full history
+            </p>
+          </div>
+          <div className="px-5 py-3 border-b border-[var(--lims-border)] bg-[#f8fafc]/60 flex flex-col lg:flex-row lg:items-center gap-2">
             <div className="relative flex-1 min-w-0 lg:max-w-xs">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400 pointer-events-none" />
               <input
@@ -636,7 +763,7 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search name, case, barcode…"
-                className="w-full pl-8 pr-8 py-1.5 text-xs rounded-md border border-[#d8dde6] bg-white focus:outline-none focus:border-[#0176d3] focus:ring-1 focus:ring-[#0176d3]"
+                className="lims-input pl-8 pr-8 py-2 text-xs"
                 aria-label="Search patients"
               />
               {query ? (
@@ -654,7 +781,7 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as PatientCategory | 'ALL')}
-                className="text-xs rounded-md border border-[#d8dde6] px-2 py-1 bg-white text-slate-800 min-w-0 flex-1 sm:flex-none sm:max-w-[140px]"
+                className="lims-input text-xs px-2 py-1.5 min-w-0 flex-1 sm:flex-none sm:max-w-[140px]"
                 aria-label="Filter by category"
               >
                 {CATEGORIES.map((c) => (
@@ -666,7 +793,7 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
               <select
                 value={sex}
                 onChange={(e) => setSex(e.target.value as typeof sex)}
-                className="text-xs rounded-md border border-[#d8dde6] px-2 py-1 bg-white text-slate-800"
+                className="lims-input text-xs px-2 py-1.5"
                 aria-label="Filter by sex"
               >
                 <option value="ALL">All sex</option>
@@ -677,7 +804,7 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
               <select
                 value={visitStatus}
                 onChange={(e) => setVisitStatus(e.target.value as typeof visitStatus)}
-                className="text-xs rounded-md border border-[#d8dde6] px-2 py-1 bg-white text-slate-800 min-w-0 flex-1 sm:flex-none sm:max-w-[150px]"
+                className="lims-input text-xs px-2 py-1.5 min-w-0 flex-1 sm:flex-none sm:max-w-[150px]"
                 aria-label="Filter by visit status"
               >
                 <option value="ALL">Any visit status</option>
@@ -687,7 +814,7 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                className="text-xs rounded-md border border-[#d8dde6] px-2 py-1 bg-white text-slate-800"
+                className="lims-input text-xs px-2 py-1.5"
                 aria-label="Sort patients"
               >
                 <option value="recent">Recent visit</option>
@@ -698,7 +825,7 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="text-[11px] font-semibold text-[#0176d3] hover:underline cursor-pointer px-1 shrink-0"
+                  className="text-[11px] font-semibold text-[#0878e8] hover:underline cursor-pointer px-1 shrink-0"
                 >
                   Reset
                 </button>
@@ -707,18 +834,18 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-xs">
+            <table className="w-full min-w-[720px] text-left text-xs">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="py-2 px-3">Patient</th>
-                  <th className="py-2 px-2">Date of birth</th>
-                  <th className="py-2 px-2">Sex</th>
-                  <th className="py-2 px-2">Category</th>
-                  <th className="py-2 px-2 text-center">Visits</th>
-                  <th className="py-2 px-2">Last visit</th>
-                  <th className="py-2 px-2">Status</th>
-                  <th className="py-2 px-3">Latest case</th>
-                  <th className="py-2 px-1 w-8" aria-hidden />
+                <tr className="bg-[#f8fafc] text-[11px] font-semibold uppercase tracking-wide text-slate-500 border-b border-[var(--lims-border)]">
+                  <th className="px-5 py-3">Patient</th>
+                  <th className="px-3 py-3">Date of birth</th>
+                  <th className="px-3 py-3">Sex</th>
+                  <th className="px-3 py-3">Category</th>
+                  <th className="px-3 py-3 text-center">Visits</th>
+                  <th className="px-3 py-3">Last visit</th>
+                  <th className="px-3 py-3">Status</th>
+                  <th className="px-3 py-3">Latest case</th>
+                  <th className="w-10 px-2 py-3" aria-hidden />
                 </tr>
               </thead>
               <tbody>
@@ -731,7 +858,7 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
                         <button
                           type="button"
                           onClick={clearFilters}
-                          className="mt-3 text-xs font-semibold text-[#0176d3] hover:underline cursor-pointer"
+                          className="mt-3 text-xs font-semibold text-[#0878e8] hover:underline cursor-pointer"
                         >
                           Reset filters
                         </button>
@@ -748,42 +875,50 @@ export const PatientRecordsView: React.FC<PatientRecordsViewProps> = ({
                       <tr
                         key={record.id}
                         onClick={() => openDrawer(record.id)}
-                        className="border-b border-slate-100 hover:bg-[#eef4ff]/60 cursor-pointer transition-colors uppercase font-normal"
+                        className="border-b border-[var(--lims-border)] hover:bg-[#f8fafc] cursor-pointer transition-colors"
                       >
-                        <td className="py-2 px-3 text-slate-900">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="relative w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-                              <User className="w-3 h-3 text-slate-600" />
+                        <td className="py-2.5 px-5 text-sm font-medium text-slate-900">
+                          <div className="flex items-center gap-2 min-w-0 normal-case">
+                            <div className="relative w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                              <User className="w-3.5 h-3.5 text-slate-600" />
                               <span
-                                className={`absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ring-2 ring-white ${STATUS_DOT[statusKey] || STATUS_DOT.SUBMITTED}`}
+                                className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ring-2 ring-white ${STATUS_DOT[statusKey] || STATUS_DOT.SUBMITTED}`}
                               />
                             </div>
-                            <span className="truncate max-w-[200px]">
-                              {formatPersonName(record.fullName)}
-                            </span>
+                            <span className="truncate max-w-[220px]">{formatPersonName(record.fullName)}</span>
                           </div>
                         </td>
-                        <td className="py-2 px-2 tabular-nums text-slate-800">{record.birthday || '—'}</td>
-                        <td className="py-2 px-2 text-slate-700">{record.sex}</td>
-                        <td className="py-2 px-2 text-slate-700 max-w-[120px] truncate">{record.category}</td>
-                        <td className="py-2 px-2 text-center tabular-nums text-slate-900">
+                        <td className="px-3 py-2.5 tabular-nums text-slate-600">{record.birthday || '—'}</td>
+                        <td className="px-3 py-2.5 text-slate-700 uppercase text-[11px]">{record.sex}</td>
+                        <td className="px-3 py-2.5 max-w-[140px]">
+                          <span
+                            className={`inline-flex text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border truncate max-w-full ${
+                              CATEGORY_BADGE[record.category] ||
+                              'bg-slate-50 text-slate-700 border-slate-200'
+                            }`}
+                            title={record.category}
+                          >
+                            {record.category}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-center tabular-nums font-semibold text-slate-900">
                           {record.visits.length}
                         </td>
-                        <td className="py-2 px-2 tabular-nums text-slate-800 whitespace-nowrap">
+                        <td className="px-3 py-2.5 tabular-nums text-slate-600 whitespace-nowrap">
                           {last?.requestDate || '—'}
                         </td>
-                        <td className="py-2 px-2 normal-case">
+                        <td className="px-3 py-2.5">
                           <span
-                            className={`inline-flex text-[9px] font-normal uppercase tracking-wide px-1.5 py-0.5 rounded-full border ${tone}`}
+                            className={`inline-flex text-[10px] font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full border ${tone}`}
                           >
                             {label}
                           </span>
                         </td>
-                        <td className="py-2 px-3 tabular-nums text-slate-800 whitespace-nowrap">
+                        <td className="px-3 py-2.5 tabular-nums text-slate-800 whitespace-nowrap font-mono text-[11px]">
                           {last?.caseNo || last?.requisitionNumber || '—'}
                         </td>
-                        <td className="py-2 px-1 text-slate-300">
-                          <ChevronRight className="w-3.5 h-3.5" />
+                        <td className="px-2 py-2.5 text-slate-400">
+                          <ChevronRight className="w-4 h-4" />
                         </td>
                       </tr>
                     );

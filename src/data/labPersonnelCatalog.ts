@@ -138,6 +138,10 @@ export const LAB_PERSONNEL: LabPersonnel[] = [
 ];
 
 export function personnelForRole(role: LabPersonnelRole): LabPersonnel[] {
+  // Performed-by may be any rostered signatory (not only RMLT / “performed” tags).
+  if (role === 'performed') {
+    return [...LAB_PERSONNEL].sort((a, b) => a.name.localeCompare(b.name));
+  }
   return LAB_PERSONNEL.filter((p) => p.role === role);
 }
 

@@ -82,7 +82,7 @@ export const BoxesView: React.FC<BoxesViewProps> = ({
   return (
     <div className="lims-page-shell animate-fadeIn">
       {/* 1. Header Card */}
-      <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="lims-card p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           {onBackToSamples && (
             <button
@@ -93,13 +93,13 @@ export const BoxesView: React.FC<BoxesViewProps> = ({
               <ArrowLeft className="w-4 h-4" />
             </button>
           )}
-          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3] shadow-xs">
+          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs">
             <Box className="w-6 h-6" />
           </div>
           <div>
             <div className="text-xs text-slate-500 font-medium">Cold Vault Inventory</div>
             <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <span className="font-mono text-[#0176d3]">{currentBox.id}</span>
+              <span className="font-mono text-[#0878e8]">{currentBox.id}</span>
               <span className="text-sm font-normal text-slate-500">· {currentBox.name}</span>
             </h1>
           </div>
@@ -113,7 +113,7 @@ export const BoxesView: React.FC<BoxesViewProps> = ({
               onClick={() => setGridFormat('96_WELL')}
               className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
                 gridFormat === '96_WELL'
-                  ? 'bg-white text-[#0176d3] font-bold shadow-2xs'
+                  ? 'bg-white text-[#0878e8] font-bold shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -124,7 +124,7 @@ export const BoxesView: React.FC<BoxesViewProps> = ({
               onClick={() => setGridFormat('81_CRYO')}
               className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
                 gridFormat === '81_CRYO'
-                  ? 'bg-white text-[#0176d3] font-bold shadow-2xs'
+                  ? 'bg-white text-[#0878e8] font-bold shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -139,7 +139,7 @@ export const BoxesView: React.FC<BoxesViewProps> = ({
               setSelectedBoxId(e.target.value);
               setSelectedWell(null);
             }}
-            className="px-3 py-1.5 text-xs rounded border border-[#d8dde6] bg-white text-slate-900 font-mono font-semibold focus:outline-none focus:border-[#0176d3] cursor-pointer"
+            className="px-3 py-1.5 text-xs rounded border border-[#d8dde6] bg-white text-slate-900 font-mono font-semibold focus:outline-none focus:border-[#0878e8] cursor-pointer"
           >
             {STANDARD_BOXES.map((b) => {
               const occ = samples.filter((s) => (s.storageLocation?.box || '').toUpperCase() === b.id.toUpperCase()).length;
@@ -160,7 +160,7 @@ export const BoxesView: React.FC<BoxesViewProps> = ({
         <div className="lg:col-span-8 lims-card p-5 space-y-4">
           <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
             <h3 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-              <Thermometer className="w-4 h-4 text-[#0176d3]" />
+              <Thermometer className="w-4 h-4 text-[#0878e8]" />
               <span>Cryogenic Grid Matrix ({currentBox.temp}) · {gridFormat === '96_WELL' ? '8 Rows × 12 Cols' : '9 Rows × 9 Cols'}</span>
             </h3>
             
@@ -224,7 +224,7 @@ export const BoxesView: React.FC<BoxesViewProps> = ({
                 const nextFree = findNextAvailableWell(currentBox.id, samples, gridFormat);
                 setSelectedWell(nextFree);
               }}
-              className="inline-flex items-center gap-1 text-[#0176d3] hover:underline font-semibold cursor-pointer"
+              className="inline-flex items-center gap-1 text-[#0878e8] hover:underline font-semibold cursor-pointer"
             >
               <Sparkles className="w-3 h-3" />
               <span>Jump to next free well</span>
@@ -239,7 +239,7 @@ export const BoxesView: React.FC<BoxesViewProps> = ({
           <div className="lims-card p-4 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <h3 className="font-bold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-[#0176d3]" />
+                <MapPin className="w-3.5 h-3.5 text-[#0878e8]" />
                 <span>Selected Cell: <strong className="font-mono text-slate-900 text-sm">{selectedWell || 'None'}</strong></span>
               </h3>
               {selectedWell && (
@@ -258,7 +258,7 @@ export const BoxesView: React.FC<BoxesViewProps> = ({
                 <div className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-200 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] uppercase font-bold text-slate-500">Specimen Barcode</span>
-                    <span className="font-mono font-bold text-[#0176d3]">{activeSelectedSample.barcode}</span>
+                    <span className="font-mono font-bold text-[#0878e8]">{activeSelectedSample.barcode}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] uppercase font-bold text-slate-500">Sample Name</span>
@@ -282,7 +282,7 @@ export const BoxesView: React.FC<BoxesViewProps> = ({
                   <button
                     type="button"
                     onClick={() => onSelectSample(activeSelectedSample)}
-                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white rounded-md font-semibold text-xs transition-colors shadow-2xs cursor-pointer"
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-[#0878e8] hover:bg-[#0669c9] text-white rounded-md font-semibold text-xs transition-colors shadow-2xs cursor-pointer"
                   >
                     <span>Open Full Specimen Detail</span>
                     <ExternalLink className="w-3.5 h-3.5" />
@@ -329,7 +329,7 @@ export const BoxesView: React.FC<BoxesViewProps> = ({
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-400">Target Temp:</span>
-                <span className="font-mono font-bold text-[#0176d3]">{currentBox.temp}</span>
+                <span className="font-mono font-bold text-[#0878e8]">{currentBox.temp}</span>
               </div>
             </div>
           </div>

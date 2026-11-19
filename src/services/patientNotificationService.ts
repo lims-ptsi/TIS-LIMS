@@ -1,5 +1,11 @@
 import { LabTestRequisition } from '../types/lims';
 import { isValidPatientEmail, normalizePatientPhone } from '../utils/patientContact';
+import {
+  buildResultsReadyEmailContent,
+  PICKUP_EMAIL_LAB_ADDRESS,
+  PICKUP_EMAIL_LAB_NAME,
+  PICKUP_EMAIL_LAB_PHONE,
+} from './patientPickupEmailTemplate';
 
 const NOTIFICATION_LOG_KEY = 'lims_patient_notifications_v1';
 
@@ -12,6 +18,7 @@ export interface ResultsReadyNotificationPayload {
   to: string;
   subject?: string;
   body: string;
+  bodyHtml?: string;
   sentAt: string;
 }
 
@@ -23,53 +30,21 @@ export interface SendResultsReadyResult {
   skippedReason?: string;
 }
 
-const LAB_NAME = 'Philippine Tuberculosis Society, Inc. — Clinical Diagnostic Laboratory';
-const LAB_ADDRESS = 'Quezon Institute Compound, E. Rodriguez Sr. Avenue, Quezon City';
-const LAB_PHONE = '(02) 0000 - 0000';
-
 export function buildResultsReadySmsBody(req: LabTestRequisition): string {
   const name = (req.patientOrSubjectName || 'Patient').trim();
   const caseRef = req.caseNo || req.requisitionNumber;
   return (
-    `${LAB_NAME}: Dear ${name}, your laboratory results (Case ${caseRef}) are COMPLETED and ready for pickup. ` +
-    `Visit ${LAB_ADDRESS}. Questions: ${LAB_PHONE}. Please bring ID and OR/receipt.`
+    `${PICKUP_EMAIL_LAB_NAME}: Dear ${name}, your laboratory results (Case ${caseRef}) are COMPLETED and ready for pickup. ` +
+    `Visit ${PICKUP_EMAIL_LAB_ADDRESS}. Questions: ${PICKUP_EMAIL_LAB_PHONE}. Please bring ID and OR/receipt.`
   );
 }
 
 export function buildResultsReadyEmail(req: LabTestRequisition): {
   subject: string;
   body: string;
+  bodyHtml: string;
 } {
-  const name = (req.patientOrSubjectName || 'Patient').trim();
-  const caseRef = req.caseNo || req.requisitionNumber;
-  const reqNo = req.requisitionNumber;
-  const exams =
-    (req.kindOfExamination?.length ? req.kindOfExamination : req.selectedTestNames) || [];
-  const examLine = exams.slice(0, 5).join(', ') + (exams.length > 5 ? ` (+${exams.length - 5} more)` : '');
-
-  const subject = `Laboratory results ready for pickup — ${caseRef}`;
-  const body = [
-    `Dear ${name},`,
-    '',
-    'Your laboratory examination results have been completed and are ready for pickup at the laboratory release desk.',
-    '',
-    `Case number: ${caseRef}`,
-    `Requisition: ${reqNo}`,
-    examLine ? `Examination(s): ${examLine}` : '',
-    '',
-    'Pickup location:',
-    LAB_NAME,
-    LAB_ADDRESS,
-    `Tel: ${LAB_PHONE}`,
-    '',
-    'Please bring a valid ID and your official receipt (OR) when collecting your results.',
-    '',
-    'This is an automated message. Do not reply to this email.',
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  return { subject, body };
+  return buildResultsReadyEmailContent(req);
 }
 
 function resolvePatientNotifyWebhookUrl(): string | undefined {
@@ -126,14 +101,17 @@ async function dispatchChannel(payload: ResultsReadyNotificationPayload): Promis
 export async function sendResultsReadyPickupNotifications(
   req: LabTestRequisition
 ): Promise<SendResultsReadyResult> {
-  const phone = normalizePatientPhone(req.patientPhone);
+  const smsEnabled = isPatientSmsConfigured();
+  const phone = smsEnabled ? normalizePatientPhone(req.patientPhone) : null;
   const email = isValidPatientEmail(req.patientEmail) ? String(req.patientEmail).trim() : null;
 
-  if (!phone && !email) {
+  if (!email && !phone) {
     return {
       smsSent: false,
       emailSent: false,
-      skippedReason: 'No mobile number or email on this request. Add contact info when creating the lab request.',
+      skippedReason: smsEnabled
+        ? 'No mobile number or email on this request. Add contact info when creating the lab request.'
+        : 'No email on this request. SMS is optional and not set up yet — add a patient email on the lab request.',
     };
   }
 
@@ -160,7 +138,7 @@ export async function sendResultsReadyPickupNotifications(
   }
 
   if (email) {
-    const { subject, body } = buildResultsReadyEmail(req);
+    const { subject, body, bodyHtml } = buildResultsReadyEmail(req);
     const result = await dispatchChannel({
       requisitionId: req.id,
       requisitionNumber: req.requisitionNumber,
@@ -170,6 +148,7 @@ export async function sendResultsReadyPickupNotifications(
       to: email,
       subject,
       body,
+      bodyHtml,
       sentAt,
     });
     if (result.ok) emailSent = true;
@@ -182,6 +161,12 @@ export async function sendResultsReadyPickupNotifications(
 export function isPatientNotifyWebhookConfigured(): boolean {
   const webhook = import.meta.env.VITE_PATIENT_NOTIFY_WEBHOOK_URL as string | undefined;
   return Boolean(webhook?.trim());
+}
+
+/** Lab-wide SMS gateway (Twilio, etc.). Off by default — email-only pickup alerts. */
+export function isPatientSmsConfigured(): boolean {
+  const raw = import.meta.env.VITE_PATIENT_SMS_ENABLED as string | undefined;
+  return raw === 'true' || raw === '1';
 }
 
 export function readPatientNotificationLog(): ResultsReadyNotificationPayload[] {

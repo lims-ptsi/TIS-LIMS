@@ -91,7 +91,7 @@ interface ResultFormsViewProps {
 type FormValues = Record<string, string>;
 
 const inputUnderline =
-  'w-full border-0 bg-transparent px-0 py-0 text-[11px] print:text-[9px] font-bold text-slate-900 placeholder:text-slate-300 focus:outline-none focus:border-[#0176d3]';
+  'w-full border-0 bg-transparent px-0 py-0 text-[11px] print:text-[9px] font-bold text-slate-900 placeholder:text-slate-300 focus:outline-none focus:border-[#0878e8]';
 
 function blankValues(form: ResultFormDefinition): FormValues {
   const values: FormValues = {};
@@ -161,7 +161,7 @@ function FieldControl({
           onChange={(e) => onChange(field.id, e.target.value)}
           placeholder={field.placeholder}
           rows={2}
-          className="w-full border border-slate-300 rounded-sm px-2 py-1.5 text-sm text-slate-900 placeholder:text-slate-300 focus:outline-none focus:border-[#0176d3] resize-y print:border-slate-800"
+          className="w-full border border-slate-300 rounded-sm px-2 py-1.5 text-sm text-slate-900 placeholder:text-slate-300 focus:outline-none focus:border-[#0878e8] resize-y print:border-slate-800"
         />
       ) : (
         <input
@@ -199,7 +199,7 @@ function AnalyteResultInput({
       <select
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm font-semibold text-slate-900 focus:outline-none focus:border-[#0176d3] print:border-slate-800"
+        className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm font-semibold text-slate-900 focus:outline-none focus:border-[#0878e8] print:border-slate-800"
       >
         <option value="">{analyte.placeholder || '—'}</option>
         {(analyte.options || []).map((opt) => (
@@ -217,7 +217,7 @@ function AnalyteResultInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={analyte.placeholder}
         rows={2}
-        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3] resize-y print:border-slate-800"
+        className="w-full border border-slate-300 rounded-sm px-2 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0878e8] resize-y print:border-slate-800"
       />
     );
   }
@@ -228,7 +228,7 @@ function AnalyteResultInput({
       value={value || ''}
       onChange={(e) => onChange(e.target.value)}
       placeholder={analyte.placeholder}
-      className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3] print:border-slate-800"
+      className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0878e8] print:border-slate-800"
     />
   );
 }
@@ -365,9 +365,9 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
   return (
     <div className="lims-page-shell text-slate-900">
       {/* Header */}
-      <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
+      <div className="lims-card p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3] shadow-xs">
+          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs">
             <ClipboardList className="w-5 h-5" />
           </div>
           <div>
@@ -404,7 +404,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
             onClick={() => setExaminedResultsOnly((v) => !v)}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border shadow-xs cursor-pointer ${
               examinedResultsOnly
-                ? 'bg-[#0176d3]/10 border-[#0176d3]/40 text-[#014486]'
+                ? 'bg-[#0878e8]/10 border-[#0878e8]/40 text-[#014486]'
                 : 'bg-white hover:bg-slate-50 text-slate-700 border-[#d8dde6]'
             }`}
             title={
@@ -427,7 +427,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
           <button
             type="button"
             onClick={handlePrint}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0176d3] hover:bg-[#014486] text-white text-xs font-bold rounded shadow-xs cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0878e8] hover:bg-[#014486] text-white text-xs font-bold rounded shadow-xs cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
             Print Form
@@ -438,7 +438,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Sidebar */}
         <aside className="lg:col-span-3 print:hidden">
-          <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm overflow-hidden">
+          <div className="lims-card shadow-sm overflow-hidden">
             <div className="px-3 py-2 border-b border-[#e5e7eb] bg-slate-50">
               <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
                 Available Forms ({sidebarForms.length})
@@ -454,20 +454,20 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                       onClick={() => handleSelectForm(form.id)}
                       className={`w-full text-left px-3 py-2.5 transition-colors cursor-pointer ${
                         selected
-                          ? 'bg-[#eef4ff] border-l-2 border-l-[#0176d3]'
+                          ? 'bg-[#eef4ff] border-l-2 border-l-[#0878e8]'
                           : 'hover:bg-slate-50 border-l-2 border-l-transparent'
                       }`}
                     >
                       <div className="flex items-center gap-2">
                         <FileText
                           className={`w-3.5 h-3.5 shrink-0 ${
-                            selected ? 'text-[#0176d3]' : 'text-slate-400'
+                            selected ? 'text-[#0878e8]' : 'text-slate-400'
                           }`}
                         />
                         <div className="min-w-0">
                           <div
                             className={`text-xs font-bold truncate ${
-                              selected ? 'text-[#0176d3]' : 'text-slate-800'
+                              selected ? 'text-[#0878e8]' : 'text-slate-800'
                             }`}
                           >
                             {form.shortName}
@@ -477,7 +477,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                           </div>
                         </div>
                         {selected && (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-[#0176d3] ml-auto shrink-0" />
+                          <CheckCircle2 className="w-3.5 h-3.5 text-[#0878e8] ml-auto shrink-0" />
                         )}
                       </div>
                     </button>
@@ -490,7 +490,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
 
         {/* Printable form sheet */}
         <div className="lg:col-span-9">
-          <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm p-5 sm:p-7 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 print:max-w-none">
+          <div className="lims-card shadow-sm p-5 sm:p-7 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 print:max-w-none">
             {activeForm.layoutStyle === 'ntp-request' ? (
               <NtpLabRequestForm
                 values={values}
@@ -682,7 +682,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                                         setField(`${row.id}_result`, '');
                                       }
                                     }}
-                                    className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                                    className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0878e8]"
                                     aria-label="Culture method"
                                   >
                                     <option value="">—</option>
@@ -733,7 +733,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                         <select
                           value={values[`${abo.id}_result`] || ''}
                           onChange={(e) => setField(`${abo.id}_result`, e.target.value)}
-                          className="min-w-[4.5rem] border-0 border-b-2 border-slate-700 bg-transparent px-2 py-1 text-center text-xl sm:text-2xl font-bold text-slate-900 focus:outline-none focus:border-[#0176d3] print:border-slate-900 appearance-auto"
+                          className="min-w-[4.5rem] border-0 border-b-2 border-slate-700 bg-transparent px-2 py-1 text-center text-xl sm:text-2xl font-bold text-slate-900 focus:outline-none focus:border-[#0878e8] print:border-slate-900 appearance-auto"
                           aria-label="Blood type ABO"
                         >
                           <option value="">—</option>
@@ -751,7 +751,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                             <select
                               value={values[`${rh.id}_result`] || ''}
                               onChange={(e) => setField(`${rh.id}_result`, e.target.value)}
-                              className="min-w-[11rem] border-0 border-b-2 border-slate-700 bg-transparent px-2 py-1 text-center text-lg sm:text-xl font-bold text-slate-900 focus:outline-none focus:border-[#0176d3] print:border-slate-900"
+                              className="min-w-[11rem] border-0 border-b-2 border-slate-700 bg-transparent px-2 py-1 text-center text-lg sm:text-xl font-bold text-slate-900 focus:outline-none focus:border-[#0878e8] print:border-slate-900"
                               aria-label="Rh factor"
                             >
                               <option value="">—</option>
@@ -786,7 +786,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                       <select
                         value={values[`${row.id}_result`] || ''}
                         onChange={(e) => setField(`${row.id}_result`, e.target.value)}
-                        className="min-w-[12rem] border-0 border-b-2 border-slate-700 bg-transparent px-3 py-1 text-center text-xl font-bold tracking-wide text-slate-900 focus:outline-none focus:border-[#0176d3] print:border-slate-900"
+                        className="min-w-[12rem] border-0 border-b-2 border-slate-700 bg-transparent px-3 py-1 text-center text-xl font-bold tracking-wide text-slate-900 focus:outline-none focus:border-[#0878e8] print:border-slate-900"
                         aria-label="Pregnancy test result"
                       >
                         <option value="">—</option>
@@ -837,7 +837,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                                 onChange={(e) =>
                                   setField(`${analyte.id}_at`, e.target.value)
                                 }
-                                className="border-0 border-b border-slate-400 bg-transparent px-1 py-0.5 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3] w-28 print:border-slate-800"
+                                className="border-0 border-b border-slate-400 bg-transparent px-1 py-0.5 text-sm text-slate-900 focus:outline-none focus:border-[#0878e8] w-28 print:border-slate-800"
                               />
                             </>
                           )}
@@ -885,7 +885,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                   value={values.remarks || ''}
                   onChange={(e) => setField('remarks', e.target.value)}
                   rows={2}
-                  className="mt-1 w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3] resize-y print:border-slate-800"
+                  className="mt-1 w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0878e8] resize-y print:border-slate-800"
                 />
               </section>
             )}
@@ -930,7 +930,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                         value={values[`${sig.id}_license`] || ''}
                         onChange={(e) => setField(`${sig.id}_license`, e.target.value)}
                         placeholder="____________"
-                        className="inline-block w-[5.5rem] max-w-full text-center font-mono bg-transparent border-0 border-b border-slate-400 focus:outline-none focus:border-[#0176d3] print:border-slate-600"
+                        className="inline-block w-[5.5rem] max-w-full text-center font-mono bg-transparent border-0 border-b border-slate-400 focus:outline-none focus:border-[#0878e8] print:border-slate-600"
                       />
                     </div>
                   ) : null}
@@ -939,7 +939,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                       type="date"
                       value={values[`${sig.id}_date`] || ''}
                       onChange={(e) => setField(`${sig.id}_date`, e.target.value)}
-                      className="mx-auto w-full max-w-[9rem] border-0 border-b border-slate-400 bg-transparent px-0.5 py-0.5 text-[10px] text-slate-700 focus:outline-none focus:border-[#0176d3] print:border-slate-800"
+                      className="mx-auto w-full max-w-[9rem] border-0 border-b border-slate-400 bg-transparent px-0.5 py-0.5 text-[10px] text-slate-700 focus:outline-none focus:border-[#0878e8] print:border-slate-800"
                     />
                   ) : null}
                 </div>

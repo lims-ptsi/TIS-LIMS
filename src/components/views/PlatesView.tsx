@@ -96,7 +96,7 @@ export const PlatesView: React.FC<PlatesViewProps> = ({
       case 'BLANK':
         return 'bg-slate-400 border-slate-500 text-white';
       case 'CALIBRATOR':
-        return 'bg-[#0176d3] border-blue-600 text-white';
+        return 'bg-[#0878e8] border-blue-600 text-white';
       case 'QC_LOW':
         return 'bg-[#e28704] border-amber-600 text-white';
       case 'QC_HIGH':
@@ -118,7 +118,7 @@ export const PlatesView: React.FC<PlatesViewProps> = ({
       />
 
       {/* 2. Header Card */}
-      <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="lims-card p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-md bg-[#eaf5ea] border border-[#a3d9a5] flex items-center justify-center text-[#2e844a] shadow-xs">
             <Grid3X3 className="w-6 h-6" />
@@ -132,7 +132,7 @@ export const PlatesView: React.FC<PlatesViewProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={handleAutoPopulateTemplate}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0176d3] hover:bg-[#0060b2] text-white text-xs font-semibold rounded shadow-sm"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0878e8] hover:bg-[#0669c9] text-white text-xs font-semibold rounded shadow-sm"
           >
             <Sparkles className="w-3.5 h-3.5" />
             Auto-Fill Standard Template
@@ -151,14 +151,14 @@ export const PlatesView: React.FC<PlatesViewProps> = ({
         {/* Placement Tools */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
-            <Layers className="w-4 h-4 text-[#0176d3]" />
+            <Layers className="w-4 h-4 text-[#0878e8]" />
             <span>Active Placement Tool:</span>
           </div>
           <div className="flex flex-wrap gap-2 text-xs">
             {[
               { type: 'SAMPLE', label: 'Sample (SMP)', color: 'bg-[#2e844a]' },
               { type: 'BLANK', label: 'Method Blank (BLK)', color: 'bg-slate-400' },
-              { type: 'CALIBRATOR', label: 'Calibrator (CAL)', color: 'bg-[#0176d3]' },
+              { type: 'CALIBRATOR', label: 'Calibrator (CAL)', color: 'bg-[#0878e8]' },
               { type: 'QC_LOW', label: 'QC Low (QCL)', color: 'bg-[#e28704]' },
               { type: 'QC_HIGH', label: 'QC High (QCH)', color: 'bg-[#e5b800]' },
             ].map((tool) => (
@@ -167,7 +167,7 @@ export const PlatesView: React.FC<PlatesViewProps> = ({
                 onClick={() => setSelectedTool(tool.type as any)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border transition-all ${
                   selectedTool === tool.type
-                    ? 'border-[#0176d3] bg-blue-50 text-[#0176d3] font-bold ring-1 ring-[#0176d3]'
+                    ? 'border-[#0878e8] bg-blue-50 text-[#0878e8] font-bold ring-1 ring-[#0878e8]'
                     : 'border-[#d8dde6] bg-white text-slate-700 hover:bg-slate-50'
                 }`}
               >

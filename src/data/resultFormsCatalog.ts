@@ -967,7 +967,6 @@ export const RESULT_FORM_10: ResultFormDefinition = {
   },
   headerFields: [],
   signatures: [],
-  footerNote: 'A separate result form for LPA, Culture and DST will be issued',
 };
 
 export const RESULT_FORMS: ResultFormDefinition[] = [

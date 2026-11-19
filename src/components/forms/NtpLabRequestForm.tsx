@@ -1,10 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ResultFormOrgBanner } from '../common/ResultFormOrgBanner';
 import {
   NTP_REQ_TO_RESULT_CHECK,
   syncNtpResultChecksFromRequest,
 } from '../../utils/ntpFormPrefill';
+import { formatNtpOfficialDateTime } from '../../utils/resultsPickup';
+import {
+  findPersonnelById,
+  personnelForRole,
+  personnelIdForExaminer,
+  type LabPersonnelRole,
+} from '../../data/labPersonnelCatalog';
 
 export const NTP_FIELD_KEYS = [
   'facilityName',
@@ -39,6 +46,7 @@ export const NTP_FIELD_KEYS = [
   'spec1_dispatched',
   'spec2_collected',
   'spec2_dispatched',
+  'request_spec2_active',
   'remarks',
   'preparedBy',
   'preparedDesignation',
@@ -47,6 +55,8 @@ export const NTP_FIELD_KEYS = [
   'specimenReceivedBy',
   'specimenQuality',
   'specimenQualityReason',
+  'spec2_quality',
+  'spec2_qualityReason',
   'specimenVolumeQuality',
   'specimenVolumeQuality2',
   'labSerial',
@@ -66,6 +76,18 @@ export const NTP_FIELD_KEYS = [
   'res_xpert_ultra',
   'res_truenat_plus',
   'res_truenat_rif',
+  'res_xpert_r1',
+  'res_xpert_r2',
+  'res_xpert_r3',
+  'res_xpert_ultra_r1',
+  'res_xpert_ultra_r2',
+  'res_xpert_ultra_r3',
+  'res_truenat_plus_r1',
+  'res_truenat_plus_r2',
+  'res_truenat_plus_r3',
+  'res_truenat_rif_r1',
+  'res_truenat_rif_r2',
+  'res_truenat_rif_r3',
   'res_tblamp',
   'smear_reading1',
   'smear_reading2',
@@ -91,16 +113,46 @@ export const NTP_PATIENT_AUTO_FIELD_KEYS = new Set<string>([
 
 type Values = Record<string, string>;
 
+/** paper = official Form 2a / print; saas = lab workflow data entry (sample detail, result entry). */
+type NtpUiMode = 'paper' | 'saas';
+const NtpUiContext = React.createContext<NtpUiMode>('paper');
+function useNtpUi(): NtpUiMode {
+  return React.useContext(NtpUiContext);
+}
+
 const REQUESTED_TESTS: { id: string; label: string }[] = [
   { id: 'req_xpert', label: 'Xpert MTB/RIF' },
   { id: 'req_xpert_ultra', label: 'Xpert MTB/RIF Ultra' },
   { id: 'req_truenat_plus', label: 'Truenat MTB Plus' },
   { id: 'req_truenat_rif', label: 'Truenat MTB-RIF Dx' },
+  { id: 'req_tblamp', label: 'TB LAMP' },
   { id: 'req_smear', label: 'Smear Microscopy' },
   { id: 'req_xpert_xdr', label: 'Xpert MTB/XDR' },
   { id: 'req_lpa', label: 'Line Probe Assay' },
   { id: 'req_culture', label: 'TB Culture' },
   { id: 'req_pdst', label: 'Phenotypic DST' },
+];
+
+/** Official Form 2a paper — test requested columns (top → bottom within each column). */
+const NTP_REQUESTED_TESTS_PAPER_COLS: { id: string; label: string }[][] = [
+  [
+    { id: 'req_xpert', label: 'Xpert MTB/RIF' },
+    { id: 'req_xpert_xdr', label: 'Xpert MTB/XDR' },
+    { id: 'req_xpert_ultra', label: 'Xpert MTB/RIF Ultra' },
+  ],
+  [
+    { id: 'req_truenat_plus', label: 'Truenat MTB Plus' },
+    { id: 'req_lpa', label: 'Line Probe Assay' },
+  ],
+  [
+    { id: 'req_truenat_rif', label: 'Truenat MTB-RIF' },
+    { id: 'req_tblamp', label: 'TB LAMP' },
+    { id: 'req_culture', label: 'TB Culture' },
+  ],
+  [
+    { id: 'req_smear', label: 'Smear Microscopy' },
+    { id: 'req_pdst', label: 'Phenotypic DST' },
+  ],
 ];
 
 const NTP_XPERT_MTB_RIF_RESULT_OPTIONS = [
@@ -256,8 +308,216 @@ export function resolveNtpSelectedDiagnosticChkId(values: Record<string, string>
   return active.length ? active[0].chkId : '';
 }
 
+/** Workflow entry: one active row; official print / preview: every requested test. */
+export function resolveNtpDiagnosticRowsForForm(
+  values: Record<string, string>,
+  opts: { workflowEntry: boolean }
+): DiagnosticResultRow[] {
+  const requested = DIAGNOSTIC_RESULT_ROWS.filter((t) => {
+    const reqKey = Object.entries(NTP_REQ_TO_RESULT_CHECK).find(([, ck]) => ck === t.chkId)?.[0];
+    return values[t.chkId] === '1' || (reqKey && values[reqKey] === '1');
+  });
+  if (opts.workflowEntry) {
+    const selected = resolveNtpSelectedDiagnosticChkId(values);
+    const one = DIAGNOSTIC_RESULT_ROWS.find((t) => t.chkId === selected);
+    return one ? [one] : [];
+  }
+  return requested;
+}
+
+const NTP_MOLECULAR_RESULT_CHK_IDS = new Set([
+  'res_ck_xpert',
+  'res_ck_xpert_ultra',
+  'res_ck_truenat_plus',
+  'res_ck_truenat_rif',
+]);
+
+function molecularPerTestKeys(test: DiagnosticResultRow) {
+  return {
+    r1: `${test.id}_r1`,
+    r2: `${test.id}_r2`,
+    r3: `${test.id}_r3`,
+  } as const;
+}
+
+function rifReadingToOfficialSemicolon(r3: string): string {
+  return r3.replace(/^RIF RESISTANCE /, 'RIFAMPICIN RESISTANCE ');
+}
+
+/** Official one-line result for storage on res_xpert / res_truenat_* (matches pre-defined option text). */
+export function formatNtpMolecularOfficialLine(r1: string, r2: string, r3: string): string {
+  const reading1 = r1.trim();
+  const reading2 = r2.trim();
+  const rif = r3.trim();
+  if (!reading1 && !reading2 && !rif) return '';
+  if (reading1 === 'MTB NOT DETECTED' || reading1 === 'ERROR') return reading1;
+  if (reading1 === 'MTB TRACE DETECTED') {
+    return rif ? `MTB DETECTED TRACE; ${rifReadingToOfficialSemicolon(rif)}` : reading1;
+  }
+  if (reading1 === 'MTB DETECTED') {
+    const level = reading2 ? ` ${reading2}` : '';
+    const base = `MTB DETECTED${level}`;
+    return rif ? `${base}; ${rifReadingToOfficialSemicolon(rif)}` : reading2 ? `MTB DETECTED ${reading2}` : reading1;
+  }
+  return [reading1, reading2, rif].filter(Boolean).join('; ');
+}
+
+/** Split stored res_xpert / preset option text into workflow Reading 1–3 values. */
+export function parseNtpMolecularSplitFromText(line: string): { r1: string; r2: string; r3: string } {
+  const t = line.trim();
+  if (!t) return { r1: '', r2: '', r3: '' };
+  if (t === 'MTB NOT DETECTED') return { r1: 'MTB NOT DETECTED', r2: '', r3: '' };
+  if (t === 'ERROR' || t === 'INVALID / ERROR') return { r1: 'ERROR', r2: '', r3: '' };
+
+  let r1 = '';
+  let r2 = '';
+  let r3 = '';
+
+  if (/MTB DETECTED TRACE/i.test(t)) r1 = 'MTB TRACE DETECTED';
+  else if (/MTB DETECTED/i.test(t)) r1 = 'MTB DETECTED';
+  else if (/MTB NOT DETECTED/i.test(t)) r1 = 'MTB NOT DETECTED';
+
+  const levelMatch = t.match(/MTB DETECTED (VERY LOW|LOW|MEDIUM|HIGH)\b/i);
+  if (levelMatch) r2 = levelMatch[1].toUpperCase();
+
+  const rifMatch = t.match(/RIF(?:AMPICIN)? RESISTANCE (NOT DETECTED|DETECTED|INDETERMINATE)/i);
+  if (rifMatch) r3 = `RIF RESISTANCE ${rifMatch[1].toUpperCase()}`;
+
+  if ((NTP_READING3_RIF_OPTIONS as readonly string[]).includes(t)) {
+    return { r1: '', r2: '', r3: t };
+  }
+
+  return { r1, r2, r3 };
+}
+
+function mergeMolecularReadingParts(
+  base: { r1: string; r2: string; r3: string },
+  storedLine: string
+): { r1: string; r2: string; r3: string } {
+  const parsed = storedLine ? parseNtpMolecularSplitFromText(storedLine) : { r1: '', r2: '', r3: '' };
+  return {
+    r1: base.r1 || parsed.r1,
+    r2: base.r2 || parsed.r2,
+    r3: base.r3 || parsed.r3,
+  };
+}
+
+function molecularCombinedLineIsAlert(line: string): boolean {
+  const { r1, r3 } = parseNtpMolecularSplitFromText(line);
+  if (NTP_READING1_MTB_RED.has(r1)) return true;
+  if (NTP_READING3_RIF_RED.has(r3)) return true;
+  return r1 === 'ERROR' || /INVALID/i.test(line);
+}
+
+function isNtpMolecularFullOption(test: DiagnosticResultRow, value: string): boolean {
+  const v = value.trim();
+  if (!v || !test.options?.length) return false;
+  return (test.options as readonly string[]).includes(v);
+}
+
+function molecularRowReadings(test: DiagnosticResultRow, values: Record<string, string>) {
+  const pk = molecularPerTestKeys(test);
+  const storedLine = (values[test.id] || '').trim();
+  let r1 = (values[pk.r1] || '').trim();
+  let r2 = (values[pk.r2] || '').trim();
+  let r3 = (values[pk.r3] || '').trim();
+
+  if (r1 || r2 || r3) {
+    const merged = mergeMolecularReadingParts({ r1, r2, r3 }, storedLine);
+    return { ...merged, combined: false };
+  }
+
+  if (storedLine) {
+    const fromLine = parseNtpMolecularSplitFromText(storedLine);
+    if (fromLine.r1 || fromLine.r2 || fromLine.r3) {
+      const activeChk = resolveNtpSelectedDiagnosticChkId(values);
+      const shared =
+        activeChk === test.chkId
+          ? {
+              r1: values.res_result_reading1 || '',
+              r2: values.res_result_reading2 || '',
+              r3: values.res_result_diagnosis || '',
+            }
+          : { r1: '', r2: '', r3: '' };
+      const merged = mergeMolecularReadingParts(
+        {
+          r1: fromLine.r1 || shared.r1,
+          r2: fromLine.r2 || shared.r2,
+          r3: fromLine.r3 || shared.r3,
+        },
+        storedLine
+      );
+      return { ...merged, combined: false };
+    }
+    if (isNtpMolecularFullOption(test, storedLine)) {
+      const parsed = parseNtpMolecularSplitFromText(storedLine);
+      return { ...parsed, combined: false };
+    }
+  }
+
+  if (NTP_MOLECULAR_RESULT_CHK_IDS.has(test.chkId)) {
+    const activeChk = resolveNtpSelectedDiagnosticChkId(values);
+    const sharedR1 = values.res_result_reading1 || '';
+    const sharedR2 = values.res_result_reading2 || '';
+    const sharedR3 = values.res_result_diagnosis || '';
+    const anotherMolecularHasSnapshot = RESULT_TESTS.some((t) => {
+      if (t.chkId === test.chkId) return false;
+      const otherPk = molecularPerTestKeys(t);
+      return (
+        (values[otherPk.r1] || '').trim() ||
+        (values[otherPk.r2] || '').trim() ||
+        (values[otherPk.r3] || '').trim()
+      );
+    });
+    if (
+      (sharedR1.trim() || sharedR2.trim() || sharedR3.trim()) &&
+      (activeChk === test.chkId || !anotherMolecularHasSnapshot)
+    ) {
+      const merged = mergeMolecularReadingParts(
+        { r1: sharedR1, r2: sharedR2, r3: sharedR3 },
+        storedLine
+      );
+      return { ...merged, combined: false };
+    }
+  }
+
+  if (storedLine) {
+    return { r1: storedLine, r2: '', r3: '', combined: true };
+  }
+
+  return { r1: '', r2: '', r3: '', combined: false };
+}
+
 const line =
-  'w-full border-0 border-b border-slate-800 bg-transparent px-1 py-0.5 text-[11px] text-slate-900 focus:outline-none focus:border-[#0176d3]';
+  'lims-ntp-result-select w-full border-0 border-b border-slate-800 bg-transparent px-1 py-0.5 text-[11px] focus:outline-none focus:border-[#0878e8]';
+
+/** Official results table cells — plain text, no faux field underline. */
+const ntpPaperTableValueClass =
+  'ntp-form-plain-value inline-block w-full px-1 py-0.5 text-[11px] font-semibold leading-snug';
+const ntpPaperTableEmptyClass =
+  'ntp-form-plain-value inline-block w-full px-1 py-0.5 text-[10px] text-slate-400';
+
+function useNtpLineClass(): string {
+  return useNtpUi() === 'saas'
+    ? 'lims-input w-full text-sm py-2'
+    : line;
+}
+
+function ntpResultSelectClass(isAlert: boolean, base?: string): string {
+  const root = base ?? line;
+  return `${root} cursor-pointer pr-6 font-semibold ${
+    isAlert ? 'lims-ntp-result-select--alert text-red-600' : 'text-slate-900'
+  }`;
+}
+
+function useNtpResultSelectClass(isAlert: boolean): string {
+  const base = useNtpLineClass();
+  return ntpResultSelectClass(isAlert, base);
+}
+
+function ntpResultOptionClass(isAlert: boolean): string {
+  return isAlert ? 'lims-ntp-result-option--alert text-red-600 font-semibold' : 'text-slate-900';
+}
 
 function Line({
   value,
@@ -265,15 +525,49 @@ function Line({
   readOnly,
   type = 'text',
   placeholder,
+  plainPaper,
+  inlineValue,
+  paperFieldUnderline,
 }: {
   value: string;
   onChange: (v: string) => void;
   readOnly?: boolean;
   type?: string;
   placeholder?: string;
+  /** Official print — show value without faux underline (e.g. accession boxes). */
+  plainPaper?: boolean;
+  /** Read-only paper — sit inline after a label on the same row. */
+  inlineValue?: boolean;
+  /** Rare: show field underline on official read-only paper (default off). */
+  paperFieldUnderline?: boolean;
 }) {
+  const ui = useNtpUi();
+  const inputClass = useNtpLineClass();
   if (readOnly) {
-    return <span className="inline-block min-w-[4rem] border-b border-slate-800 px-1 text-[11px] font-semibold">{value || '\u00a0'}</span>;
+    if (ui === 'saas') {
+      return (
+        <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-900 min-h-[2.375rem]">
+          {value || '—'}
+        </div>
+      );
+    }
+    const showUnderline = paperFieldUnderline === true;
+    const plain = plainPaper !== false && !showUnderline;
+    const displayValue =
+      type === 'datetime-local' && (value || '').trim()
+        ? formatNtpOfficialDateTime(value)
+        : value;
+    return (
+      <span
+        className={`ntp-form-plain-value ${
+          inlineValue ? 'inline' : 'block w-full'
+        } min-h-[1.125rem] px-1 py-0.5 text-[11px] font-semibold break-words leading-snug ${
+          plain ? '' : 'border-b border-slate-800'
+        }`}
+      >
+        {displayValue || '\u00a0'}
+      </span>
+    );
   }
   return (
     <input
@@ -281,7 +575,7 @@ function Line({
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
-      className={line}
+      className={inputClass}
     />
   );
 }
@@ -295,6 +589,7 @@ function SmearResultSelect({
   onChange: (v: string) => void;
   readOnly?: boolean;
 }) {
+  const ui = useNtpUi();
   const options = NTP_SMEAR_RESULT_OPTIONS;
   const choices =
     value.trim() && !options.includes(value as (typeof options)[number])
@@ -302,30 +597,34 @@ function SmearResultSelect({
       : [...options];
   const display = value || choices[0];
   const isRed = NTP_SMEAR_RESULT_RED.has(display);
+  const selectClass = useNtpResultSelectClass(isRed);
 
   if (readOnly) {
+    if (ui === 'saas') {
+      return (
+        <div
+          className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold ${
+            isRed ? 'border-red-200 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-900'
+          }`}
+        >
+          {display || '—'}
+        </div>
+      );
+    }
     return (
-      <span
-        className={`inline-block w-full border-b border-slate-800 px-1 text-[11px] font-semibold ${
-          isRed ? 'text-red-600' : 'text-slate-900'
-        }`}
-      >
+      <span className={`${ntpPaperTableValueClass} ${isRed ? 'text-red-600' : 'text-slate-900'}`}>
         {display || '\u00a0'}
       </span>
     );
   }
 
   return (
-    <select
-      value={display}
-      onChange={(e) => onChange(e.target.value)}
-      className={`${line} cursor-pointer pr-6 font-semibold ${isRed ? 'text-red-600' : 'text-slate-900'}`}
-    >
+    <select value={display} onChange={(e) => onChange(e.target.value)} className={selectClass}>
       {choices.map((opt) => (
         <option
           key={opt}
           value={opt}
-          className={NTP_SMEAR_RESULT_RED.has(opt) ? 'text-red-600 font-semibold' : 'text-slate-900'}
+          className={ntpResultOptionClass(NTP_SMEAR_RESULT_RED.has(opt))}
         >
           {opt}
         </option>
@@ -343,6 +642,7 @@ function SmearLabDiagnosisSelect({
   onChange: (v: string) => void;
   readOnly?: boolean;
 }) {
+  const ui = useNtpUi();
   const options = NTP_SMEAR_LAB_DIAGNOSIS_OPTIONS;
   const choices =
     value.trim() && !options.includes(value as (typeof options)[number])
@@ -350,30 +650,34 @@ function SmearLabDiagnosisSelect({
       : [...options];
   const display = value || choices[1];
   const isRed = NTP_SMEAR_LAB_DIAGNOSIS_RED.has(display);
+  const selectClass = useNtpResultSelectClass(isRed);
 
   if (readOnly) {
+    if (ui === 'saas') {
+      return (
+        <div
+          className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold ${
+            isRed ? 'border-red-200 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-900'
+          }`}
+        >
+          {display || '—'}
+        </div>
+      );
+    }
     return (
-      <span
-        className={`inline-block w-full border-b border-slate-800 px-1 text-[11px] font-semibold ${
-          isRed ? 'text-red-600' : 'text-slate-900'
-        }`}
-      >
+      <span className={`${ntpPaperTableValueClass} ${isRed ? 'text-red-600' : 'text-slate-900'}`}>
         {display || '\u00a0'}
       </span>
     );
   }
 
   return (
-    <select
-      value={display}
-      onChange={(e) => onChange(e.target.value)}
-      className={`${line} cursor-pointer pr-6 font-semibold ${isRed ? 'text-red-600' : 'text-slate-900'}`}
-    >
+    <select value={display} onChange={(e) => onChange(e.target.value)} className={selectClass}>
       {choices.map((opt) => (
         <option
           key={opt}
           value={opt}
-          className={NTP_SMEAR_LAB_DIAGNOSIS_RED.has(opt) ? 'text-red-600 font-semibold' : 'text-slate-900'}
+          className={ntpResultOptionClass(NTP_SMEAR_LAB_DIAGNOSIS_RED.has(opt))}
         >
           {opt}
         </option>
@@ -397,15 +701,19 @@ function SmearSpecimenRow({
   readOnly?: boolean;
   onChange: (key: string, value: string) => void;
 }) {
+  const ui = useNtpUi();
   const v = (key: string) => values[key] || '';
   const reading = v(readingKey);
+  const paperCell = 'border border-slate-800 px-1 py-1 align-top';
+  const specCell =
+    ui === 'saas'
+      ? 'align-top text-center text-sm font-semibold text-slate-700'
+      : 'border border-slate-800 px-2 py-1 align-top text-center text-[11px] font-semibold';
 
   return (
     <>
-      <td className="border border-slate-800 px-2 py-1 align-top text-center text-[11px] font-semibold">
-        {specimenLabel}
-      </td>
-      <td className="border border-slate-800 px-1 py-1 align-top">
+      <td className={specCell}>{specimenLabel}</td>
+      <td className={ui === 'saas' ? 'align-top' : paperCell}>
         <SmearResultSelect
           value={reading}
           onChange={(val) => {
@@ -415,7 +723,7 @@ function SmearSpecimenRow({
           readOnly={readOnly}
         />
       </td>
-      <td className="border border-slate-800 px-1 py-1 align-top">
+      <td className={ui === 'saas' ? 'align-top' : paperCell}>
         <SmearAfbCountField
           result={reading || NTP_SMEAR_RESULT_OPTIONS[0]}
           value={v(afbKey)}
@@ -424,6 +732,54 @@ function SmearSpecimenRow({
         />
       </td>
     </>
+  );
+}
+
+/** Workflow SaaS — specimen block (no paper table). */
+function SmearSpecimenBlock({
+  specimenLabel,
+  readingKey,
+  afbKey,
+  values,
+  readOnly,
+  onChange,
+}: {
+  specimenLabel: string;
+  readingKey: string;
+  afbKey: string;
+  values: Values;
+  readOnly?: boolean;
+  onChange: (key: string, value: string) => void;
+}) {
+  const v = (key: string) => values[key] || '';
+  const reading = v(readingKey);
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 sm:p-4 space-y-3">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        Specimen {specimenLabel}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        <Field label="Acid-fast reading">
+          <SmearResultSelect
+            value={reading}
+            onChange={(val) => {
+              onChange(readingKey, val);
+              if (val !== '+n') onChange(afbKey, '');
+            }}
+            readOnly={readOnly}
+          />
+        </Field>
+        <Field label="Number of AFB (when reading is +n)">
+          <SmearAfbCountField
+            result={reading || NTP_SMEAR_RESULT_OPTIONS[0]}
+            value={v(afbKey)}
+            onChange={(val) => onChange(afbKey, val)}
+            readOnly={readOnly}
+          />
+        </Field>
+      </div>
+    </div>
   );
 }
 
@@ -441,21 +797,14 @@ function SmearAfbCountField({
   const active = result === '+n';
 
   if (!active) {
-    return (
-      <span className="inline-block w-full border-b border-slate-300 px-1 text-[10px] text-slate-400">
-        {'\u00a0'}
-      </span>
-    );
+    return <span className={ntpPaperTableEmptyClass}>{'\u00a0'}</span>;
   }
 
-  return (
-    <Line
-      value={value}
-      onChange={onChange}
-      readOnly={readOnly}
-      placeholder="Enter count"
-    />
-  );
+  if (readOnly) {
+    return <span className={`${ntpPaperTableValueClass} text-slate-900`}>{value.trim() || '\u00a0'}</span>;
+  }
+
+  return <Line value={value} onChange={onChange} readOnly={false} placeholder="Enter count" />;
 }
 
 function MtbReading1Select({
@@ -467,6 +816,7 @@ function MtbReading1Select({
   onChange: (v: string) => void;
   readOnly?: boolean;
 }) {
+  const ui = useNtpUi();
   const options = NTP_READING1_MTB_OPTIONS;
   const choices =
     value.trim() && !options.includes(value as (typeof options)[number])
@@ -474,30 +824,34 @@ function MtbReading1Select({
       : [...options];
   const display = value || choices[0];
   const isRed = NTP_READING1_MTB_RED.has(display);
+  const selectClass = useNtpResultSelectClass(isRed);
 
   if (readOnly) {
+    if (ui === 'saas') {
+      return (
+        <div
+          className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold ${
+            isRed ? 'border-red-200 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-900'
+          }`}
+        >
+          {display || '—'}
+        </div>
+      );
+    }
     return (
-      <span
-        className={`inline-block w-full border-b border-slate-800 px-1 text-[11px] font-semibold ${
-          isRed ? 'text-red-600' : 'text-slate-900'
-        }`}
-      >
+      <span className={`${ntpPaperTableValueClass} ${isRed ? 'text-red-600' : 'text-slate-900'}`}>
         {display || '\u00a0'}
       </span>
     );
   }
 
   return (
-    <select
-      value={display}
-      onChange={(e) => onChange(e.target.value)}
-      className={`${line} cursor-pointer pr-6 font-semibold ${isRed ? 'text-red-600' : 'text-slate-900'}`}
-    >
+    <select value={display} onChange={(e) => onChange(e.target.value)} className={selectClass}>
       {choices.map((opt) => (
         <option
           key={opt}
           value={opt}
-          className={NTP_READING1_MTB_RED.has(opt) ? 'text-red-600 font-semibold' : 'text-slate-900'}
+          className={ntpResultOptionClass(NTP_READING1_MTB_RED.has(opt))}
         >
           {opt}
         </option>
@@ -517,6 +871,8 @@ function MtbReading2LevelSelect({
   onChange: (v: string) => void;
   readOnly?: boolean;
 }) {
+  const ui = useNtpUi();
+  const inputClass = useNtpLineClass();
   const showLevels = reading1 === 'MTB DETECTED';
   const options = NTP_READING2_MTB_LEVEL_OPTIONS;
   const choices =
@@ -525,29 +881,33 @@ function MtbReading2LevelSelect({
       : [...options];
 
   if (!showLevels) {
-    return (
-      <span className="inline-block w-full border-b border-slate-300 px-1 text-[10px] text-slate-400">
-        {'\u00a0'}
-      </span>
-    );
+    if (ui === 'saas') {
+      return (
+        <div className="w-full rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-400">
+          Not applicable
+        </div>
+      );
+    }
+    return <span className={ntpPaperTableEmptyClass}>{'\u00a0'}</span>;
   }
 
   const display = value || choices[0];
 
   if (readOnly) {
-    return (
-      <span className="inline-block w-full border-b border-slate-800 px-1 text-[11px] font-semibold text-slate-900">
-        {display || '\u00a0'}
-      </span>
-    );
+    if (ui === 'saas') {
+      return (
+        <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-900">
+          {display || '—'}
+        </div>
+      );
+    }
+    return <span className={`${ntpPaperTableValueClass} text-slate-900`}>{display || '\u00a0'}</span>;
   }
 
+  const selectClass = `${inputClass} cursor-pointer pr-6 font-semibold text-slate-900`;
+
   return (
-    <select
-      value={display}
-      onChange={(e) => onChange(e.target.value)}
-      className={`${line} cursor-pointer pr-6 font-semibold text-slate-900`}
-    >
+    <select value={display} onChange={(e) => onChange(e.target.value)} className={selectClass}>
       {choices.map((opt) => (
         <option key={opt} value={opt}>
           {opt}
@@ -568,52 +928,161 @@ function MtbRifReading3Select({
   onChange: (v: string) => void;
   readOnly?: boolean;
 }) {
+  const ui = useNtpUi();
   const showRif = reading1ShowsRifDropdown(reading1);
   const options = NTP_READING3_RIF_OPTIONS;
   const choices =
     value.trim() && !options.includes(value as (typeof options)[number])
       ? [value, ...options]
       : [...options];
+  const isRedPreview = NTP_READING3_RIF_RED.has(value || choices[0]);
+  const selectClass = useNtpResultSelectClass(isRedPreview);
 
   if (!showRif) {
-    return (
-      <span className="inline-block w-full border-b border-slate-300 px-1 text-[10px] text-slate-400">
-        {'\u00a0'}
-      </span>
-    );
+    if (ui === 'saas') {
+      return (
+        <div className="w-full rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-400">
+          Not applicable
+        </div>
+      );
+    }
+    return <span className={ntpPaperTableEmptyClass}>{'\u00a0'}</span>;
   }
 
   const display = value || choices[0];
   const isRed = NTP_READING3_RIF_RED.has(display);
 
   if (readOnly) {
+    if (ui === 'saas') {
+      return (
+        <div
+          className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold ${
+            isRed ? 'border-red-200 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-900'
+          }`}
+        >
+          {display || '—'}
+        </div>
+      );
+    }
     return (
-      <span
-        className={`inline-block w-full border-b border-slate-800 px-1 text-[11px] font-semibold ${
-          isRed ? 'text-red-600' : 'text-slate-900'
-        }`}
-      >
+      <span className={`${ntpPaperTableValueClass} ${isRed ? 'text-red-600' : 'text-slate-900'}`}>
         {display || '\u00a0'}
       </span>
     );
   }
 
   return (
-    <select
-      value={display}
-      onChange={(e) => onChange(e.target.value)}
-      className={`${line} cursor-pointer pr-6 font-semibold ${isRed ? 'text-red-600' : 'text-slate-900'}`}
-    >
+    <select value={display} onChange={(e) => onChange(e.target.value)} className={selectClass}>
       {choices.map((opt) => (
         <option
           key={opt}
           value={opt}
-          className={NTP_READING3_RIF_RED.has(opt) ? 'text-red-600 font-semibold' : 'text-slate-900'}
+          className={ntpResultOptionClass(NTP_READING3_RIF_RED.has(opt))}
         >
           {opt}
         </option>
       ))}
     </select>
+  );
+}
+
+/** Under Reading 3 when RIF is indeterminate or MTB trace is detected (Form 2a). */
+function NtpMolecularResultRemarksInline({
+  show,
+  value,
+  readOnly,
+  uiMode,
+  onChange,
+  workflowAlignUnderReading3,
+}: {
+  show: boolean;
+  value: string;
+  readOnly?: boolean;
+  uiMode: NtpUiMode;
+  onChange: (val: string) => void;
+  /** Workflow card: line up under Reading 3 column. */
+  workflowAlignUnderReading3?: boolean;
+}) {
+  if (!show) return null;
+  const text = value.trim();
+
+  const saasBody =
+    uiMode === 'saas' && !readOnly ? (
+      <div className="space-y-1">
+        <label className="text-xs font-semibold text-slate-600">Remarks:</label>
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={2}
+          placeholder="Required when RIF resistance is indeterminate or MTB trace is detected"
+          className="lims-input w-full text-sm min-h-[3rem] resize-y"
+        />
+      </div>
+    ) : uiMode === 'saas' ? (
+      <div>
+        <p className="text-xs font-semibold text-slate-600 mb-1">Remarks:</p>
+        <p className="text-sm font-medium text-slate-900 whitespace-pre-wrap">{text || '—'}</p>
+      </div>
+    ) : null;
+
+  if (saasBody) {
+    const inner = (
+      <div className="mt-1 pt-3 border-t border-slate-200">{saasBody}</div>
+    );
+    if (workflowAlignUnderReading3) {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 -mt-2">
+          <div className="hidden md:block" aria-hidden />
+          <div className="hidden md:block" aria-hidden />
+          {inner}
+        </div>
+      );
+    }
+    return inner;
+  }
+
+  return null;
+}
+
+/** Form 2a paper table — one full-width row under Reading 1–3. */
+function NtpMolecularRemarksPaperTableRow({
+  show,
+  value,
+  colSpan,
+  readOnly,
+  onChange,
+}: {
+  show: boolean;
+  value: string;
+  colSpan: number;
+  readOnly?: boolean;
+  onChange: (val: string) => void;
+}) {
+  if (!show) return null;
+  const text = value.trim();
+  return (
+    <tr>
+      <td colSpan={colSpan} className="border border-slate-800 px-2 py-0.5 align-top">
+        {readOnly ? (
+          <div className="flex flex-wrap items-baseline gap-x-1.5 text-[10px] leading-snug py-0.5">
+            <span className="font-semibold text-slate-800 shrink-0">Remarks:</span>
+            <span className="flex-1 min-w-[6rem] font-semibold text-slate-900 whitespace-pre-wrap">
+              {text || '\u00a0'}
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-start gap-x-1.5 gap-y-1 py-0.5">
+            <span className="text-[10px] font-semibold text-slate-800 pt-1 shrink-0">Remarks:</span>
+            <textarea
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              rows={1}
+              className="flex-1 min-w-[8rem] border border-slate-300 rounded px-1.5 py-0.5 text-[10px] resize-y"
+            />
+          </div>
+        )}
+      </td>
+    </tr>
   );
 }
 
@@ -629,6 +1098,8 @@ function DiagnosticTestPicker({
   /** When set, only tests checked under Test Requested appear (plus empty option). */
   allowedChkIds?: Set<string>;
 }) {
+  const ui = useNtpUi();
+  const inputClass = useNtpLineClass();
   const options = useMemo(() => {
     const base = DIAGNOSTIC_TEST_PICKER_OPTIONS.filter((opt) => {
       if (!opt.value) return true;
@@ -644,8 +1115,15 @@ function DiagnosticTestPicker({
 
   if (readOnly) {
     const label = options.find((o) => o.value === selectedChkId)?.label || '\u00a0';
+    if (ui === 'saas') {
+      return (
+        <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-900">
+          {label === '\u00a0' ? '—' : label}
+        </div>
+      );
+    }
     return (
-      <span className="inline-block w-full border-b border-slate-800 px-1 text-[11px] font-semibold">
+      <span className="ntp-form-plain-value inline-block w-full px-1 text-[11px] font-semibold">
         {label}
       </span>
     );
@@ -655,7 +1133,7 @@ function DiagnosticTestPicker({
     <select
       value={selectedChkId}
       onChange={(e) => onPick(e.target.value)}
-      className={`${line} cursor-pointer pr-6`}
+      className={`${inputClass} cursor-pointer pr-6`}
     >
       {options.map((opt) => (
         <option key={opt.value || 'none'} value={opt.value}>
@@ -677,6 +1155,29 @@ function Box({
   onChange: (v: boolean) => void;
   readOnly?: boolean;
 }) {
+  const ui = useNtpUi();
+  if (ui === 'saas') {
+    if (readOnly && !checked) return null;
+    return (
+      <button
+        type="button"
+        disabled={readOnly}
+        aria-pressed={checked}
+        onClick={() => !readOnly && onChange(!checked)}
+        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+          checked
+            ? 'border-[#0878e8] bg-[#0878e8]/10 text-[#0878e8] shadow-sm'
+            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+        } ${readOnly ? 'cursor-default opacity-90' : 'cursor-pointer'}`}
+      >
+        <span
+          className={`h-2 w-2 rounded-full shrink-0 ${checked ? 'bg-[#0878e8]' : 'bg-slate-300'}`}
+          aria-hidden
+        />
+        {label}
+      </button>
+    );
+  }
   return (
     <label className="inline-flex items-center gap-1 text-[11px] text-slate-900">
       <input
@@ -691,91 +1192,502 @@ function Box({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function NtpPaperFormRow({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <div className={`ntp-request-paper-row ${className}`.trim()}>{children}</div>;
+}
+
+/** Official Form 2a — facility + patient rows; shared 12-column grid for aligned vertical rules. */
+function NtpPaperPatientRow({ children }: { children: React.ReactNode }) {
+  return <div className="ntp-request-paper-row ntp-request-paper-patient-row">{children}</div>;
+}
+
+function NtpPaperPatientCell({
+  label,
+  children,
+  colSpan,
+  tone = 'default',
+}: {
+  label: string;
+  children: React.ReactNode;
+  /** 1–12; rows use 9+3 or 9+1+2 so the main vertical rule lines up at 75%. */
+  colSpan: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12; // grid uses 9+3 and 9+1+2 in practice
+  tone?: 'default' | 'narrow' | 'date';
+}) {
+  const toneClass =
+    tone === 'narrow'
+      ? 'ntp-request-paper-patient-cell--narrow'
+      : tone === 'date'
+        ? 'ntp-request-paper-patient-cell--date'
+        : '';
+  const SPAN_CLASS: Record<number, string> = {
+    1: 'col-span-1',
+    2: 'col-span-2',
+    3: 'col-span-3',
+    4: 'col-span-4',
+    8: 'col-span-8',
+    9: 'col-span-9',
+    12: 'col-span-12',
+  };
+  const spanClass = SPAN_CLASS[colSpan] ?? 'col-span-12';
   return (
-    <div className="flex items-end gap-1 min-w-0">
-      <span className="shrink-0 text-[11px] text-slate-800">{label}</span>
-      <div className="flex-1 min-w-0">{children}</div>
+    <div
+      className={`ntp-request-paper-patient-cell ntp-paper-field flex flex-col gap-0 min-h-0 ${spanClass} ${toneClass}`.trim()}
+    >
+      <span className="ntp-request-paper-patient-label text-[9px] font-normal text-slate-900 leading-tight">
+        {label}
+      </span>
+      <div className="min-w-0 w-full flex-1 flex flex-col justify-end">{children}</div>
     </div>
   );
 }
 
-/** Up to two underline rows for volume/quality notes (second row via “Add line”). */
-function SpecimenVolumeQualityFields({
-  line1,
-  line2,
-  onChange,
-  readOnly,
+function NtpPaperInlineField({
+  label,
+  children,
+  className = '',
 }: {
-  line1: string;
-  line2: string;
-  onChange: (key: 'specimenVolumeQuality' | 'specimenVolumeQuality2', val: string) => void;
-  readOnly?: boolean;
+  label: string;
+  children: React.ReactNode;
+  className?: string;
 }) {
-  const [extraOpen, setExtraOpen] = useState(() => line2.trim().length > 0);
-  const showSecond = extraOpen || line2.trim().length > 0;
+  return (
+    <div className={`ntp-paper-inline-field flex flex-nowrap items-baseline gap-x-1 min-w-0 ${className}`.trim()}>
+      <span className="text-[9px] font-semibold text-slate-900 shrink-0 leading-tight">{label}</span>
+      <div className="min-w-0 shrink">{children}</div>
+    </div>
+  );
+}
+
+/** Official read-only footer — three signatories + printed timestamp (Form 2a). */
+function signaturePrintedNameLine(full: string): string {
+  const s = full.trim();
+  if (!s) return '';
+  const idx = s.indexOf(',');
+  return idx > 0 ? s.slice(0, idx).trim() : s;
+}
+
+function NtpPaperPreparedSignoff({
+  preparedBy,
+  designation,
+  readOnly,
+  onPreparedBy,
+  onDesignation,
+}: {
+  preparedBy: string;
+  designation: string;
+  readOnly?: boolean;
+  onPreparedBy: (name: string) => void;
+  onDesignation: (val: string) => void;
+}) {
+  return (
+    <div className="ntp-paper-prepared-signoff grid grid-cols-2 gap-4 pt-1.5 mt-0.5">
+      <div className="ntp-paper-prepared-signoff-col min-w-0">
+        <div className="ntp-paper-prepared-signoff-label">Prepared by</div>
+        {readOnly ? (
+          <div className="ntp-paper-signature-name">{preparedBy.trim() || '\u00a0'}</div>
+        ) : (
+          <NtpPersonnelSelect
+            role="performed"
+            nameValue={preparedBy}
+            onNameChange={onPreparedBy}
+            designationValue={designation}
+            onDesignationChange={onDesignation}
+            readOnly={false}
+          />
+        )}
+        <div className="ntp-paper-signature-caption">Signature over Printed Name</div>
+      </div>
+      <div className="ntp-paper-prepared-signoff-col min-w-0">
+        <div className="ntp-paper-prepared-signoff-label">Designation</div>
+        {readOnly ? (
+          <div className="ntp-paper-signature-name">{designation || '\u00a0'}</div>
+        ) : (
+          <Line value={designation} onChange={onDesignation} readOnly={false} plainPaper />
+        )}
+        <div className="ntp-paper-signature-caption ntp-paper-signature-caption--spacer" aria-hidden>
+          {'\u00a0'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NtpPaperSignatureFooter({
+  performedBy,
+  verifiedBy,
+  notedBy,
+  printedAt,
+}: {
+  performedBy: string;
+  verifiedBy: string;
+  notedBy: string;
+  printedAt: string;
+}) {
+  const slots = [
+    { label: 'Performed by', name: signaturePrintedNameLine(performedBy) },
+    { label: 'Verified by', name: signaturePrintedNameLine(verifiedBy) },
+    { label: 'Noted by', name: signaturePrintedNameLine(notedBy) },
+  ];
+
+  return (
+    <div className="ntp-paper-signature-footer">
+      <div className="ntp-paper-signature-grid">
+        {slots.map((slot) => (
+          <div key={slot.label} className="ntp-paper-signature-col">
+            <div className="ntp-paper-signature-role">{slot.label}</div>
+            <div className="ntp-paper-signature-name">{slot.name || '\u00a0'}</div>
+            <div className="ntp-paper-signature-caption">Signature over Printed Name</div>
+          </div>
+        ))}
+      </div>
+      <div className="ntp-paper-signature-date">
+        <span className="ntp-paper-signature-date-label">Date and Time Printed:</span>
+        <span className="ntp-paper-signature-date-value">{printedAt || '\u00a0'}</span>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const ui = useNtpUi();
+  if (ui === 'saas') {
+    return (
+      <div className="flex flex-col gap-1.5 min-w-0">
+        <span className="text-xs font-semibold text-slate-600">{label}</span>
+        <div className="min-w-0">{children}</div>
+      </div>
+    );
+  }
+  return (
+    <div className="ntp-paper-field flex flex-col gap-0.5 min-w-0">
+      <span className="text-[10px] font-semibold text-slate-800 leading-snug">{label}</span>
+      <div className="min-w-0 w-full">{children}</div>
+    </div>
+  );
+}
+
+function NtpFieldLegend({ children }: { children: React.ReactNode }) {
+  const ui = useNtpUi();
+  return (
+    <div
+      className={
+        ui === 'saas'
+          ? 'text-sm font-semibold text-slate-800'
+          : 'font-semibold'
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
+function NtpPersonnelSelect({
+  role,
+  nameValue,
+  onNameChange,
+  designationValue,
+  onDesignationChange,
+  readOnly,
+  placeholder = 'Select laboratory staff…',
+  signatureLine,
+}: {
+  role: LabPersonnelRole;
+  nameValue: string;
+  onNameChange: (name: string) => void;
+  designationValue?: string;
+  onDesignationChange?: (designation: string) => void;
+  readOnly?: boolean;
+  placeholder?: string;
+  /** Official print footer — show signature underline even on read-only paper */
+  signatureLine?: boolean;
+}) {
+  const ui = useNtpUi();
+  const inputClass = useNtpLineClass();
+  const options = personnelForRole(role);
+  const selectedId = personnelIdForExaminer(role, nameValue, '');
 
   if (readOnly) {
     return (
-      <div className="space-y-1">
-        <Field label="Specimen Volume and Quality:">
-          <Line value={line1} onChange={() => undefined} readOnly />
-        </Field>
-        {line2.trim() ? (
-          <div className="pl-[11rem] sm:pl-[12.5rem]">
-            <Line value={line2} onChange={() => undefined} readOnly />
-          </div>
-        ) : null}
-      </div>
+      <Line
+        value={nameValue}
+        onChange={() => undefined}
+        readOnly
+        plainPaper={ui === 'paper'}
+        paperFieldUnderline={Boolean(signatureLine && ui === 'paper')}
+      />
     );
   }
 
   return (
-    <div className="space-y-1">
-      <Field label="Specimen Volume and Quality:">
-        <Line
-          value={line1}
-          onChange={(val) => onChange('specimenVolumeQuality', val)}
-          placeholder="e.g. 2 sputum containers; mucopurulent; adequate volume"
-        />
-      </Field>
-      {showSecond ? (
-        <div className="flex items-end gap-2 pl-[11rem] sm:pl-[12.5rem]">
-          <div className="flex-1 min-w-0">
-            <Line
-              value={line2}
-              onChange={(val) => onChange('specimenVolumeQuality2', val)}
-              placeholder="Additional volume / quality note (optional)"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              onChange('specimenVolumeQuality2', '');
-              setExtraOpen(false);
-            }}
-            className="shrink-0 text-[10px] font-semibold text-slate-500 hover:text-rose-600 print:hidden"
-          >
-            Remove line
-          </button>
-        </div>
+  <>
+    <select
+      value={selectedId}
+      onChange={(e) => {
+        const id = e.target.value;
+        if (!id) {
+          onNameChange('');
+          onDesignationChange?.('');
+          return;
+        }
+        const person = findPersonnelById(id);
+        if (!person) return;
+        onNameChange(person.name);
+        onDesignationChange?.(person.designation);
+      }}
+      className={`${inputClass} cursor-pointer`}
+      aria-label={placeholder}
+    >
+      <option value="">{placeholder}</option>
+      {options.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.name}
+        </option>
+      ))}
+      {nameValue.trim() && !selectedId ? (
+        <option value="__custom__" disabled>
+          Current: {nameValue}
+        </option>
+      ) : null}
+    </select>
+    {designationValue?.trim() ? (
+      <p className="text-[10px] text-slate-500 mt-1">{designationValue}</p>
+    ) : null}
+  </>
+  );
+}
+
+function NtpSpecimenAccessionBlock({
+  title,
+  volume,
+  onVolumeChange,
+  quality,
+  onQualityChange,
+  reason,
+  onReasonChange,
+  readOnly,
+}: {
+  title: string;
+  volume: string;
+  onVolumeChange: (val: string) => void;
+  quality: string;
+  onQualityChange: (status: 'Accepted' | 'Rejected') => void;
+  reason: string;
+  onReasonChange: (val: string) => void;
+  readOnly?: boolean;
+}) {
+  const ui = useNtpUi();
+  const saas = ui === 'saas';
+  const rejected = quality === 'Rejected';
+  const statusLegendClass = saas
+    ? 'text-xs font-semibold text-slate-600 shrink-0'
+    : 'text-[10px] font-semibold text-slate-800 shrink-0';
+
+  return (
+    <div
+      className={
+        saas
+          ? 'rounded-xl border border-[var(--lims-border)] bg-slate-50/50 p-3 space-y-2.5'
+          : 'ntp-paper-specimen-block border border-slate-800 p-1 space-y-0.5'
+      }
+    >
+      <div
+        className={
+          saas
+            ? 'text-xs font-bold uppercase tracking-wide text-[#0878e8]'
+            : 'ntp-paper-specimen-block-title text-[9px] font-bold uppercase text-slate-900 leading-tight'
+        }
+      >
+        {title}
+      </div>
+      {saas ? (
+        <Field label="Specimen Volume and Quality:">
+          <Line
+            value={volume}
+            onChange={onVolumeChange}
+            readOnly={readOnly}
+            placeholder="e.g. mucopurulent; adequate volume"
+          />
+        </Field>
       ) : (
-        <div className="pl-[11rem] sm:pl-[12.5rem] print:hidden">
-          <button
-            type="button"
-            onClick={() => setExtraOpen(true)}
-            className="text-[10px] font-semibold text-[#0176d3] hover:underline"
-          >
-            + Add line
-          </button>
-        </div>
+        <NtpPaperInlineField label="Specimen Volume and Quality:" className="w-full !flex-nowrap">
+          <Line
+            value={volume}
+            onChange={onVolumeChange}
+            readOnly={readOnly}
+            plainPaper
+            inlineValue
+            placeholder="e.g. mucopurulent; adequate volume"
+          />
+        </NtpPaperInlineField>
       )}
+      <div className="ntp-paper-specimen-status flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <span className={statusLegendClass}>Accepted / Rejected:</span>
+        <Box checked={quality === 'Accepted'} label="Accepted" readOnly={readOnly} onChange={() => onQualityChange('Accepted')} />
+        <Box checked={quality === 'Rejected'} label="Rejected" readOnly={readOnly} onChange={() => onQualityChange('Rejected')} />
+      </div>
+      {rejected ? (
+        saas ? (
+          <Field label="Reason:">
+            <Line value={reason} onChange={onReasonChange} readOnly={readOnly} />
+          </Field>
+        ) : (
+          <NtpPaperInlineField label="Reason:" className="w-full !flex-nowrap">
+            <Line
+              value={reason}
+              onChange={onReasonChange}
+              readOnly={readOnly}
+              plainPaper
+              inlineValue
+            />
+          </NtpPaperInlineField>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+/** '' = infer from dates; '1' = show; '0' = user removed (ignore dates). */
+function ntpRequestHasSecondSpecimen(values: Values): boolean {
+  if (values.request_spec2_active === '0') return false;
+  if (values.request_spec2_active === '1') return true;
+  return (
+    (values.spec2_collected || '').trim().length > 0 ||
+    (values.spec2_dispatched || '').trim().length > 0
+  );
+}
+
+function NtpSpecimenAccessionFields({
+  values,
+  onChange,
+  readOnly,
+  showSecondSpecimen = true,
+}: {
+  values: Values;
+  onChange: (key: string, value: string) => void;
+  readOnly?: boolean;
+  showSecondSpecimen?: boolean;
+}) {
+  const ui = useNtpUi();
+  const setSpecimenQuality = (which: 1 | 2, status: 'Accepted' | 'Rejected') => {
+    if (which === 1) {
+      onChange('specimenQuality', status);
+      if (status === 'Accepted') onChange('specimenQualityReason', '');
+    } else {
+      onChange('spec2_quality', status);
+      if (status === 'Accepted') onChange('spec2_qualityReason', '');
+    }
+  };
+
+  return (
+    <div
+      className={`grid ${
+        ui === 'paper'
+          ? `${showSecondSpecimen ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5 mt-1`
+          : `${showSecondSpecimen ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'} gap-3`
+      }`}
+    >
+      <NtpSpecimenAccessionBlock
+        title="Specimen 1"
+        volume={values.specimenVolumeQuality || ''}
+        onVolumeChange={(val) => onChange('specimenVolumeQuality', val)}
+        quality={values.specimenQuality || ''}
+        onQualityChange={(status) => setSpecimenQuality(1, status)}
+        reason={values.specimenQualityReason || ''}
+        onReasonChange={(val) => onChange('specimenQualityReason', val)}
+        readOnly={readOnly}
+      />
+      {showSecondSpecimen ? (
+        <NtpSpecimenAccessionBlock
+          title="Specimen 2"
+          volume={values.specimenVolumeQuality2 || ''}
+          onVolumeChange={(val) => onChange('specimenVolumeQuality2', val)}
+          quality={values.spec2_quality || ''}
+          onQualityChange={(status) => setSpecimenQuality(2, status)}
+          reason={values.spec2_qualityReason || ''}
+          onReasonChange={(val) => onChange('spec2_qualityReason', val)}
+          readOnly={readOnly}
+        />
+      ) : null}
     </div>
   );
 }
 
 /** full = paper-style (print / form library); workflow = collapsible steps on sample detail */
 export type NtpLabRequestFormLayout = 'full' | 'workflow';
+
+const NTP_WORKFLOW_SLIDES = [
+  { id: 'request', title: 'Request', hint: 'Sending facility & tests' },
+  { id: 'receive', title: 'Receive', hint: 'Laboratory accession' },
+  { id: 'results', title: 'Results', hint: 'Diagnostics & release' },
+] as const;
+
+function NtpWorkflowProgress({
+  slides,
+  activeIndex,
+  onSelect,
+}: {
+  slides: readonly { id: string; title: string; hint: string }[];
+  activeIndex: number;
+  onSelect: (index: number) => void;
+}) {
+  const active = slides[activeIndex];
+  const progressPct = ((activeIndex + 1) / slides.length) * 100;
+
+  return (
+    <div className="print:hidden space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span className="text-slate-500">
+          Step <span className="font-semibold text-slate-800">{activeIndex + 1}</span> of{' '}
+          {slides.length}
+        </span>
+        <span className="font-semibold text-[#0878e8]">{active?.hint}</span>
+      </div>
+      <div className="h-2 rounded-full bg-slate-200 overflow-hidden" aria-hidden>
+        <div
+          className="h-full bg-[#0878e8] transition-all duration-300 ease-out"
+          style={{ width: `${progressPct}%` }}
+        />
+      </div>
+      <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-0.5" role="tablist" aria-label="Form progress">
+        {slides.map((slide, index) => {
+          const isActive = index === activeIndex;
+          const isComplete = index < activeIndex;
+          return (
+            <button
+              key={slide.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => onSelect(index)}
+              className={`flex-1 min-w-[5.5rem] rounded-lg border px-2 py-2 text-center transition ${
+                isActive
+                  ? 'border-[#0878e8] bg-[#0878e8]/10 shadow-sm'
+                  : isComplete
+                    ? 'border-emerald-200 bg-emerald-50/90'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <div
+                className={`text-[10px] font-bold uppercase tracking-wide ${
+                  isActive ? 'text-[#0878e8]' : isComplete ? 'text-emerald-700' : 'text-slate-400'
+                }`}
+              >
+                {index + 1}
+              </div>
+              <div
+                className={`text-[10px] sm:text-xs font-semibold truncate mt-0.5 ${
+                  isActive ? 'text-slate-900' : 'text-slate-600'
+                }`}
+              >
+                {slide.title}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function NtpFormSection({
   step,
@@ -784,6 +1696,7 @@ function NtpFormSection({
   summary,
   collapsible,
   defaultOpen,
+  hidden,
   children,
 }: {
   step: string;
@@ -792,24 +1705,61 @@ function NtpFormSection({
   summary?: string;
   collapsible: boolean;
   defaultOpen: boolean;
+  hidden?: boolean;
   children: React.ReactNode;
 }) {
+  const ui = useNtpUi();
   const [open, setOpen] = useState(defaultOpen);
   const isOpen = !collapsible || open;
+  const saas = ui === 'saas';
+
+  if (hidden) return null;
 
   const headerInner = (
     <>
       <div className="min-w-0 text-left flex-1">
-        <div className="font-bold text-[11px] uppercase tracking-wide text-slate-800">
-          {step}. {title}
+        <div
+          className={
+            saas
+              ? 'flex flex-wrap items-center gap-2 font-bold text-sm text-[var(--lims-navy)]'
+              : 'font-bold text-[11px] uppercase tracking-wide text-slate-800'
+          }
+        >
+          {saas ? (
+            <>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#0878e8] bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
+                {step}
+              </span>
+              <span>{title}</span>
+            </>
+          ) : step === 'Request' ? (
+            <span>1. REQUEST</span>
+          ) : (
+            <>
+              <span>{step}. </span>
+              <span>{title}</span>
+            </>
+          )}
         </div>
-        <div className="font-semibold italic text-[10px] text-slate-600">{subtitle}</div>
+        <div
+          className={
+            saas ? 'text-xs text-slate-500 mt-1' : 'font-semibold italic text-[9px] text-slate-600 leading-tight mt-0.5'
+          }
+        >
+          {subtitle}
+        </div>
         {collapsible && !isOpen && summary ? (
-          <div className="mt-1 text-[10px] text-slate-700 truncate">{summary}</div>
+          <div className={`mt-1 truncate ${saas ? 'text-xs text-slate-600' : 'text-[10px] text-slate-700'}`}>
+            {summary}
+          </div>
         ) : null}
       </div>
       {collapsible ? (
-        <span className="shrink-0 print:hidden flex items-center gap-0.5 text-[10px] font-semibold text-[#0176d3]">
+        <span
+          className={`shrink-0 print:hidden flex items-center gap-0.5 font-semibold ${
+            saas ? 'text-xs text-[#0878e8]' : 'text-[10px] text-[#0176d3]'
+          }`}
+        >
           {isOpen ? 'Collapse' : 'Expand'}
           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </span>
@@ -817,27 +1767,33 @@ function NtpFormSection({
     </>
   );
 
+  const sectionClass = saas
+    ? 'rounded-xl border border-[var(--lims-border)] bg-white shadow-sm overflow-hidden ntp-form-section'
+    : 'border border-slate-800 ntp-form-section';
+
+  const headerClass = saas
+    ? 'w-full bg-gradient-to-r from-slate-50 to-sky-50/40 border-b border-[var(--lims-border)] px-4 py-3 flex items-start justify-between gap-2 text-left'
+    : 'w-full bg-slate-100 border-b border-slate-800 px-2 py-1 flex items-start justify-between gap-1.5 text-left';
+
+  const bodyClass = saas
+    ? `ntp-section-body px-4 py-4 space-y-4 ${isOpen ? '' : 'hidden print:block'}`
+    : `ntp-section-body p-1.5 space-y-1 ${isOpen ? '' : 'hidden print:block'}`;
+
   return (
-    <section className="border border-slate-800 ntp-form-section">
+    <section className={sectionClass}>
       {collapsible ? (
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="w-full bg-slate-100 border-b border-slate-800 px-2 py-1.5 flex items-start justify-between gap-2 text-left print:pointer-events-none cursor-pointer"
+          className={`${headerClass} print:pointer-events-none cursor-pointer`}
           aria-expanded={isOpen}
         >
           {headerInner}
         </button>
       ) : (
-        <div className="bg-slate-100 border-b border-slate-800 px-2 py-1.5 flex items-start justify-between gap-2">
-          {headerInner}
-        </div>
+        <div className={headerClass}>{headerInner}</div>
       )}
-      <div
-        className={`ntp-section-body p-2 space-y-1.5 ${isOpen ? '' : 'hidden print:block'}`}
-      >
-        {children}
-      </div>
+      <div className={bodyClass}>{children}</div>
     </section>
   );
 }
@@ -871,7 +1827,11 @@ export const NtpLabRequestForm: React.FC<{
     if (!on && alsoClear?.length) alsoClear.forEach((k) => onChange(k, ''));
   };
   const pick = (key: string, option: string) => onChange(key, v(key) === option ? '' : option);
-
+  const repeatCollectionYes = v('repeatCollection') === 'Yes';
+  const setRepeatCollection = (choice: 'No' | 'Yes') => {
+    onChange('repeatCollection', choice);
+    if (choice === 'No') onChange('repeatReason', '');
+  };
   const genericResultKeys = [
     'res_result_reading1',
     'res_result_reading2',
@@ -879,18 +1839,38 @@ export const NtpLabRequestForm: React.FC<{
     'res_result_remarks',
   ] as const;
 
-  const clearKeysForRow = (t: DiagnosticResultRow) =>
-    t.kind === 'smear'
-      ? [...SMEAR_RESULT.clearKeys]
-      : [t.id, ...genericResultKeys];
+  const clearKeysForRow = (t: DiagnosticResultRow) => {
+    if (t.kind === 'smear') return [...SMEAR_RESULT.clearKeys];
+    const pk = molecularPerTestKeys(t);
+    return [t.id, pk.r1, pk.r2, pk.r3, ...genericResultKeys];
+  };
 
   const maybeClearResultRemarks = (reading1: string, rifReading3: string) => {
     if (!needsNtpResultRemarks(reading1, rifReading3)) onChange('res_result_remarks', '');
   };
 
-  const setMolecularResult = (test: DiagnosticResultRow, key: (typeof genericResultKeys)[number], val: string) => {
+  const syncMolecularPerTestFields = (
+    test: DiagnosticResultRow,
+    patch: Partial<Record<(typeof genericResultKeys)[number], string>>
+  ) => {
+    const merged = { ...values, ...patch };
+    const r1 = merged.res_result_reading1 || '';
+    const r2 = merged.res_result_reading2 || '';
+    const r3 = merged.res_result_diagnosis || '';
+    const pk = molecularPerTestKeys(test);
+    onChange(pk.r1, r1);
+    onChange(pk.r2, r2);
+    onChange(pk.r3, r3);
+    onChange(test.id, formatNtpMolecularOfficialLine(r1, r2, r3));
+  };
+
+  const setMolecularResult = (
+    test: DiagnosticResultRow,
+    key: (typeof genericResultKeys)[number],
+    val: string
+  ) => {
     onChange(key, val);
-    if (key === 'res_result_diagnosis') onChange(test.id, val);
+    syncMolecularPerTestFields(test, { [key]: val });
   };
 
   const visibleDiagnosticChkIds = new Set(DIAGNOSTIC_RESULT_ROWS.map((t) => t.chkId));
@@ -901,13 +1881,16 @@ export const NtpLabRequestForm: React.FC<{
   const selectedDiagnosticTest = DIAGNOSTIC_RESULT_ROWS.find(
     (t) => t.chkId === selectedDiagnosticChkId
   );
+  const workflow = layout === 'workflow';
 
   const molecularReading1 = v('res_result_reading1') || NTP_READING1_MTB_OPTIONS[0];
   const molecularRifReading3 = v('res_result_diagnosis');
-  const showResultRemarks =
-    Boolean(selectedDiagnosticTest && selectedDiagnosticTest.kind !== 'smear') &&
-    needsNtpResultRemarks(molecularReading1, molecularRifReading3);
 
+  const workflowEntryMode = workflow && !readOnly;
+  const displayDiagnosticRows = useMemo(
+    () => resolveNtpDiagnosticRowsForForm(values, { workflowEntry: workflowEntryMode }),
+    [values, workflowEntryMode]
+  );
   const isSmearResults = selectedDiagnosticTest?.kind === 'smear';
   const showSmearSpec2 =
     isSmearResults &&
@@ -915,6 +1898,10 @@ export const NtpLabRequestForm: React.FC<{
       v('smear2_reading1').trim().length > 0 ||
       v('smear2_reading2').trim().length > 0);
   const smearSpecimenRowCount = showSmearSpec2 ? 2 : 1;
+  const printSmearSpec2 =
+    v('smear_spec2_active') === '1' ||
+    v('smear2_reading1').trim().length > 0 ||
+    v('smear2_reading2').trim().length > 0;
 
   const clearSmearSpec2 = () => {
     const next = { ...values };
@@ -959,6 +1946,11 @@ export const NtpLabRequestForm: React.FC<{
     return ids;
   }, [values]);
 
+  const requestedDiagnosticRows = useMemo(
+    () => DIAGNOSTIC_RESULT_ROWS.filter((t) => requestedResultChkIds.has(t.chkId)),
+    [requestedResultChkIds]
+  );
+
   const handleSingleDiagnosticPick = (pickedChkId: string) => {
     if (
       pickedChkId &&
@@ -967,21 +1959,81 @@ export const NtpLabRequestForm: React.FC<{
     ) {
       return;
     }
+    const currentChk = selectedDiagnosticChkId || resolveNtpSelectedDiagnosticChkId(values);
+    const currentTest = DIAGNOSTIC_RESULT_ROWS.find((t) => t.chkId === currentChk);
+    if (
+      currentTest &&
+      currentTest.kind !== 'smear' &&
+      pickedChkId &&
+      currentChk &&
+      currentChk !== pickedChkId
+    ) {
+      syncMolecularPerTestFields(currentTest, {});
+    }
+    const pickedTest = DIAGNOSTIC_RESULT_ROWS.find((t) => t.chkId === pickedChkId);
+    if (pickedTest && pickedTest.kind !== 'smear') {
+      const pk = molecularPerTestKeys(pickedTest);
+      onChange('res_result_reading1', values[pk.r1] || '');
+      onChange('res_result_reading2', values[pk.r2] || '');
+      onChange('res_result_diagnosis', values[pk.r3] || '');
+    } else if (pickedTest?.kind === 'smear') {
+      onChange('res_result_reading1', '');
+      onChange('res_result_reading2', '');
+      onChange('res_result_diagnosis', '');
+    }
     const next: Values = { ...values, res_diagnostic_test: pickedChkId };
     syncNtpResultChecksFromRequest(next);
-    DIAGNOSTIC_RESULT_ROWS.forEach((t) => {
-      const on = Boolean(pickedChkId && t.chkId === pickedChkId);
-      if (!on && clearKeysForRow(t).length) {
-        clearKeysForRow(t).forEach((k) => {
-          next[k] = '';
-        });
-      }
-    });
     pushNtpState(next);
   };
 
-  const workflow = layout === 'workflow';
-  const collapsible = workflow && !readOnly;
+  const uiMode: NtpUiMode = workflow && !readOnly ? 'saas' : 'paper';
+  const showRequestSpec2 = uiMode === 'paper' ? true : ntpRequestHasSecondSpecimen(values);
+  const requestSpecimenRowNums = showRequestSpec2 ? ([1, 2] as const) : ([1] as const);
+  const addRequestSpec2 = () => onChange('request_spec2_active', '1');
+  const clearRequestSpec2 = () => {
+    onChange('request_spec2_active', '0');
+    onChange('spec2_collected', '');
+    onChange('spec2_dispatched', '');
+    onChange('spec2_quality', '');
+    onChange('spec2_qualityReason', '');
+    onChange('specimenVolumeQuality2', '');
+  };
+  const useSaasResultsPanel = workflowEntryMode && uiMode === 'saas';
+  /** Smear and molecular (Xpert, etc.) use different column sets on Form 2a — split when both appear on print. */
+  const splitDiagnosticTables =
+    !useSaasResultsPanel &&
+    displayDiagnosticRows.some((t) => t.kind === 'smear') &&
+    displayDiagnosticRows.some((t) => t.kind !== 'smear');
+  const useSmearColumnLayout =
+    !useSaasResultsPanel &&
+    !splitDiagnosticTables &&
+    displayDiagnosticRows.length > 0 &&
+    (workflowEntryMode
+      ? displayDiagnosticRows[0]?.kind === 'smear'
+      : displayDiagnosticRows.every((t) => t.kind === 'smear'));
+  const diagnosticTableGroups = useMemo(() => {
+    if (displayDiagnosticRows.length === 0) {
+      return [{ rows: [] as DiagnosticResultRow[], smearLayout: false }];
+    }
+    if (splitDiagnosticTables) {
+      const molecular = displayDiagnosticRows.filter((t) => t.kind !== 'smear');
+      const smear = displayDiagnosticRows.filter((t) => t.kind === 'smear');
+      const groups: { rows: DiagnosticResultRow[]; smearLayout: boolean }[] = [];
+      if (molecular.length) groups.push({ rows: molecular, smearLayout: false });
+      if (smear.length) groups.push({ rows: smear, smearLayout: true });
+      return groups;
+    }
+    return [{ rows: displayDiagnosticRows, smearLayout: useSmearColumnLayout }];
+  }, [displayDiagnosticRows, splitDiagnosticTables, useSmearColumnLayout]);
+  const useWorkflowSlides = workflow && !readOnly;
+  const [workflowSlide, setWorkflowSlide] = useState(0);
+  const activeSlideId = NTP_WORKFLOW_SLIDES[workflowSlide]?.id;
+  const slideVisible = (id: string) => !useWorkflowSlides || activeSlideId === id;
+  const collapsible = workflow && !readOnly && !useWorkflowSlides;
+  const tableClass =
+    uiMode === 'saas' ? 'lims-table w-full text-sm' : 'w-full border border-slate-800 border-collapse';
+  const formGridClass =
+    uiMode === 'saas' ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'grid grid-cols-2 gap-x-3 gap-y-1.5';
   const patientLocked = (fieldKey: string) =>
     Boolean(readOnly || (workflow && NTP_PATIENT_AUTO_FIELD_KEYS.has(fieldKey)));
 
@@ -998,22 +2050,11 @@ export const NtpLabRequestForm: React.FC<{
 
   const receiveSummary = [
     v('specimenReceivedBy') ? `Received by ${v('specimenReceivedBy')}` : '',
-    v('specimenQuality') || '',
     v('specimenReceivedAt') ? v('specimenReceivedAt').replace('T', ' ') : '',
-    v('specimenVolumeQuality') || '',
-    v('specimenVolumeQuality2') || '',
-  ]
-    .filter(Boolean)
-    .join(' · ');
-
-  const selectedDiagnosticLabel =
-    DIAGNOSTIC_TEST_PICKER_OPTIONS.find((o) => o.value === selectedDiagnosticChkId)?.label || '';
-
-  const assignmentSummary = [
-    assignedExaminations?.length ? assignedExaminations.join(', ') : '',
-    selectedDiagnosticLabel && selectedDiagnosticLabel !== '— Select examination —'
-      ? `Entry: ${selectedDiagnosticLabel}`
-      : 'Pick one examination for results',
+    v('specimenQuality') ? `Spec 1: ${v('specimenQuality')}` : '',
+    v('spec2_quality') ? `Spec 2: ${v('spec2_quality')}` : '',
+    v('specimenVolumeQuality') ? `S1 vol: ${v('specimenVolumeQuality')}` : '',
+    v('specimenVolumeQuality2') ? `S2 vol: ${v('specimenVolumeQuality2')}` : '',
   ]
     .filter(Boolean)
     .join(' · ');
@@ -1021,212 +2062,582 @@ export const NtpLabRequestForm: React.FC<{
   const pickerInResultsTable = !workflow;
 
   return (
-    <div className="text-slate-900 text-[11px] leading-tight space-y-3">
-      <ResultFormOrgBanner
-        shortName={shortName}
-        panelTitle={panelTitle}
-        verificationQr={verificationQr}
-      />
-
-      {workflow && !readOnly ? (
-        <p className="print:hidden text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-1.5">
-          Lab workflow: check <span className="font-semibold text-slate-800">Test Requested</span> under
-          Request first — Results and examination assignment follow those checks. Expand Receive as needed.
-          Patient demographics on Request come from the requisition (read-only). Print uses paper order.
-        </p>
-      ) : null}
-
+    <NtpUiContext.Provider value={uiMode}>
+    <div
+      className={
+        uiMode === 'saas'
+          ? 'ntp-form-root--saas text-slate-900 text-sm leading-normal space-y-4'
+          : `text-slate-900 text-[11px] leading-tight space-y-2${readOnly ? ' ntp-official-result-form' : ''}`
+      }
+    >
       {workflow ? (
-        <NtpFormSection
-          step="Assign"
-          title="Examination assignment"
-          subtitle="Pick one checked Test Requested examination to enter on this sheet"
-          summary={assignmentSummary}
-          collapsible={collapsible}
-          defaultOpen
-        >
-          {assignedExaminations && assignedExaminations.length > 0 ? (
-            <div className="mb-2 print:hidden">
-              <div className="text-[10px] font-semibold text-slate-700">Assigned on this request:</div>
-              <ul className="mt-1 flex flex-wrap gap-1.5">
-                {assignedExaminations.map((name) => (
-                  <li
-                    key={name}
-                    className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-[#0176d3]/10 text-[#014486] border border-[#0176d3]/25"
-                  >
-                    {name}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {requestedResultChkIds.size === 0 && !readOnly ? (
-            <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 print:hidden">
-              Mark at least one test under <span className="font-semibold">Test Requested</span> (Request
-              step) that appears on Form 2a results — e.g. Smear Microscopy or Xpert MTB/RIF.
-            </p>
-          ) : null}
-          <Field label="Diagnostic test for result entry:">
-            <DiagnosticTestPicker
-              selectedChkId={selectedDiagnosticChkId}
-              readOnly={readOnly || requestedResultChkIds.size <= 1}
-              allowedChkIds={requestedResultChkIds}
-              onPick={handleSingleDiagnosticPick}
-            />
-          </Field>
-        </NtpFormSection>
+        <div className="print:hidden rounded-lg border border-[var(--lims-border)] bg-gradient-to-br from-white to-sky-50/40 px-4 py-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[#0878e8]">{shortName}</div>
+            <div className="text-sm font-semibold text-[var(--lims-navy)] mt-0.5">{panelTitle}</div>
+          </div>
+          {verificationQr ? <div className="shrink-0">{verificationQr}</div> : null}
+        </div>
+      ) : (
+        <ResultFormOrgBanner
+          shortName={shortName}
+          panelTitle={panelTitle}
+          verificationQr={verificationQr}
+        />
+      )}
+
+      {useWorkflowSlides ? (
+        <NtpWorkflowProgress
+          slides={NTP_WORKFLOW_SLIDES}
+          activeIndex={workflowSlide}
+          onSelect={setWorkflowSlide}
+        />
+      ) : workflow && !readOnly ? (
+        <p className="print:hidden text-xs text-slate-600 bg-sky-50/60 border border-sky-100 rounded-lg px-3 py-2 leading-snug">
+          Mark <span className="font-semibold text-slate-800">tests requested</span> on step 1, complete{' '}
+          <span className="font-semibold text-slate-800">receive</span>, then enter{' '}
+          <span className="font-semibold text-slate-800">results</span> (use the test tabs when multiple exams are on
+          this form). Patient demographics come from the requisition.
+        </p>
       ) : null}
 
       <NtpFormSection
         step="Request"
         title="Sending facility"
-        subtitle="To be filled out by requesting facility health worker"
+        subtitle={
+          uiMode === 'paper'
+            ? 'To be filled out by requesting facility Health Worker'
+            : 'To be filled out by requesting facility health worker'
+        }
         summary={requestSummary}
         collapsible={collapsible}
-        defaultOpen={!workflow}
+        defaultOpen={!workflow || useWorkflowSlides}
+        hidden={!slideVisible('request')}
       >
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-            <Field label="Name of Request Facility/Unit:">
-              <Line value={v('facilityName')} onChange={set('facilityName')} readOnly={readOnly} />
-            </Field>
-            <Field label="Date of Request:">
-              <Line type="date" value={v('dateOfRequest')} onChange={set('dateOfRequest')} readOnly={readOnly} />
-            </Field>
-            <Field label="Facility contact information:">
-              <Line value={v('facilityContact')} onChange={set('facilityContact')} readOnly={readOnly} />
-            </Field>
-            <Field label="Requesting Physician:">
-              <Line value={v('requestingPhysician')} onChange={set('requestingPhysician')} readOnly={readOnly} />
-            </Field>
-            <Field label="Patient's Full Name:">
-              <Line value={v('patientName')} onChange={set('patientName')} readOnly={patientLocked('patientName')} />
-            </Field>
-            <div className="flex items-end gap-3">
-              <Field label="Age:">
-                <Line value={v('age')} onChange={set('age')} readOnly={patientLocked('age')} />
-              </Field>
-              <span className="shrink-0">Sex:</span>
-              <Box checked={v('sex') === 'M'} label="M" readOnly={patientLocked('sex')} onChange={() => pick('sex', 'M')} />
-              <Box checked={v('sex') === 'F'} label="F" readOnly={patientLocked('sex')} onChange={() => pick('sex', 'F')} />
-            </div>
-            <Field label="Province/City:">
-              <Line value={v('provinceCity')} onChange={set('provinceCity')} readOnly={patientLocked('provinceCity')} />
-            </Field>
-            <Field label="Patient's Contact Number:">
-              <Line
-                value={v('patientContact')}
-                onChange={set('patientContact')}
-                readOnly={patientLocked('patientContact')}
-              />
-            </Field>
-          </div>
-
-          <div className="pt-1">
-            <div className="font-semibold">Reason for Examination / History of Treatment:</div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
-              <span>Diagnosis</span>
-              <Box checked={v('diagnosis') === 'New'} label="New" readOnly={readOnly} onChange={() => pick('diagnosis', 'New')} />
-              <Box checked={v('diagnosis') === 'Retreatment'} label="Retreatment" readOnly={readOnly} onChange={() => pick('diagnosis', 'Retreatment')} />
-              <Box checked={v('treatmentPhase') === 'Baseline'} label="Baseline" readOnly={readOnly} onChange={() => pick('treatmentPhase', 'Baseline')} />
-              <Box checked={v('treatmentPhase') === 'Follow-up'} label="Follow-up" readOnly={readOnly} onChange={() => pick('treatmentPhase', 'Follow-up')} />
-            </div>
-            <div className="mt-1 grid grid-cols-2 gap-x-3">
-              <Field label="TB Case No.:">
-                <Line value={v('tbCaseNo')} onChange={set('tbCaseNo')} readOnly={patientLocked('tbCaseNo')} />
-              </Field>
-              <Field label="Month of Treatment:">
-                <Line value={v('monthOfTreatment')} onChange={set('monthOfTreatment')} readOnly={readOnly} />
-              </Field>
-            </div>
-          </div>
-
-          <div>
-            <div className="font-semibold">Test Requested:</div>
-            <div className="mt-1 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1">
-              {REQUESTED_TESTS.map((test) => (
-                <Box
-                  key={test.id}
-                  checked={checked(test.id)}
-                  label={test.label}
-                  readOnly={readOnly}
-                  onChange={(on) => patchFromTestRequested({ [test.id]: on ? '1' : '' })}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-end gap-x-4 gap-y-1">
-            <span className="font-semibold">Type of Specimen:</span>
-            <Box checked={v('specimenType') === 'Sputum'} label="Sputum" readOnly={readOnly} onChange={() => pick('specimenType', 'Sputum')} />
-            <Box checked={v('specimenType') === 'Other'} label="Other (specify)" readOnly={readOnly} onChange={() => pick('specimenType', 'Other')} />
-            {v('specimenType') === 'Other' ? (
-              <div className="min-w-[8rem] flex-1">
-                <Line value={v('specimenOther')} onChange={set('specimenOther')} readOnly={readOnly} />
+        <div className={uiMode === 'paper' ? 'ntp-request-paper' : 'space-y-4'}>
+          {uiMode === 'paper' ? (
+            <>
+              <div className="ntp-request-paper-patient border border-slate-800">
+                <NtpPaperPatientRow>
+                  <NtpPaperPatientCell colSpan={9} label="Name of Request Facility/Unit:">
+                    <Line
+                      value={v('facilityName')}
+                      onChange={set('facilityName')}
+                      readOnly={readOnly}
+                      plainPaper
+                    />
+                  </NtpPaperPatientCell>
+                  <NtpPaperPatientCell colSpan={3} label="Date of Request:" tone="date">
+                    <Line
+                      type="date"
+                      value={v('dateOfRequest')}
+                      onChange={set('dateOfRequest')}
+                      readOnly={readOnly}
+                      plainPaper
+                    />
+                  </NtpPaperPatientCell>
+                </NtpPaperPatientRow>
+                <NtpPaperPatientRow>
+                  <NtpPaperPatientCell colSpan={9} label="Facility Contact Information:">
+                    <Line
+                      value={v('facilityContact')}
+                      onChange={set('facilityContact')}
+                      readOnly={readOnly}
+                      plainPaper
+                    />
+                  </NtpPaperPatientCell>
+                  <NtpPaperPatientCell colSpan={3} label="Requesting Physician:">
+                    <Line
+                      value={v('requestingPhysician')}
+                      onChange={set('requestingPhysician')}
+                      readOnly={readOnly}
+                      plainPaper
+                    />
+                  </NtpPaperPatientCell>
+                </NtpPaperPatientRow>
+                <NtpPaperPatientRow>
+                  <NtpPaperPatientCell colSpan={9} label="Patient's Full Name:">
+                    <Line
+                      value={v('patientName')}
+                      onChange={set('patientName')}
+                      readOnly={patientLocked('patientName')}
+                      plainPaper
+                    />
+                  </NtpPaperPatientCell>
+                  <NtpPaperPatientCell colSpan={1} label="Age:" tone="narrow">
+                    <Line value={v('age')} onChange={set('age')} readOnly={patientLocked('age')} plainPaper />
+                  </NtpPaperPatientCell>
+                  <NtpPaperPatientCell colSpan={2} label="Sex:" tone="narrow">
+                    <div className="ntp-request-paper-sex-row flex flex-wrap items-center justify-center gap-1 pt-0 min-h-[1rem]">
+                      <Box checked={v('sex') === 'M'} label="M" readOnly={patientLocked('sex')} onChange={() => pick('sex', 'M')} />
+                      <Box checked={v('sex') === 'F'} label="F" readOnly={patientLocked('sex')} onChange={() => pick('sex', 'F')} />
+                    </div>
+                  </NtpPaperPatientCell>
+                </NtpPaperPatientRow>
+                <NtpPaperPatientRow>
+                  <NtpPaperPatientCell colSpan={9} label="Province/City:">
+                    <Line
+                      value={v('provinceCity')}
+                      onChange={set('provinceCity')}
+                      readOnly={patientLocked('provinceCity')}
+                      plainPaper
+                    />
+                  </NtpPaperPatientCell>
+                  <NtpPaperPatientCell colSpan={3} label="Patient's Contact Number:">
+                    <Line
+                      value={v('patientContact')}
+                      onChange={set('patientContact')}
+                      readOnly={patientLocked('patientContact')}
+                      plainPaper
+                    />
+                  </NtpPaperPatientCell>
+                </NtpPaperPatientRow>
               </div>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
-            <span>Repeat Collection?</span>
-            <Box checked={v('repeatCollection') === 'No'} label="No" readOnly={readOnly} onChange={() => pick('repeatCollection', 'No')} />
-            <Box checked={v('repeatCollection') === 'Yes'} label="Yes" readOnly={readOnly} onChange={() => pick('repeatCollection', 'Yes')} />
-            <span>Reason:</span>
-            <div className="min-w-[8rem] flex-1">
-              <Line value={v('repeatReason')} onChange={set('repeatReason')} readOnly={readOnly} />
-            </div>
-          </div>
+              <NtpPaperFormRow className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                <span className="text-[10px] font-semibold text-slate-900 shrink-0">Reason for Examination:</span>
+                <Box
+                  checked={v('treatmentPhase') === 'Diagnosis'}
+                  label="Diagnosis"
+                  readOnly={readOnly}
+                  onChange={() => pick('treatmentPhase', 'Diagnosis')}
+                />
+                <Box
+                  checked={v('treatmentPhase') === 'Baseline'}
+                  label="Baseline"
+                  readOnly={readOnly}
+                  onChange={() => pick('treatmentPhase', 'Baseline')}
+                />
+                <Box
+                  checked={v('treatmentPhase') === 'Follow-up'}
+                  label="Follow-up"
+                  readOnly={readOnly}
+                  onChange={() => pick('treatmentPhase', 'Follow-up')}
+                />
+                <NtpPaperInlineField label="TB Case No.:" className="min-w-[10rem] flex-1">
+                  <Line
+                    value={v('tbCaseNo')}
+                    onChange={set('tbCaseNo')}
+                    readOnly={patientLocked('tbCaseNo')}
+                    plainPaper
+                  />
+                </NtpPaperInlineField>
+              </NtpPaperFormRow>
+              <NtpPaperFormRow className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                <span className="text-[10px] font-semibold text-slate-900 shrink-0">History of Treatment:</span>
+                <Box checked={v('diagnosis') === 'New'} label="New" readOnly={readOnly} onChange={() => pick('diagnosis', 'New')} />
+                <Box
+                  checked={v('diagnosis') === 'Retreatment'}
+                  label="Retreatment"
+                  readOnly={readOnly}
+                  onChange={() => pick('diagnosis', 'Retreatment')}
+                />
+                <NtpPaperInlineField label="Month of Treatment:" className="min-w-[10rem] flex-1">
+                  <Line
+                    value={v('monthOfTreatment')}
+                    onChange={set('monthOfTreatment')}
+                    readOnly={readOnly}
+                    plainPaper
+                  />
+                </NtpPaperInlineField>
+              </NtpPaperFormRow>
+              <NtpPaperFormRow>
+                <div className="text-[10px] font-semibold text-slate-900 mb-1">Test Requested:</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-2 gap-y-1">
+                  {NTP_REQUESTED_TESTS_PAPER_COLS.map((col, colIdx) => (
+                    <div key={colIdx} className="flex flex-col gap-y-0.5 min-w-0">
+                      {col.map((test) => (
+                        <Box
+                          key={test.id}
+                          checked={checked(test.id)}
+                          label={test.label}
+                          readOnly={readOnly}
+                          onChange={(on) => patchFromTestRequested({ [test.id]: on ? '1' : '' })}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </NtpPaperFormRow>
+              <NtpPaperFormRow className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-[10px] font-semibold text-slate-900 shrink-0">Type of Specimen:</span>
+                <Box checked={v('specimenType') === 'Sputum'} label="Sputum" readOnly={readOnly} onChange={() => pick('specimenType', 'Sputum')} />
+                <Box
+                  checked={v('specimenType') === 'Other'}
+                  label="Other (specify)"
+                  readOnly={readOnly}
+                  onChange={() => pick('specimenType', 'Other')}
+                />
+                {v('specimenType') === 'Other' ? (
+                  <span className="min-w-[8rem] flex-1 max-w-xs">
+                    <Line value={v('specimenOther')} onChange={set('specimenOther')} readOnly={readOnly} />
+                  </span>
+                ) : (
+                  <span className="min-w-[8rem] flex-1 max-w-xs border-b border-slate-800 min-h-[1.125rem]" aria-hidden />
+                )}
+              </NtpPaperFormRow>
+              <NtpPaperFormRow className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-[10px] font-semibold text-slate-900 shrink-0">Repeat Collection?</span>
+                <Box
+                  checked={v('repeatCollection') === 'No'}
+                  label="No"
+                  readOnly={readOnly}
+                  onChange={() => setRepeatCollection('No')}
+                />
+                <Box
+                  checked={v('repeatCollection') === 'Yes'}
+                  label="Yes"
+                  readOnly={readOnly}
+                  onChange={() => setRepeatCollection('Yes')}
+                />
+                {repeatCollectionYes ? (
+                  <NtpPaperInlineField label="Reason:" className="min-w-[12rem] flex-1">
+                    <Line value={v('repeatReason')} onChange={set('repeatReason')} readOnly={readOnly} />
+                  </NtpPaperInlineField>
+                ) : null}
+              </NtpPaperFormRow>
+            </>
+          ) : (
+            <>
+              <div className={formGridClass}>
+                <Field label="Name of Request Facility/Unit:">
+                  <Line value={v('facilityName')} onChange={set('facilityName')} readOnly={readOnly} />
+                </Field>
+                <Field label="Date of Request:">
+                  <Line type="date" value={v('dateOfRequest')} onChange={set('dateOfRequest')} readOnly={readOnly} />
+                </Field>
+                <Field label="Facility contact information:">
+                  <Line value={v('facilityContact')} onChange={set('facilityContact')} readOnly={readOnly} />
+                </Field>
+                <Field label="Requesting Physician:">
+                  <Line value={v('requestingPhysician')} onChange={set('requestingPhysician')} readOnly={readOnly} />
+                </Field>
+                <Field label="Patient's Full Name:">
+                  <Line value={v('patientName')} onChange={set('patientName')} readOnly={patientLocked('patientName')} />
+                </Field>
+                {uiMode === 'saas' ? (
+                  <div className="space-y-1.5">
+                    <Field label="Age:">
+                      <Line value={v('age')} onChange={set('age')} readOnly={patientLocked('age')} />
+                    </Field>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs font-semibold text-slate-600">Sex</span>
+                      <div className="flex flex-wrap gap-2">
+                        <Box checked={v('sex') === 'M'} label="Male" readOnly={patientLocked('sex')} onChange={() => pick('sex', 'M')} />
+                        <Box checked={v('sex') === 'F'} label="Female" readOnly={patientLocked('sex')} onChange={() => pick('sex', 'F')} />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-end gap-3 sm:col-span-2">
+                    <Field label="Age:">
+                      <Line value={v('age')} onChange={set('age')} readOnly={patientLocked('age')} />
+                    </Field>
+                    <div className="ntp-paper-field flex flex-col gap-1 min-w-0">
+                      <span className="text-[10px] font-semibold text-slate-800">Sex:</span>
+                      <div className="flex flex-wrap items-center gap-3 pt-0.5">
+                        <Box checked={v('sex') === 'M'} label="M" readOnly={patientLocked('sex')} onChange={() => pick('sex', 'M')} />
+                        <Box checked={v('sex') === 'F'} label="F" readOnly={patientLocked('sex')} onChange={() => pick('sex', 'F')} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <Field label="Province/City:">
+                  <Line value={v('provinceCity')} onChange={set('provinceCity')} readOnly={patientLocked('provinceCity')} />
+                </Field>
+                <Field label="Patient's Contact Number:">
+                  <Line
+                    value={v('patientContact')}
+                    onChange={set('patientContact')}
+                    readOnly={patientLocked('patientContact')}
+                  />
+                </Field>
+              </div>
 
-          <Field label="Date:">
-            <Line type="date" value={v('collectionDate')} onChange={set('collectionDate')} readOnly={readOnly} />
-          </Field>
-          <table className="w-full border border-slate-800 border-collapse">
+              <div className={uiMode === 'saas' ? 'space-y-4' : 'pt-1 space-y-3'}>
+                <div className={uiMode === 'saas' ? 'space-y-2' : 'space-y-1.5'}>
+                  <NtpFieldLegend>Reason for Examination:</NtpFieldLegend>
+                  <div className={`flex flex-wrap items-center ${uiMode === 'saas' ? 'gap-2' : 'gap-x-4 gap-y-2'}`}>
+                    <Box
+                      checked={v('treatmentPhase') === 'Diagnosis'}
+                      label="Diagnosis"
+                      readOnly={readOnly}
+                      onChange={() => pick('treatmentPhase', 'Diagnosis')}
+                    />
+                    <Box
+                      checked={v('treatmentPhase') === 'Baseline'}
+                      label="Baseline"
+                      readOnly={readOnly}
+                      onChange={() => pick('treatmentPhase', 'Baseline')}
+                    />
+                    <Box
+                      checked={v('treatmentPhase') === 'Follow-up'}
+                      label="Follow-up"
+                      readOnly={readOnly}
+                      onChange={() => pick('treatmentPhase', 'Follow-up')}
+                    />
+                  </div>
+                  <Field label="TB Case No.:">
+                    <Line value={v('tbCaseNo')} onChange={set('tbCaseNo')} readOnly={patientLocked('tbCaseNo')} />
+                  </Field>
+                </div>
+                <div className={uiMode === 'saas' ? 'space-y-2' : 'space-y-1.5'}>
+                  <NtpFieldLegend>History of Treatment:</NtpFieldLegend>
+                  <div className={`flex flex-wrap items-center ${uiMode === 'saas' ? 'gap-2' : 'gap-x-4 gap-y-2'}`}>
+                    <Box checked={v('diagnosis') === 'New'} label="New" readOnly={readOnly} onChange={() => pick('diagnosis', 'New')} />
+                    <Box
+                      checked={v('diagnosis') === 'Retreatment'}
+                      label="Retreatment"
+                      readOnly={readOnly}
+                      onChange={() => pick('diagnosis', 'Retreatment')}
+                    />
+                  </div>
+                  <Field label="Month of Treatment:">
+                    <Line value={v('monthOfTreatment')} onChange={set('monthOfTreatment')} readOnly={readOnly} />
+                  </Field>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <NtpFieldLegend>Test Requested:</NtpFieldLegend>
+                <div
+                  className={
+                    uiMode === 'saas'
+                      ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2'
+                      : 'mt-1 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1'
+                  }
+                >
+                  {REQUESTED_TESTS.map((test) => (
+                    <Box
+                      key={test.id}
+                      checked={checked(test.id)}
+                      label={test.label}
+                      readOnly={readOnly}
+                      onChange={(on) => patchFromTestRequested({ [test.id]: on ? '1' : '' })}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className={uiMode === 'saas' ? 'space-y-4' : 'space-y-3'}>
+                <div className="space-y-2">
+                  <NtpFieldLegend>Type of Specimen:</NtpFieldLegend>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Box
+                      checked={v('specimenType') === 'Sputum'}
+                      label="Sputum"
+                      readOnly={readOnly}
+                      onChange={() => pick('specimenType', 'Sputum')}
+                    />
+                    <Box
+                      checked={v('specimenType') === 'Other'}
+                      label="Other (specify)"
+                      readOnly={readOnly}
+                      onChange={() => pick('specimenType', 'Other')}
+                    />
+                    {uiMode === 'saas' && v('specimenType') !== 'Other' ? null : (
+                      <div
+                        className={`min-w-0 flex-1 basis-full sm:basis-[14rem] sm:max-w-md ${
+                          uiMode === 'saas' ? 'sm:pl-1' : ''
+                        }`}
+                      >
+                        <Line
+                          value={v('specimenType') === 'Other' ? v('specimenOther') : ''}
+                          onChange={set('specimenOther')}
+                          readOnly={readOnly || v('specimenType') !== 'Other'}
+                          placeholder={v('specimenType') === 'Other' ? 'Specify specimen type' : ''}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <NtpFieldLegend>Repeat Collection?</NtpFieldLegend>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Box
+                      checked={v('repeatCollection') === 'No'}
+                      label="No"
+                      readOnly={readOnly}
+                      onChange={() => setRepeatCollection('No')}
+                    />
+                    <Box
+                      checked={v('repeatCollection') === 'Yes'}
+                      label="Yes"
+                      readOnly={readOnly}
+                      onChange={() => setRepeatCollection('Yes')}
+                    />
+                    {repeatCollectionYes ? (
+                      <>
+                        <span
+                          className={
+                            uiMode === 'saas'
+                              ? 'text-xs font-semibold text-slate-600 shrink-0 pl-0.5'
+                              : 'text-[10px] font-semibold text-slate-800 shrink-0'
+                          }
+                        >
+                          Reason:
+                        </span>
+                        <div className="min-w-[10rem] flex-1 basis-[14rem] max-w-md">
+                          <Line
+                            value={v('repeatReason')}
+                            onChange={set('repeatReason')}
+                            readOnly={readOnly}
+                            placeholder="Reason for repeat collection"
+                          />
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          <table className={`${tableClass}${uiMode === 'paper' ? ' ntp-request-specimen-table' : ''}`}>
             <thead>
-              <tr className="bg-slate-50">
-                <th className="border border-slate-800 px-1 py-1 text-left font-semibold w-16">Specimen</th>
-                <th className="border border-slate-800 px-1 py-1 text-left font-semibold">Date Collected</th>
-                <th className="border border-slate-800 px-1 py-1 text-left font-semibold">Date Dispatched to Laboratory</th>
+              <tr className={uiMode === 'saas' ? undefined : 'bg-slate-50'}>
+                <th className={uiMode === 'saas' ? 'w-16' : 'border border-slate-800 px-1 py-1 text-left font-semibold w-16'}>
+                  Specimen
+                </th>
+                <th className={uiMode === 'saas' ? undefined : 'border border-slate-800 px-1 py-1 text-left font-semibold'}>
+                  Date Collected
+                </th>
+                <th className={uiMode === 'saas' ? undefined : 'border border-slate-800 px-1 py-1 text-left font-semibold'}>
+                  Date Dispatched to Laboratory
+                </th>
+                {uiMode === 'saas' && !readOnly && showRequestSpec2 ? (
+                  <th className="w-0 p-0" aria-hidden />
+                ) : null}
               </tr>
             </thead>
             <tbody>
-              {[1, 2].map((n) => (
+              {requestSpecimenRowNums.map((n) => (
                 <tr key={n}>
-                  <td className="border border-slate-800 px-2 py-1">{n}</td>
-                  <td className="border border-slate-800 px-1 py-1">
-                    <Line type="date" value={v(`spec${n}_collected`)} onChange={set(`spec${n}_collected`)} readOnly={readOnly} />
+                  <td className={uiMode === 'saas' ? 'font-semibold text-slate-700' : 'border border-slate-800 px-2 py-1'}>
+                    {uiMode === 'saas' ? `Specimen ${n}` : n}
                   </td>
-                  <td className="border border-slate-800 px-1 py-1">
-                    <Line type="date" value={v(`spec${n}_dispatched`)} onChange={set(`spec${n}_dispatched`)} readOnly={readOnly} />
+                  <td className={uiMode === 'saas' ? undefined : 'border border-slate-800 px-1 py-1'}>
+                    <Line
+                      type="date"
+                      value={v(`spec${n}_collected`)}
+                      onChange={set(`spec${n}_collected`)}
+                      readOnly={readOnly}
+                      plainPaper={uiMode === 'paper'}
+                    />
                   </td>
+                  <td className={uiMode === 'saas' ? undefined : 'border border-slate-800 px-1 py-1'}>
+                    <Line
+                      type="date"
+                      value={v(`spec${n}_dispatched`)}
+                      onChange={set(`spec${n}_dispatched`)}
+                      readOnly={readOnly}
+                      plainPaper={uiMode === 'paper'}
+                    />
+                  </td>
+                  {uiMode === 'saas' && !readOnly && n === 2 ? (
+                    <td className="w-0 p-0 align-middle">
+                      <button
+                        type="button"
+                        onClick={clearRequestSpec2}
+                        className="text-xs font-semibold text-slate-500 hover:text-rose-600 whitespace-nowrap pl-2"
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
           </table>
-
-          <div>
-            <div>Remarks:</div>
-            {readOnly ? (
-              <div className="min-h-[2rem] border-b border-slate-800 whitespace-pre-wrap">{v('remarks')}</div>
-            ) : (
-              <textarea
-                value={v('remarks')}
-                onChange={(e) => onChange('remarks', e.target.value)}
-                rows={2}
-                placeholder="Pre-collection details, existing medical conditions, medications taken prior to testing, or other known risk factors"
-                className="mt-0.5 w-full border border-slate-400 px-1 py-1 text-[11px] focus:outline-none focus:border-[#0176d3]"
-              />
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 pt-2">
-            <div>
-              <div className="text-[10px] text-center">Prepared by</div>
-              <Line value={v('preparedBy')} onChange={set('preparedBy')} readOnly={readOnly} />
-              <div className="text-center text-[10px]">Signature over Printed Name</div>
+          {uiMode === 'saas' && !readOnly ? (
+            <div className="flex flex-wrap items-center gap-3 print:hidden -mt-1">
+              {!showRequestSpec2 ? (
+                <button
+                  type="button"
+                  onClick={addRequestSpec2}
+                  className="text-xs font-semibold text-[#0176d3] hover:underline"
+                >
+                  + Add specimen 2
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={clearRequestSpec2}
+                  className="text-xs font-semibold text-slate-500 hover:text-rose-600"
+                >
+                  Remove specimen 2
+                </button>
+              )}
             </div>
-            <div>
-              <div className="text-[10px] text-center">Designation:</div>
-              <Line value={v('preparedDesignation')} onChange={set('preparedDesignation')} readOnly={readOnly} />
+          ) : null}
+
+          {uiMode === 'paper' ? (
+            <div className="ntp-paper-remarks-block">
+              <div className="ntp-paper-remarks-label">Remarks</div>
+              {readOnly ? (
+                <div className="ntp-paper-remarks-value">{v('remarks') || '—'}</div>
+              ) : (
+                <textarea
+                  value={v('remarks')}
+                  onChange={(e) => onChange('remarks', e.target.value)}
+                  rows={2}
+                  placeholder="Pre-collection details, existing medical conditions, medications taken prior to testing, or other known risk factors"
+                  className="ntp-paper-remarks-input w-full border border-slate-400 px-1 py-0.5 text-[10px] focus:outline-none focus:border-[#0176d3] resize-y min-h-[1.75rem]"
+                />
+              )}
+              <p className="ntp-paper-remarks-hint">
+                (i.e. pre-collection details; existing medical conditions, medications taken prior to screening,
+                and/or known risk factors)
+              </p>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-1.5">
+              <NtpFieldLegend>Remarks</NtpFieldLegend>
+              {readOnly ? (
+                <div className="min-h-[3rem] rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm whitespace-pre-wrap">
+                  {v('remarks') || '—'}
+                </div>
+              ) : (
+                <textarea
+                  value={v('remarks')}
+                  onChange={(e) => onChange('remarks', e.target.value)}
+                  rows={3}
+                  placeholder="Pre-collection details, existing medical conditions, medications taken prior to testing, or other known risk factors"
+                  className="lims-input w-full min-h-[4.5rem] text-sm py-2 resize-y"
+                />
+              )}
+            </div>
+          )}
+
+          {uiMode === 'paper' ? (
+            <NtpPaperPreparedSignoff
+              preparedBy={v('preparedBy')}
+              designation={v('preparedDesignation')}
+              readOnly={readOnly}
+              onPreparedBy={set('preparedBy')}
+              onDesignation={set('preparedDesignation')}
+            />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Prepared by">
+                <NtpPersonnelSelect
+                  role="performed"
+                  nameValue={v('preparedBy')}
+                  onNameChange={set('preparedBy')}
+                  designationValue={v('preparedDesignation')}
+                  onDesignationChange={set('preparedDesignation')}
+                  readOnly={readOnly}
+                />
+              </Field>
+              <Field label="Designation">
+                <Line
+                  value={v('preparedDesignation')}
+                  onChange={set('preparedDesignation')}
+                  readOnly={readOnly}
+                />
+              </Field>
+            </div>
+          )}
+        </div>
       </NtpFormSection>
 
       <NtpFormSection
@@ -1235,54 +2646,79 @@ export const NtpLabRequestForm: React.FC<{
         subtitle="Receiving laboratory technician / medical technologist"
         summary={receiveSummary}
         collapsible={collapsible}
-        defaultOpen={false}
+        defaultOpen={useWorkflowSlides}
+        hidden={!slideVisible('receive')}
       >
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 items-start">
-            <div className="space-y-1.5">
-              <Field label="Name of Laboratory:">
-                <Line
-                  value={v('labName') || 'PTSI-Q CENTRAL LABORATORY'}
-                  onChange={set('labName')}
-                  readOnly={readOnly}
-                />
-              </Field>
-              <Field label="Specimen Received by:">
-                <Line value={v('specimenReceivedBy')} onChange={set('specimenReceivedBy')} readOnly={readOnly} />
-              </Field>
+          {uiMode === 'paper' ? (
+            <div className="ntp-paper-receive-header border border-slate-800 mb-1">
+              <NtpPaperPatientRow>
+                <NtpPaperPatientCell colSpan={9} label="Name of Laboratory:">
+                  <Line
+                    value={v('labName') || 'PTSI-Q CENTRAL LABORATORY'}
+                    onChange={set('labName')}
+                    readOnly={readOnly}
+                    plainPaper
+                  />
+                </NtpPaperPatientCell>
+                <NtpPaperPatientCell colSpan={3} label="Date and Time Specimen Received:" tone="date">
+                  <Line
+                    type="datetime-local"
+                    value={v('specimenReceivedAt')}
+                    onChange={set('specimenReceivedAt')}
+                    readOnly={readOnly}
+                    plainPaper
+                  />
+                </NtpPaperPatientCell>
+              </NtpPaperPatientRow>
+              <NtpPaperPatientRow>
+                <NtpPaperPatientCell colSpan={12} label="Specimen Received by:">
+                  <NtpPersonnelSelect
+                    role="performed"
+                    nameValue={v('specimenReceivedBy')}
+                    onNameChange={set('specimenReceivedBy')}
+                    readOnly={readOnly}
+                    placeholder="Select receiving staff…"
+                  />
+                </NtpPaperPatientCell>
+              </NtpPaperPatientRow>
             </div>
-            <div className="space-y-1.5">
-              <Field label="Date and Time Specimen Received:">
-                <Line
-                  type="datetime-local"
-                  value={v('specimenReceivedAt')}
-                  onChange={set('specimenReceivedAt')}
-                  readOnly={readOnly}
-                />
-              </Field>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-0.5">
-                <Box
-                  checked={v('specimenQuality') === 'Accepted'}
-                  label="Accepted"
-                  readOnly={readOnly}
-                  onChange={() => pick('specimenQuality', 'Accepted')}
-                />
-                <Box
-                  checked={v('specimenQuality') === 'Rejected'}
-                  label="Rejected"
-                  readOnly={readOnly}
-                  onChange={() => pick('specimenQuality', 'Rejected')}
-                />
+          ) : (
+            <div className={`${formGridClass} items-start`}>
+              <div className="space-y-1.5">
+                <Field label="Name of Laboratory:">
+                  <Line
+                    value={v('labName') || 'PTSI-Q CENTRAL LABORATORY'}
+                    onChange={set('labName')}
+                    readOnly={readOnly}
+                  />
+                </Field>
+                <Field label="Specimen Received by:">
+                  <NtpPersonnelSelect
+                    role="performed"
+                    nameValue={v('specimenReceivedBy')}
+                    onNameChange={set('specimenReceivedBy')}
+                    readOnly={readOnly}
+                    placeholder="Select receiving staff…"
+                  />
+                </Field>
               </div>
-              <Field label="Reason:">
-                <Line value={v('specimenQualityReason')} onChange={set('specimenQualityReason')} readOnly={readOnly} />
-              </Field>
+              <div className="space-y-1.5">
+                <Field label="Date and Time Specimen Received:">
+                  <Line
+                    type="datetime-local"
+                    value={v('specimenReceivedAt')}
+                    onChange={set('specimenReceivedAt')}
+                    readOnly={readOnly}
+                  />
+                </Field>
+              </div>
             </div>
-          </div>
-          <SpecimenVolumeQualityFields
-            line1={v('specimenVolumeQuality')}
-            line2={v('specimenVolumeQuality2')}
+          )}
+          <NtpSpecimenAccessionFields
+            values={values}
+            onChange={onChange}
             readOnly={readOnly}
-            onChange={(key, val) => onChange(key, val)}
+            showSecondSpecimen={uiMode === 'paper' ? true : ntpRequestHasSecondSpecimen(values)}
           />
       </NtpFormSection>
 
@@ -1292,22 +2728,237 @@ export const NtpLabRequestForm: React.FC<{
         subtitle="Microscopist / medical technologist — same Form 2a sheet"
         collapsible={collapsible}
         defaultOpen
+        hidden={!slideVisible('results')}
       >
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+          {workflow && requestedResultChkIds.size === 0 && !readOnly ? (
+            <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 print:hidden mb-3">
+              Mark at least one test under <span className="font-semibold">Test Requested</span> (Request step) — e.g.
+              Smear Microscopy or Xpert MTB/RIF.
+            </p>
+          ) : null}
+          <div className={formGridClass}>
             <Field label="Laboratory Serial Number:">
-              <Line value={v('labSerial')} onChange={set('labSerial')} readOnly={readOnly} />
+              <Line
+                value={v('labSerial')}
+                onChange={set('labSerial')}
+                readOnly={readOnly}
+                plainPaper={uiMode === 'paper'}
+              />
             </Field>
             <Field label="Date Specimen Examined:">
-              <Line type="date" value={v('dateExamined')} onChange={set('dateExamined')} readOnly={readOnly} />
+              <Line
+                type="date"
+                value={v('dateExamined')}
+                onChange={set('dateExamined')}
+                readOnly={readOnly}
+                plainPaper={uiMode === 'paper'}
+              />
             </Field>
           </div>
-          <table className="w-full border border-slate-800 border-collapse mt-2">
+
+          {workflow && requestedDiagnosticRows.length > 1 ? (
+            <div className="print:hidden space-y-2">
+              <p className="text-xs font-semibold text-slate-600">
+                Enter results for each requested test ({requestedDiagnosticRows.length} on this form)
+              </p>
+              <div
+                className="flex flex-col sm:flex-row gap-2 p-1 rounded-xl border border-[var(--lims-border)] bg-slate-50/80"
+                role="tablist"
+                aria-label="Requested diagnostic tests"
+              >
+                {requestedDiagnosticRows.map((test) => {
+                  const active = test.chkId === selectedDiagnosticChkId;
+                  return (
+                    <button
+                      key={test.chkId}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => handleSingleDiagnosticPick(test.chkId)}
+                      className={`flex-1 min-w-0 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${
+                        active
+                          ? 'bg-white border border-[#0878e8]/40 text-[#0878e8] shadow-sm'
+                          : 'border border-transparent text-slate-700 hover:bg-white/80'
+                      }`}
+                    >
+                      <span className="block truncate leading-snug">{test.label}</span>
+                      <span
+                        className={`block text-[10px] font-medium mt-0.5 ${active ? 'text-[#0878e8]/80' : 'text-slate-500'}`}
+                      >
+                        {active ? 'Editing now' : 'Tap to switch'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : workflow && requestedDiagnosticRows.length === 1 && !readOnly ? (
+            <p className="print:hidden text-xs text-slate-500">
+              Result entry:{' '}
+              <span className="font-semibold text-slate-800">{requestedDiagnosticRows[0].label}</span>
+            </p>
+          ) : null}
+
+          {useSaasResultsPanel ? (
+            <div className="mt-3 space-y-3 print:hidden">
+              {displayDiagnosticRows.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-sm text-slate-500 text-center">
+                  Mark tests under Request, then choose a tab above to enter results.
+                </div>
+              ) : (
+                displayDiagnosticRows.map((test) => {
+                  const showCardTitle = requestedDiagnosticRows.length <= 1;
+                  if (test.kind === 'smear') {
+                    return (
+                      <div
+                        key={test.chkId}
+                        className="rounded-xl border border-[var(--lims-border)] bg-white p-4 sm:p-5 space-y-4 shadow-sm"
+                      >
+                        {showCardTitle ? (
+                          <h4 className="text-sm font-semibold text-[var(--lims-navy)]">{test.label}</h4>
+                        ) : null}
+                        <div className="space-y-3">
+                          <SmearSpecimenBlock
+                            specimenLabel="1"
+                            readingKey="smear_reading1"
+                            afbKey="smear_reading2"
+                            values={values}
+                            readOnly={readOnly}
+                            onChange={handleSmearSpecimenChange}
+                          />
+                          {showSmearSpec2 ? (
+                            <SmearSpecimenBlock
+                              specimenLabel="2"
+                              readingKey="smear2_reading1"
+                              afbKey="smear2_reading2"
+                              values={values}
+                              readOnly={readOnly}
+                              onChange={handleSmearSpecimenChange}
+                            />
+                          ) : null}
+                        </div>
+                        <Field label="Laboratory diagnosis">
+                          <p className="text-[10px] text-slate-500 mb-1.5 -mt-1">
+                            Combined from specimens 1 and 2 (when present)
+                          </p>
+                          <SmearLabDiagnosisSelect
+                            value={
+                              v('smear_diagnosis') ||
+                              deriveCombinedSmearLabDiagnosis(values, showSmearSpec2)
+                            }
+                            onChange={set('smear_diagnosis')}
+                            readOnly={readOnly}
+                          />
+                        </Field>
+                        <div className="flex flex-wrap gap-2 pt-0.5">
+                          {!showSmearSpec2 ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onChange('smear_spec2_active', '1');
+                                syncCombinedSmearLabDiagnosis({}, true);
+                              }}
+                              className="lims-btn-primary text-xs px-3 py-1.5 rounded-lg"
+                            >
+                              Add specimen 2
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={clearSmearSpec2}
+                              className="text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50"
+                            >
+                              Remove specimen 2
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={test.chkId}
+                      className="rounded-xl border border-[var(--lims-border)] bg-white p-4 sm:p-5 space-y-4 shadow-sm"
+                    >
+                      {showCardTitle ? (
+                        <h4 className="text-sm font-semibold text-[var(--lims-navy)]">{test.label}</h4>
+                      ) : null}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <Field label="Reading 1 — Mycobacterium tuberculosis">
+                          <MtbReading1Select
+                            value={v('res_result_reading1')}
+                            onChange={(val) => {
+                              if ((values[test.id] || '').trim()) onChange(test.id, '');
+                              setMolecularResult(test, 'res_result_reading1', val);
+                              if (val !== 'MTB DETECTED') onChange('res_result_reading2', '');
+                              const rifAfter =
+                                !reading1ShowsRifDropdown(val) ? '' : molecularRifReading3;
+                              if (!reading1ShowsRifDropdown(val)) {
+                                onChange('res_result_diagnosis', '');
+                                onChange(test.id, '');
+                              }
+                              maybeClearResultRemarks(val, rifAfter);
+                            }}
+                            readOnly={readOnly}
+                          />
+                        </Field>
+                        <Field label="Reading 2 — Bacillary load">
+                          <MtbReading2LevelSelect
+                            reading1={v('res_result_reading1') || NTP_READING1_MTB_OPTIONS[0]}
+                            value={v('res_result_reading2')}
+                            onChange={(val) => setMolecularResult(test, 'res_result_reading2', val)}
+                            readOnly={readOnly}
+                          />
+                        </Field>
+                        <Field label="Reading 3 — Rifampicin resistance">
+                          <MtbRifReading3Select
+                            reading1={v('res_result_reading1') || NTP_READING1_MTB_OPTIONS[0]}
+                            value={v('res_result_diagnosis') || v(test.id)}
+                            onChange={(val) => {
+                              setMolecularResult(test, 'res_result_diagnosis', val);
+                              maybeClearResultRemarks(molecularReading1, val);
+                            }}
+                            readOnly={readOnly}
+                          />
+                        </Field>
+                      </div>
+                      <NtpMolecularResultRemarksInline
+                        show={needsNtpResultRemarks(
+                          v('res_result_reading1') || NTP_READING1_MTB_OPTIONS[0],
+                          v('res_result_diagnosis')
+                        )}
+                        value={v('res_result_remarks')}
+                        readOnly={readOnly}
+                        uiMode={uiMode}
+                        onChange={(val) => onChange('res_result_remarks', val)}
+                        workflowAlignUnderReading3
+                      />
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          ) : null}
+
+          {!useSaasResultsPanel ? (
+          <>
+            {diagnosticTableGroups.map((group, groupIndex) => {
+              const smearLayout = group.smearLayout;
+              const tableRows = group.rows;
+              return (
+          <table
+            key={splitDiagnosticTables ? (smearLayout ? 'smear' : 'molecular') : 'all'}
+            className={`${tableClass} ntp-results-diagnostic-table ${
+              uiMode === 'saas' ? 'mt-3' : groupIndex === 0 ? 'mt-2' : 'mt-2'
+            }`}
+          >
             <thead>
               <tr className="bg-slate-50">
                 <th className="border border-slate-800 px-2 py-1 text-left font-semibold w-[28%]">
                   Diagnostic Tests
                 </th>
-                {isSmearResults ? (
+                {smearLayout ? (
                   <>
                     <th className="border border-slate-800 px-2 py-1 text-left font-semibold w-16">
                       Specimen
@@ -1330,132 +2981,200 @@ export const NtpLabRequestForm: React.FC<{
               </tr>
             </thead>
             <tbody>
-              {selectedDiagnosticTest?.kind === 'smear' ? (
-                <>
-                  <tr>
-                    <td
-                      rowSpan={smearSpecimenRowCount}
-                      className="border border-slate-800 px-2 py-1 align-top"
-                    >
-                      {pickerInResultsTable ? (
-                        <DiagnosticTestPicker
-                          selectedChkId={selectedDiagnosticChkId}
-                          readOnly={readOnly}
-                          allowedChkIds={requestedResultChkIds}
-                          onPick={handleSingleDiagnosticPick}
-                        />
-                      ) : (
-                        <span className="inline-block w-full border-b border-slate-800 px-1 text-[11px] font-semibold">
-                          {selectedDiagnosticTest?.label || selectedDiagnosticLabel || '\u00a0'}
-                        </span>
-                      )}
-                    </td>
-                    <SmearSpecimenRow
-                      specimenLabel="1"
-                      readingKey="smear_reading1"
-                      afbKey="smear_reading2"
-                      values={values}
-                      readOnly={readOnly}
-                      onChange={handleSmearSpecimenChange}
-                    />
-                    <td
-                      rowSpan={smearSpecimenRowCount}
-                      className="border border-slate-800 px-2 py-1 align-middle"
-                    >
-                      <p className="text-[9px] text-slate-500 mb-1 print:hidden">
-                        Combined result (specimens 1–2)
-                      </p>
-                      <SmearLabDiagnosisSelect
-                        value={
-                          v('smear_diagnosis') ||
-                          deriveCombinedSmearLabDiagnosis(values, showSmearSpec2)
-                        }
-                        onChange={set('smear_diagnosis')}
-                        readOnly={readOnly}
-                      />
-                    </td>
-                  </tr>
-                  {showSmearSpec2 ? (
-                    <tr>
-                      <SmearSpecimenRow
-                        specimenLabel="2"
-                        readingKey="smear2_reading1"
-                        afbKey="smear2_reading2"
-                        values={values}
-                        readOnly={readOnly}
-                        onChange={handleSmearSpecimenChange}
-                      />
-                    </tr>
-                  ) : null}
-                </>
-              ) : (
+              {tableRows.length === 0 ? (
                 <tr>
-                  <td className="border border-slate-800 px-2 py-1 align-top">
-                    {pickerInResultsTable ? (
-                      <DiagnosticTestPicker
-                        selectedChkId={selectedDiagnosticChkId}
-                        readOnly={readOnly}
-                        allowedChkIds={requestedResultChkIds}
-                        onPick={handleSingleDiagnosticPick}
-                      />
-                    ) : (
-                      <span className="inline-block w-full border-b border-slate-800 px-1 text-[11px] font-semibold">
-                        {selectedDiagnosticTest?.label || selectedDiagnosticLabel || '\u00a0'}
-                      </span>
-                    )}
+                  <td
+                    colSpan={smearLayout ? 5 : 4}
+                    className="border border-slate-800 px-2 py-2 text-[10px] text-slate-400"
+                  >
+                    Select one examination to enter results
                   </td>
-                  {selectedDiagnosticTest ? (
-                    <>
-                      <td className="border border-slate-800 px-1 py-1 align-top">
-                        <MtbReading1Select
-                          value={v('res_result_reading1')}
-                          onChange={(val) => {
-                            setMolecularResult(selectedDiagnosticTest, 'res_result_reading1', val);
-                            if (val !== 'MTB DETECTED') onChange('res_result_reading2', '');
-                            const rifAfter =
-                              !reading1ShowsRifDropdown(val) ? '' : molecularRifReading3;
-                            if (!reading1ShowsRifDropdown(val)) {
-                              onChange('res_result_diagnosis', '');
-                              onChange(selectedDiagnosticTest.id, '');
-                            }
-                            maybeClearResultRemarks(val, rifAfter);
-                          }}
-                          readOnly={readOnly}
-                        />
-                      </td>
-                      <td className="border border-slate-800 px-1 py-1 align-top">
-                        <MtbReading2LevelSelect
-                          reading1={v('res_result_reading1') || NTP_READING1_MTB_OPTIONS[0]}
-                          value={v('res_result_reading2')}
-                          onChange={(val) =>
-                            setMolecularResult(selectedDiagnosticTest, 'res_result_reading2', val)
-                          }
-                          readOnly={readOnly}
-                        />
-                      </td>
-                      <td className="border border-slate-800 px-1 py-1 align-top">
-                        <MtbRifReading3Select
-                          reading1={v('res_result_reading1') || NTP_READING1_MTB_OPTIONS[0]}
-                          value={v('res_result_diagnosis') || v(selectedDiagnosticTest.id)}
-                          onChange={(val) => {
-                            setMolecularResult(selectedDiagnosticTest, 'res_result_diagnosis', val);
-                            maybeClearResultRemarks(molecularReading1, val);
-                          }}
-                          readOnly={readOnly}
-                        />
-                      </td>
-                    </>
-                  ) : (
-                    <td colSpan={3} className="border border-slate-800 px-2 py-2 text-[10px] text-slate-400">
-                      Select one examination to enter results
-                    </td>
-                  )}
                 </tr>
+              ) : (
+                tableRows.map((test) => {
+                  if (test.kind === 'smear') {
+                    const spec2 =
+                      workflowEntryMode && test.chkId === selectedDiagnosticChkId
+                        ? showSmearSpec2
+                        : printSmearSpec2;
+                    const rowSpan = spec2 ? 2 : 1;
+                    return (
+                      <React.Fragment key={test.chkId}>
+                        <tr>
+                          <td
+                            rowSpan={rowSpan}
+                            className="border border-slate-800 px-2 py-1 align-top"
+                          >
+                            {pickerInResultsTable && test.chkId === selectedDiagnosticChkId ? (
+                              <DiagnosticTestPicker
+                                selectedChkId={selectedDiagnosticChkId}
+                                readOnly={readOnly}
+                                allowedChkIds={requestedResultChkIds}
+                                onPick={handleSingleDiagnosticPick}
+                              />
+                            ) : (
+                              <span className={`${ntpPaperTableValueClass} text-slate-900`}>{test.label}</span>
+                            )}
+                          </td>
+                          <SmearSpecimenRow
+                            specimenLabel="1"
+                            readingKey="smear_reading1"
+                            afbKey="smear_reading2"
+                            values={values}
+                            readOnly={readOnly}
+                            onChange={handleSmearSpecimenChange}
+                          />
+                          <td
+                            rowSpan={rowSpan}
+                            className="border border-slate-800 px-2 py-1 align-middle"
+                          >
+                            {!readOnly ? (
+                              <p className="text-[9px] text-slate-500 mb-1 print:hidden">
+                                Combined result (specimens 1–2)
+                              </p>
+                            ) : null}
+                            <SmearLabDiagnosisSelect
+                              value={
+                                v('smear_diagnosis') ||
+                                deriveCombinedSmearLabDiagnosis(values, spec2)
+                              }
+                              onChange={set('smear_diagnosis')}
+                              readOnly={readOnly}
+                            />
+                          </td>
+                        </tr>
+                        {spec2 ? (
+                          <tr>
+                            <SmearSpecimenRow
+                              specimenLabel="2"
+                              readingKey="smear2_reading1"
+                              afbKey="smear2_reading2"
+                              values={values}
+                              readOnly={readOnly}
+                              onChange={handleSmearSpecimenChange}
+                            />
+                          </tr>
+                        ) : null}
+                      </React.Fragment>
+                    );
+                  }
+
+                  const { r1, r2, r3, combined } = molecularRowReadings(test, values);
+                  const canEditRow =
+                    workflowEntryMode && !readOnly && test.chkId === selectedDiagnosticChkId;
+                  const useCombinedDisplay = combined && !canEditRow;
+                  const remarksReading1 = canEditRow
+                    ? v('res_result_reading1')
+                    : useCombinedDisplay
+                      ? parseNtpMolecularSplitFromText(r1).r1
+                      : r1;
+                  const remarksRif = canEditRow
+                    ? v('res_result_diagnosis')
+                    : useCombinedDisplay
+                      ? parseNtpMolecularSplitFromText(r1).r3
+                      : r3;
+                  const showMolecularRemarks = needsNtpResultRemarks(
+                    remarksReading1 || NTP_READING1_MTB_OPTIONS[0],
+                    remarksRif
+                  );
+
+                  return (
+                    <React.Fragment key={test.chkId}>
+                    <tr>
+                      <td className="border border-slate-800 px-2 py-1 align-top">
+                        {pickerInResultsTable && test.chkId === selectedDiagnosticChkId ? (
+                          <DiagnosticTestPicker
+                            selectedChkId={selectedDiagnosticChkId}
+                            readOnly={readOnly}
+                            allowedChkIds={requestedResultChkIds}
+                            onPick={handleSingleDiagnosticPick}
+                          />
+                        ) : (
+                          <span className={`${ntpPaperTableValueClass} text-slate-900`}>{test.label}</span>
+                        )}
+                      </td>
+                      {useCombinedDisplay ? (
+                        <td
+                          colSpan={3}
+                          className={`border border-slate-800 px-2 py-1 align-top text-[11px] font-semibold ${
+                            molecularCombinedLineIsAlert(r1) ? 'text-red-600' : 'text-slate-900'
+                          }`}
+                        >
+                          {r1 || '\u00a0'}
+                        </td>
+                      ) : (
+                        <>
+                          <td className="border border-slate-800 px-1 py-1 align-top">
+                            <MtbReading1Select
+                              value={canEditRow ? v('res_result_reading1') : r1}
+                              onChange={(val) => {
+                                if (!canEditRow) return;
+                                if ((values[test.id] || '').trim()) onChange(test.id, '');
+                                setMolecularResult(test, 'res_result_reading1', val);
+                                if (val !== 'MTB DETECTED') onChange('res_result_reading2', '');
+                                const rifAfter =
+                                  !reading1ShowsRifDropdown(val) ? '' : molecularRifReading3;
+                                if (!reading1ShowsRifDropdown(val)) {
+                                  onChange('res_result_diagnosis', '');
+                                  onChange(test.id, '');
+                                }
+                                maybeClearResultRemarks(val, rifAfter);
+                              }}
+                              readOnly={readOnly || !canEditRow}
+                            />
+                          </td>
+                          <td className="border border-slate-800 px-1 py-1 align-top">
+                            <MtbReading2LevelSelect
+                              reading1={
+                                (canEditRow ? v('res_result_reading1') : r1) ||
+                                NTP_READING1_MTB_OPTIONS[0]
+                              }
+                              value={canEditRow ? v('res_result_reading2') : r2}
+                              onChange={(val) => {
+                                if (canEditRow) setMolecularResult(test, 'res_result_reading2', val);
+                              }}
+                              readOnly={readOnly || !canEditRow}
+                            />
+                          </td>
+                          <td className="border border-slate-800 px-1 py-1 align-top">
+                            <MtbRifReading3Select
+                              reading1={
+                                (canEditRow ? v('res_result_reading1') : r1) ||
+                                NTP_READING1_MTB_OPTIONS[0]
+                              }
+                              value={
+                                canEditRow ? v('res_result_diagnosis') || v(test.id) : r3
+                              }
+                              onChange={(val) => {
+                                if (!canEditRow) return;
+                                setMolecularResult(test, 'res_result_diagnosis', val);
+                                maybeClearResultRemarks(molecularReading1, val);
+                              }}
+                              readOnly={readOnly || !canEditRow}
+                            />
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                    <NtpMolecularRemarksPaperTableRow
+                      show={showMolecularRemarks}
+                      value={v('res_result_remarks')}
+                      colSpan={4}
+                      readOnly={readOnly || !canEditRow}
+                      onChange={(val) => onChange('res_result_remarks', val)}
+                    />
+                    </React.Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
+              );
+            })}
+          </>
+          ) : null}
 
-          {isSmearResults && !readOnly ? (
+          {isSmearResults && !readOnly && !useSaasResultsPanel ? (
             <div className="mt-1.5 flex flex-wrap items-center gap-3 print:hidden">
               {!showSmearSpec2 ? (
                 <button
@@ -1480,46 +3199,110 @@ export const NtpLabRequestForm: React.FC<{
             </div>
           ) : null}
 
-          {showResultRemarks ? (
-            <div className="mt-2 space-y-0.5">
-              <div className="text-[11px] font-semibold text-slate-800">Remarks:</div>
-              {readOnly ? (
-                <div className="min-h-[1.5rem] border-b border-slate-800 whitespace-pre-wrap text-[11px] font-semibold px-1">
-                  {v('res_result_remarks') || '\u00a0'}
+          {!workflowEntryMode ? (
+            readOnly && uiMode === 'paper' ? (
+              <NtpPaperSignatureFooter
+                performedBy={v('performedBy')}
+                verifiedBy={v('verifiedBy')}
+                notedBy={v('notedBy')}
+                printedAt={formatNtpOfficialDateTime(v('dateReleased'))}
+              />
+            ) : (
+              <div className={uiMode === 'paper' ? 'ntp-paper-signature-footer' : undefined}>
+                <div
+                  className={`grid gap-3 pt-3 ${
+                    uiMode === 'paper' ? 'grid-cols-3' : `grid-cols-1 sm:grid-cols-3 ${uiMode === 'saas' ? 'pt-1' : ''}`
+                  }`}
+                >
+                  <Field label="Performed by">
+                    <NtpPersonnelSelect
+                      role="performed"
+                      nameValue={v('performedBy')}
+                      onNameChange={set('performedBy')}
+                      readOnly={readOnly}
+                      signatureLine
+                    />
+                    {uiMode === 'paper' ? (
+                      <div className="text-center text-[10px]">Signature over Printed Name</div>
+                    ) : null}
+                  </Field>
+                  <Field label="Verified by">
+                    <NtpPersonnelSelect
+                      role="verified"
+                      nameValue={v('verifiedBy')}
+                      onNameChange={set('verifiedBy')}
+                      readOnly={readOnly}
+                      signatureLine
+                    />
+                    {uiMode === 'paper' ? (
+                      <div className="text-center text-[10px]">Signature over Printed Name</div>
+                    ) : null}
+                  </Field>
+                  <Field label="Noted by">
+                    <NtpPersonnelSelect
+                      role="pathologist"
+                      nameValue={v('notedBy')}
+                      onNameChange={set('notedBy')}
+                      readOnly={readOnly}
+                      signatureLine
+                    />
+                    {uiMode === 'paper' ? (
+                      <div className="text-center text-[10px]">Signature over Printed Name</div>
+                    ) : null}
+                  </Field>
                 </div>
-              ) : (
-                <textarea
-                  value={v('res_result_remarks')}
-                  onChange={(e) => onChange('res_result_remarks', e.target.value)}
-                  rows={2}
-                  placeholder="Required for MTB trace detected or indeterminate RIF resistance"
-                  className="w-full border border-slate-300 rounded px-2 py-1 text-[11px] text-slate-900 focus:outline-none focus:border-[#0176d3] print:border-0 print:border-b print:border-slate-800 print:rounded-none"
-                />
-              )}
-            </div>
-          ) : null}
-
-          <div className="grid grid-cols-3 gap-3 pt-3">
-            {[
-              ['performedBy', 'Performed by'],
-              ['verifiedBy', 'Verified by'],
-              ['notedBy', 'Noted by'],
-            ].map(([key, label]) => (
-              <div key={key}>
-                <div className="text-[10px]">{label}</div>
-                <Line value={v(key)} onChange={set(key)} readOnly={readOnly} />
-                <div className="text-center text-[10px]">Signature over Printed Name</div>
+                <Field label="Date and Time Printed:">
+                  <Line
+                    type="datetime-local"
+                    value={v('dateReleased')}
+                    onChange={set('dateReleased')}
+                    readOnly={readOnly}
+                    plainPaper={uiMode === 'paper'}
+                    paperFieldUnderline={readOnly && uiMode === 'paper'}
+                  />
+                </Field>
               </div>
-            ))}
-          </div>
-          <Field label="Date and Time Released:">
-            <Line type="datetime-local" value={v('dateReleased')} onChange={set('dateReleased')} readOnly={readOnly} />
-          </Field>
+            )
+          ) : null}
       </NtpFormSection>
 
-      <p className="text-[10px] text-center text-slate-700">
-        A separate result form for LPA, Culture and DST will be issued
-      </p>
+      {useWorkflowSlides ? (
+        <div className="print:hidden flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-[var(--lims-border)]">
+          <button
+            type="button"
+            disabled={workflowSlide === 0}
+            onClick={() => setWorkflowSlide((i) => Math.max(0, i - 1))}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <ChevronLeft className="w-4 h-4" aria-hidden />
+            Back
+          </button>
+          <p className="text-[10px] text-center text-slate-500 sm:order-none">
+            {workflowSlide < NTP_WORKFLOW_SLIDES.length - 1
+              ? 'Continue when this step is complete — official print shows all sections.'
+              : 'Last step — save from the page toolbar when finished.'}
+          </p>
+          {workflowSlide < NTP_WORKFLOW_SLIDES.length - 1 ? (
+            <button
+              type="button"
+              onClick={() => setWorkflowSlide((i) => Math.min(NTP_WORKFLOW_SLIDES.length - 1, i + 1))}
+              className="lims-btn-primary inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm rounded-lg"
+            >
+              Continue
+              <ChevronRight className="w-4 h-4" aria-hidden />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setWorkflowSlide(0)}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50"
+            >
+              Review from start
+            </button>
+          )}
+        </div>
+      ) : null}
     </div>
+    </NtpUiContext.Provider>
   );
 };

@@ -1,0 +1,395 @@
+/* Form 2a official — unlayered overrides (screen, print, PDF). Wins over @layer components. */
+
+/* --- WYSIWYG: modal preview, browser print, and PDF share one paper metric --- */
+.print-coa-forms.coa-official-forms-stack {
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+  color: #0f172a;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.coa-official-paper-frame {
+  width: 738px;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+}
+
+.coa-result-sheet.ntp-official-result-form .coa-ntp-form-sheet-body {
+  padding: 5mm 4mm;
+  box-sizing: border-box;
+}
+
+/* Form 2a signature block — official print/read-only */
+.ntp-paper-signature-footer {
+  margin-top: 0.65rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #0f172a;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.ntp-paper-signature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem 1rem;
+}
+
+.ntp-paper-signature-col {
+  min-width: 0;
+  text-align: center;
+}
+
+.ntp-paper-signature-role {
+  font-size: 10px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 0.2rem;
+}
+
+.ntp-paper-signature-name {
+  min-height: 2.1rem;
+  border-bottom: 1px solid #0f172a;
+  padding: 0.15rem 0.25rem 0.2rem;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.25;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  text-align: center;
+  word-break: break-word;
+}
+
+.ntp-paper-signature-caption {
+  margin-top: 0.15rem;
+  font-size: 9px;
+  color: #334155;
+  line-height: 1.2;
+}
+
+.ntp-paper-signature-date {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.ntp-paper-signature-date-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.ntp-paper-signature-date-value {
+  font-size: 10px;
+  font-weight: 700;
+  color: #0f172a;
+  border-bottom: 1px solid #0f172a;
+  min-width: 12rem;
+  padding-bottom: 0.1rem;
+}
+
+/* Receive — accession header + specimen boxes */
+.ntp-paper-receive-header .ntp-request-paper-patient-row {
+  min-height: 1.65rem;
+}
+
+.ntp-paper-specimen-block-title {
+  margin-bottom: 0.1rem;
+}
+
+.ntp-paper-specimen-block .ntp-paper-inline-field,
+.ntp-paper-specimen-block label {
+  font-size: 8px !important;
+  line-height: 1.15;
+}
+
+.ntp-official-result-form .ntp-paper-specimen-block .ntp-form-plain-value,
+.print-coa-forms .ntp-paper-specimen-block .ntp-form-plain-value {
+  font-size: 9px !important;
+  min-height: auto !important;
+  padding: 0 1px !important;
+}
+
+.ntp-paper-specimen-status {
+  font-size: 9px;
+}
+
+.ntp-paper-specimen-status label {
+  font-size: 9px !important;
+}
+
+/* Request section — remarks (compact) */
+.ntp-paper-remarks-block {
+  border-bottom: 1px solid #0f172a;
+  padding-bottom: 0.25rem;
+  margin-bottom: 0.1rem;
+}
+
+.ntp-paper-remarks-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.08rem;
+  line-height: 1.15;
+}
+
+.ntp-paper-remarks-value {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 0 1px;
+  min-height: 0;
+}
+
+.ntp-paper-remarks-input {
+  font-weight: 600;
+}
+
+.ntp-paper-remarks-hint {
+  font-size: 7.5px;
+  font-style: italic;
+  color: #475569;
+  line-height: 1.2;
+  margin-top: 0.12rem;
+}
+
+/* Request section — Prepared by / Designation sign-off row */
+.ntp-paper-prepared-signoff-col {
+  text-align: center;
+}
+
+.ntp-paper-prepared-signoff-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 0.15rem;
+  text-align: center;
+}
+
+.ntp-paper-prepared-signoff .ntp-paper-signature-name {
+  min-height: 1.85rem;
+}
+
+.ntp-paper-prepared-signoff .ntp-form-plain-value,
+.ntp-paper-prepared-signoff select {
+  display: block !important;
+  width: 100% !important;
+  text-align: center !important;
+  border-bottom: 1px solid #0f172a !important;
+  min-height: 1.85rem;
+  padding: 0.1rem 0.25rem 0.15rem;
+  box-sizing: border-box;
+  font-size: 10px !important;
+  font-weight: 700;
+}
+
+.ntp-paper-prepared-signoff .ntp-paper-signature-caption--spacer {
+  visibility: hidden;
+  min-height: 0.9rem;
+}
+
+.ntp-official-result-form .ntp-paper-prepared-signoff .ntp-form-plain-value,
+.print-coa-forms .ntp-paper-prepared-signoff .ntp-form-plain-value {
+  border-bottom-width: 1px !important;
+  border-bottom-style: solid !important;
+}
+
+.print-coa-forms .coa-result-sheet.ntp-official-result-form {
+  width: 100%;
+  padding: 0 !important;
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+  box-sizing: border-box;
+}
+
+/* Form 2a §1 REQUEST — compact facility / patient grid (official preview + print) */
+.ntp-official-result-form .ntp-request-paper-patient-row,
+.print-coa-forms .ntp-request-paper-patient-row {
+  min-height: 1.75rem;
+}
+
+.ntp-official-result-form .ntp-request-paper-patient-cell,
+.print-coa-forms .ntp-request-paper-patient-cell {
+  padding: 2px 4px;
+}
+
+.ntp-official-result-form .ntp-request-paper-patient-label,
+.print-coa-forms .ntp-request-paper-patient-label {
+  font-size: 8px !important;
+  line-height: 1.15;
+}
+
+.ntp-official-result-form .ntp-request-paper-patient .ntp-form-plain-value,
+.print-coa-forms .ntp-request-paper-patient .ntp-form-plain-value {
+  min-height: auto !important;
+  padding: 0 1px !important;
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+}
+
+.ntp-official-result-form .ntp-request-paper-sex-row label,
+.print-coa-forms .ntp-request-paper-sex-row label {
+  font-size: 9px;
+  gap: 0.2rem;
+}
+
+.ntp-official-result-form .ntp-request-paper-sex-row input[type='checkbox'],
+.print-coa-forms .ntp-request-paper-sex-row input[type='checkbox'] {
+  height: 0.65rem;
+  width: 0.65rem;
+}
+
+.ntp-official-result-form .ntp-form-section .ntp-section-body,
+.print-coa-forms .ntp-form-section .ntp-section-body {
+  padding: 4px !important;
+}
+
+.ntp-official-result-form .ntp-form-section header,
+.ntp-official-result-form .ntp-form-section > button,
+.print-coa-forms .ntp-form-section > div:first-child {
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
+}
+
+.coa-official-paper-frame .ntp-official-result-form .ntp-results-diagnostic-table td .border-b,
+.coa-official-paper-frame .ntp-official-result-form .ntp-request-specimen-table td .border-b,
+.coa-official-paper-frame .ntp-official-result-form .ntp-request-paper-patient .border-b,
+.coa-official-paper-frame .ntp-official-result-form span.border-b,
+.print-coa-forms .ntp-official-result-form .ntp-results-diagnostic-table td .border-b,
+.print-coa-forms .ntp-official-result-form .ntp-request-specimen-table td .border-b,
+.print-coa-forms .ntp-official-result-form .ntp-request-paper-patient .border-b,
+.print-coa-forms .ntp-official-result-form span.border-b {
+  border-bottom-width: 0 !important;
+  border-bottom-style: none !important;
+}
+
+.coa-official-paper-frame .ntp-official-result-form .ntp-paper-signature-footer .border-b,
+.coa-official-paper-frame .ntp-official-result-form .ntp-paper-signature-footer span.border-b,
+.print-coa-forms .ntp-official-result-form .ntp-paper-signature-footer .border-b,
+.print-coa-forms .ntp-official-result-form .ntp-paper-signature-footer span.border-b {
+  border-bottom-width: 1px !important;
+  border-bottom-style: solid !important;
+}
+
+
+.ntp-official-result-form .ntp-form-plain-value,
+.coa-result-sheet.ntp-official-result-form .ntp-form-plain-value,
+.print-coa-forms .ntp-form-plain-value {
+  border: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+  background-image: none !important;
+  text-decoration: none !important;
+}
+
+.ntp-official-result-form .ntp-request-paper-patient-cell span,
+.ntp-official-result-form .ntp-request-specimen-table td span,
+.ntp-official-result-form .ntp-results-diagnostic-table td span,
+.print-coa-forms .ntp-official-result-form .ntp-request-paper-patient-cell span,
+.print-coa-forms .ntp-official-result-form .ntp-request-specimen-table td span {
+  border: none !important;
+  border-bottom: none !important;
+  text-decoration: none !important;
+}
+
+/* RF-10 Form 2a — US Legal (8.5″ × 14″); other official forms keep default @page A4 */
+@page ntp-rf10-legal {
+  size: legal portrait;
+  margin: 8mm 10mm;
+}
+
+@media print {
+  .coa-result-sheet.ntp-official-result-form,
+  .print-coa-forms .coa-result-sheet.ntp-official-result-form {
+    page: ntp-rf10-legal;
+  }
+
+  /* Fill the printable area inside @page margins (same metric as 738px preview). */
+  .print-modal-backdrop .print-coa-forms.coa-official-forms-stack,
+  .print-modal-backdrop .coa-official-paper-frame,
+  .print-coa-forms.coa-official-forms-stack,
+  .coa-official-paper-frame {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box;
+  }
+
+  .print-coa-forms .ntp-official-result-form,
+  .print-coa-forms .coa-result-sheet.ntp-official-result-form {
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+    padding: 0 !important;
+  }
+
+  .print-coa-forms .ntp-official-result-form .ntp-form-plain-value,
+  .print-coa-forms .ntp-official-result-form .ntp-request-paper-patient-cell span,
+  .print-coa-forms .ntp-official-result-form .ntp-request-specimen-table td span {
+    border: none !important;
+    border-bottom: none !important;
+    text-decoration: none !important;
+  }
+}
+
+body.pdf-exporting .ntp-official-result-form .ntp-form-plain-value,
+body.pdf-exporting .ntp-official-result-form .ntp-request-paper-patient-cell span {
+  border: none !important;
+  border-bottom: none !important;
+}
+
+body.pdf-exporting .coa-official-sheet--inactive,
+body.pdf-exporting .coa-official-sheet--active {
+  display: block !important;
+  visibility: visible !important;
+}
+
+.lims-pdf-auto-capture {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 738px;
+  max-width: 100vw;
+  z-index: 1;
+  opacity: 1;
+  pointer-events: none;
+  overflow: visible;
+}
+
+body.pdf-exporting .print-coa-forms.coa-official-forms-stack {
+  width: 738px !important;
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+}
+
+body.pdf-exporting .coa-result-sheet.ntp-official-result-form {
+  min-height: 0 !important;
+  padding: 0 !important;
+  font-size: 11px !important;
+  line-height: 1.35 !important;
+}
+
+/* Official Results modal — one React tree for preview + print */
+.coa-official-sheet--inactive {
+  display: none;
+}
+
+@media print {
+  .coa-official-sheet--inactive,
+  .coa-official-sheet--active {
+    display: block !important;
+  }
+
+  .print-coa-forms.coa-official-forms-stack,
+  .print-coa-forms.coa-official-forms-stack .coa-official-sheet {
+    display: block !important;
+    visibility: visible !important;
+  }
+}

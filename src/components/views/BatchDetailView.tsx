@@ -37,7 +37,7 @@ export const BatchDetailView: React.FC<BatchDetailViewProps> = ({
 
   const inventoryItems = [
     { name: 'Gel Extraction Kit', color: '#032d60', count: 1, percentage: 5 },
-    { name: 'NEB Luna qPCR master mix B', color: '#0176d3', count: 1, percentage: 5 },
+    { name: 'NEB Luna qPCR master mix B', color: '#0878e8', count: 1, percentage: 5 },
     { name: 'Primer 16S Forward', color: '#00a1e0', count: 1, percentage: 5 },
     { name: 'Primer 16S Reverse', color: '#4bca81', count: 1, percentage: 5 },
     { name: 'Qubit DNA HS standard 2', color: '#e28704', count: 1, percentage: 5 },
@@ -54,10 +54,10 @@ export const BatchDetailView: React.FC<BatchDetailViewProps> = ({
       />
 
       {/* 2. Record Header Card */}
-      <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="lims-card p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           {/* Blue 3D Cube Icon */}
-          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3] shadow-xs">
+          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs">
             <Box className="w-6 h-6" />
           </div>
           <div>
@@ -98,7 +98,7 @@ export const BatchDetailView: React.FC<BatchDetailViewProps> = ({
           onClick={() => setActiveTab('details')}
           className={`py-2.5 text-xs font-bold transition-all border-b-2 ${
             activeTab === 'details'
-              ? 'text-[#0176d3] border-[#0176d3]'
+              ? 'text-[#0878e8] border-[#0878e8]'
               : 'text-slate-600 border-transparent hover:text-slate-900'
           }`}
         >
@@ -108,7 +108,7 @@ export const BatchDetailView: React.FC<BatchDetailViewProps> = ({
           onClick={() => setActiveTab('print-label')}
           className={`py-2.5 text-xs font-bold transition-all border-b-2 ${
             activeTab === 'print-label'
-              ? 'text-[#0176d3] border-[#0176d3]'
+              ? 'text-[#0878e8] border-[#0878e8]'
               : 'text-slate-600 border-transparent hover:text-slate-900'
           }`}
         >
@@ -169,7 +169,7 @@ export const BatchDetailView: React.FC<BatchDetailViewProps> = ({
                     Quality Control Check <Info className="w-3 h-3 text-slate-400" />
                   </span>
                   <div className="flex items-center gap-2">
-                    <input type="checkbox" defaultChecked className="rounded border-slate-300 text-[#0176d3]" />
+                    <input type="checkbox" defaultChecked className="rounded border-slate-300 text-[#0878e8]" />
                     <Edit2 className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 cursor-pointer" />
                   </div>
                 </div>
@@ -324,7 +324,7 @@ export const BatchDetailView: React.FC<BatchDetailViewProps> = ({
                     <circle cx="50" cy="50" r="38" fill="transparent" stroke="#e28704" strokeWidth="18" strokeDasharray="15 240" strokeDashoffset="-180" />
                     <circle cx="50" cy="50" r="38" fill="transparent" stroke="#4bca81" strokeWidth="18" strokeDasharray="15 240" strokeDashoffset="-195" />
                     <circle cx="50" cy="50" r="38" fill="transparent" stroke="#00a1e0" strokeWidth="18" strokeDasharray="15 240" strokeDashoffset="-210" />
-                    <circle cx="50" cy="50" r="38" fill="transparent" stroke="#0176d3" strokeWidth="18" strokeDasharray="15 240" strokeDashoffset="-225" />
+                    <circle cx="50" cy="50" r="38" fill="transparent" stroke="#0878e8" strokeWidth="18" strokeDasharray="15 240" strokeDashoffset="-225" />
                   </svg>
                   {/* Center Number: 20 */}
                   <div className="absolute text-center">

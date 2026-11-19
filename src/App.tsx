@@ -9,6 +9,9 @@ import {
   isCorporatePatientCategory,
 } from './data/requestDesk';
 import { TopNavbar } from './components/layout/TopNavbar';
+import { LimsMainBackdrop } from './components/common/LimsDashboardArtwork';
+import { LimsViewFrame } from './components/common/LimsViewFrame';
+import { AppSidebar, sidebarTabsForRole } from './components/layout/AppSidebar';
 import { HomeDashboardView } from './components/views/HomeDashboardView';
 import { AdvancedAnalyticsView } from './components/views/AdvancedAnalyticsView';
 import { SamplesListView } from './components/views/SamplesListView';
@@ -26,7 +29,7 @@ import { SubmissionsView } from './components/views/SubmissionsView';
 import { CreateRequisitionView } from './components/views/CreateRequisitionView';
 import { ExaminationsView } from './components/views/ExaminationsView';
 import { PatientRecordsView } from './components/views/PatientRecordsView';
-import { findSampleForRequisition } from './data/patientDirectory';
+import { findRequisitionForSample, findSampleForRequisition } from './data/patientDirectory';
 import { ResultTemplatesView } from './components/views/ResultTemplatesView';
 import { ResultFormsView } from './components/views/ResultFormsView';
 import { NewSampleModal } from './components/modals/NewSampleModal';
@@ -118,7 +121,7 @@ import {
 import { playNotificationChime, triggerDesktopNotification } from './utils/notificationSound';
 import { hasPermission, permissionDeniedMessage } from './utils/permissions';
 import { canOpenTab, defaultTabForRole, isAppRole, tabsForRole } from './data/roleAccess';
-import { readAppNav, writeAppNav } from './utils/appNavigation';
+import { readAppNav, resolveSampleFromNav, writeAppNav } from './utils/appNavigation';
 import {
   mergePullTestResults,
   mergeRemoteRequisitions,
@@ -133,9 +136,16 @@ import { syncExamResultsWorkflowStatus } from './utils/verifyStatusOnFile';
 function MainLimsContent() {
   const { isAuthenticated, user, terminalInfo } = useAuth();
   const [currentTab, setCurrentTab] = useState<string>(() => readAppNav()?.tab || 'home');
-  const [selectedSample, setSelectedSample] = useState<Sample | null>(null);
+  const [selectedSample, setSelectedSample] = useState<Sample | null>(() =>
+    resolveSampleFromNav(
+      loadStoredSamples(),
+      loadStoredRequisitions(),
+      readAppNav()
+    )
+  );
   const navRestoredRef = useRef(false);
-  const pendingSampleIdRef = useRef<string | null>(null);
+  const navPersistReadyRef = useRef(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activeBoxId, setActiveBoxId] = useState<string>('BX000026');
   const [activeBoxWell, setActiveBoxWell] = useState<string | undefined>('A01');
   const [isNewSampleModalOpen, setIsNewSampleModalOpen] = useState(false);
@@ -143,6 +153,7 @@ function MainLimsContent() {
   const [opdPaymentModalReq, setOpdPaymentModalReq] = useState<LabTestRequisition | null>(null);
   const [detailResultModalReq, setDetailResultModalReq] = useState<LabTestRequisition | null>(null);
   const [detailCoAModalReq, setDetailCoAModalReq] = useState<LabTestRequisition | null>(null);
+  const [coaAutoDownloadPdf, setCoaAutoDownloadPdf] = useState(false);
   const [slipModalReq, setSlipModalReq] = useState<LabTestRequisition | null>(null);
   const [receiveModalReq, setReceiveModalReq] = useState<LabTestRequisition | null>(null);
   const [patientNotifyDrawerReq, setPatientNotifyDrawerReq] = useState<LabTestRequisition | null>(null);
@@ -251,54 +262,6 @@ function MainLimsContent() {
 
   // Core State
   const [samples, setSamples] = useState<Sample[]>(() => loadStoredSamples());
-
-  useEffect(() => {
-    if (!user) {
-      navRestoredRef.current = false;
-      pendingSampleIdRef.current = null;
-      return;
-    }
-    if (!navRestoredRef.current) {
-      navRestoredRef.current = true;
-      const nav = readAppNav();
-      if (
-        nav?.userId === user.id &&
-        nav.tab &&
-        canOpenTab(user.roleType, nav.tab)
-      ) {
-        setCurrentTab(nav.tab);
-        if (nav.tab === 'sample-detail' && nav.sampleId) {
-          pendingSampleIdRef.current = nav.sampleId;
-        }
-      }
-    }
-    if (currentTab === 'submissions') {
-      setCurrentTab('lab-requests');
-      return;
-    }
-    if (!canOpenTab(user.roleType, currentTab)) {
-      setCurrentTab(defaultTabForRole(user.roleType));
-    }
-  }, [user, currentTab]);
-
-  useEffect(() => {
-    const pendingId = pendingSampleIdRef.current;
-    if (!pendingId || currentTab !== 'sample-detail') return;
-    const found = samples.find((s) => s.id === pendingId);
-    if (found) {
-      setSelectedSample(found);
-      pendingSampleIdRef.current = null;
-    }
-  }, [samples, currentTab]);
-
-  useEffect(() => {
-    if (!user) return;
-    writeAppNav({
-      userId: user.id,
-      tab: currentTab,
-      sampleId: currentTab === 'sample-detail' ? selectedSample?.id : undefined,
-    });
-  }, [user, currentTab, selectedSample?.id]);
 
   useEffect(() => {
     saveStoredSamples(samples);
@@ -422,11 +385,159 @@ function MainLimsContent() {
   // Requisitions / Lab Test Requests State with LocalStorage Persistence
   const [requisitions, setRequisitions] = useState<LabTestRequisition[]>(() => loadStoredRequisitions());
   const [editingRequest, setEditingRequest] = useState<LabTestRequisition | null>(null);
-  const [submissionsPipelineFilter, setSubmissionsPipelineFilter] = useState<string | null>(null);
+  const [submissionsPipelineFilter, setSubmissionsPipelineFilter] = useState<string | null>(
+    () => readAppNav()?.submissionsPipelineFilter ?? null
+  );
+  const [submissionsReleaseFilter, setSubmissionsReleaseFilter] = useState<string | null>(
+    () => readAppNav()?.submissionsReleaseFilter ?? null
+  );
+  const [sampleDetailReturnTab, setSampleDetailReturnTab] = useState<string | null>(
+    () => readAppNav()?.returnTab ?? null
+  );
+
+  const SAMPLE_DETAIL_RETURN_TABS = new Set([
+    'home',
+    'lab-requests',
+    'testing-queue',
+    'pickup-management',
+    'payments',
+    'all-requests',
+    'samples',
+    'patient-records',
+    'coa-reports',
+    'batches',
+  ]);
+
+  const openSampleDetail = useCallback(
+    (
+      sample: Sample,
+      options?: { returnTab?: string; pipelineFilter?: string | null; releaseFilter?: string | null }
+    ) => {
+      const back =
+        options?.returnTab ??
+        (SAMPLE_DETAIL_RETURN_TABS.has(currentTab) ? currentTab : 'testing-queue');
+      setSampleDetailReturnTab(back);
+      if (options?.pipelineFilter !== undefined) {
+        setSubmissionsPipelineFilter(options.pipelineFilter);
+      }
+      if (options?.releaseFilter !== undefined) {
+        setSubmissionsReleaseFilter(options.releaseFilter);
+      }
+      setSelectedSample(sample);
+      setCurrentTab('sample-detail');
+    },
+    [currentTab]
+  );
+
+  const openCompletedReport = useCallback(
+    (req: LabTestRequisition) => {
+      if (!hasPermission(user, 'canReleaseCoA') && !hasPermission(user, 'canEnterResults')) {
+        addToast({
+          type: 'error',
+          title: 'PERMISSION DENIED',
+          message: permissionDeniedMessage(user, 'canReleaseCoA'),
+          duration: 6000,
+        });
+        return;
+      }
+      setCoaAutoDownloadPdf(false);
+      setDetailCoAModalReq(req);
+    },
+    [user, addToast]
+  );
+
+  const leaveSampleDetail = useCallback(() => {
+    const target = sampleDetailReturnTab || 'testing-queue';
+    const next = user && canOpenTab(user.roleType, target) ? target : defaultTabForRole(user?.roleType);
+    setCurrentTab(next);
+  }, [sampleDetailReturnTab, user]);
 
   useEffect(() => {
     saveStoredRequisitions(requisitions);
   }, [requisitions]);
+
+  useEffect(() => {
+    if (!user) {
+      navRestoredRef.current = false;
+      navPersistReadyRef.current = false;
+      return;
+    }
+    if (!navRestoredRef.current) {
+      navRestoredRef.current = true;
+      navPersistReadyRef.current = false;
+      const nav = readAppNav();
+      if (
+        nav?.userId === user.id &&
+        nav.tab &&
+        canOpenTab(user.roleType, nav.tab)
+      ) {
+        setCurrentTab(nav.tab);
+        if (nav.tab === 'sample-detail') {
+          const resolved = resolveSampleFromNav(samples, requisitions, nav);
+          if (resolved) setSelectedSample(resolved);
+          if (nav.returnTab) setSampleDetailReturnTab(nav.returnTab);
+          if (nav.submissionsPipelineFilter) {
+            setSubmissionsPipelineFilter(nav.submissionsPipelineFilter);
+          }
+          if (nav.submissionsReleaseFilter) {
+            setSubmissionsReleaseFilter(nav.submissionsReleaseFilter);
+          }
+        }
+        if (nav.submissionsPipelineFilter) {
+          setSubmissionsPipelineFilter(nav.submissionsPipelineFilter);
+        }
+        if (nav.submissionsReleaseFilter) {
+          setSubmissionsReleaseFilter(nav.submissionsReleaseFilter);
+        }
+      }
+      navPersistReadyRef.current = true;
+    }
+    if (currentTab === 'submissions') {
+      setCurrentTab('lab-requests');
+      return;
+    }
+    if (!canOpenTab(user.roleType, currentTab)) {
+      setCurrentTab(defaultTabForRole(user.roleType));
+    }
+  }, [user, currentTab, samples, requisitions]);
+
+  useEffect(() => {
+    if (!user || currentTab !== 'sample-detail' || selectedSample) return;
+    const nav = readAppNav();
+    if (!nav || nav.userId !== user.id) return;
+    const resolved = resolveSampleFromNav(samples, requisitions, nav);
+    if (resolved) setSelectedSample(resolved);
+  }, [user, currentTab, samples, requisitions, selectedSample]);
+
+  useEffect(() => {
+    if (!user || !navPersistReadyRef.current) return;
+    if (currentTab === 'sample-detail' && !selectedSample) return;
+
+    const matchedReq =
+      currentTab === 'sample-detail' && selectedSample
+        ? findRequisitionForSample(selectedSample, requisitions)
+        : undefined;
+
+    writeAppNav({
+      userId: user.id,
+      tab: currentTab,
+      sampleId: currentTab === 'sample-detail' ? selectedSample?.id : undefined,
+      requisitionId: currentTab === 'sample-detail' ? matchedReq?.id : undefined,
+      requisitionNumber:
+        currentTab === 'sample-detail' ? matchedReq?.requisitionNumber : undefined,
+      returnTab: currentTab === 'sample-detail' ? sampleDetailReturnTab ?? undefined : undefined,
+      submissionsPipelineFilter: submissionsPipelineFilter ?? undefined,
+      submissionsReleaseFilter: submissionsReleaseFilter ?? undefined,
+    });
+  }, [
+    user,
+    currentTab,
+    selectedSample,
+    requisitions,
+    sampleDetailReturnTab,
+    submissionsPipelineFilter,
+    submissionsReleaseFilter,
+  ]);
 
   useEffect(() => {
     setNotifications((prev) => reconcilePipelineNotifications(requisitions, prev));
@@ -921,7 +1032,7 @@ function MainLimsContent() {
         result.emailSent ? 'Email sent' : result.emailError ? `Email failed: ${result.emailError}` : '',
       ]
         .filter(Boolean)
-        .join('; '),
+        .join('; ') || '—',
       reasonForChange: `Results ready for pickup notification — ${req.caseNo || req.requisitionNumber}`,
     });
 
@@ -938,7 +1049,7 @@ function MainLimsContent() {
       addToast({
         type: 'error',
         title: 'NOTIFICATION FAILED',
-        message: failed.join(' · ') || 'Could not send SMS or email.',
+        message: failed.join(' · ') || 'Could not send email.',
         duration: 7000,
       });
       return;
@@ -947,7 +1058,7 @@ function MainLimsContent() {
     addToast({
       type: failed.length ? 'warning' : 'success',
       title: 'PICKUP ALERT SENT',
-      message: `${req.patientOrSubjectName}: ${delivered.join(' and ')} sent.${failed.length ? ` ${failed.join(' · ')}` : ''}`,
+      message: `${req.patientOrSubjectName}: ${delivered.join(' and ')} sent successfully.${failed.length ? ` ${failed.join(' · ')}` : ''}`,
       duration: 6500,
     });
   };
@@ -1633,7 +1744,7 @@ function MainLimsContent() {
     );
 
     if (!options?.skipNavigation) {
-      setCurrentTab('sample-detail');
+      openSampleDetail(newSample);
     }
   };
 
@@ -1708,8 +1819,7 @@ function MainLimsContent() {
 
   const handleAddSample = (newSample: Sample) => {
     setSamples((prev) => [newSample, ...prev]);
-    setSelectedSample(newSample);
-    setCurrentTab('sample-detail');
+    openSampleDetail(newSample, { returnTab: 'samples' });
   };
 
   const handleUpdateSample = (updatedSample: Sample) => {
@@ -1863,17 +1973,49 @@ function MainLimsContent() {
     );
   };
 
+  const roleTabs = sidebarTabsForRole(user.roleType);
+  const selectTab = (tab: string) => {
+    if (canOpenTab(user.roleType, tab)) setCurrentTab(tab);
+  };
+
   return (
-    <div className="min-h-screen bg-[#f3f5f8] text-[#181b20] flex flex-col font-sans">
-      {/* 1. Exact Top Navbar Header */}
+    <div className="h-screen max-h-screen h-dvh max-h-dvh overflow-hidden bg-[var(--lims-bg)] text-slate-900 flex font-sans">
+      <AppSidebar
+        className="hidden lg:flex"
+        currentTab={currentTab}
+        role={user.roleType}
+        onSelectTab={selectTab}
+      />
+
+      {mobileSidebarOpen ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-40 bg-slate-900/50 lg:hidden cursor-pointer border-0"
+            aria-label="Close menu"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+          <AppSidebar
+            className="fixed left-0 top-0 z-50 lg:hidden shadow-2xl"
+            currentTab={currentTab}
+            role={user.roleType}
+            onSelectTab={(tab) => {
+              selectTab(tab);
+              setMobileSidebarOpen(false);
+            }}
+          />
+        </>
+      ) : null}
+
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full overflow-hidden">
       <TopNavbar
         currentTab={currentTab}
-        tabs={tabsForRole(user.roleType)}
+        tabs={roleTabs}
+        sidebarNav
+        onOpenMobileNav={() => setMobileSidebarOpen(true)}
         showCreate={hasPermission(user, 'canCreateRequest')}
         showAdminTools={user.roleType === 'ADMIN'}
-        onSelectTab={(tab) => {
-          if (canOpenTab(user.roleType, tab)) setCurrentTab(tab);
-        }}
+        onSelectTab={selectTab}
         onOpenNewModal={() => {
           if (hasPermission(user, 'canCreateRequest')) setIsNewRequisitionModalOpen(true);
         }}
@@ -1912,17 +2054,29 @@ function MainLimsContent() {
       />
 
       {/* 2. Main Page View Container */}
-      <main className={`flex-1 p-2 lg:p-3 overflow-y-auto ${
+      <LimsMainBackdrop />
+      <main
+        className={`relative z-[2] flex-1 min-h-0 p-3 lg:p-5 overflow-y-auto overscroll-y-contain lims-main-canvas bg-transparent ${
         (detailCoAModalReq || slipModalReq || opdPaymentModalReq || detailResultModalReq || isNewSampleModalOpen || isNewRequisitionModalOpen || receiveModalReq)
           ? 'print:hidden'
           : ''
-      }`}>
+      }`}
+      >
+        <LimsViewFrame>
         {/* Home Overview */}
         {currentTab === 'home' && (
           <HomeDashboardView
             requisitions={requisitions}
-            onNavigate={(tab) => {
+            onNavigate={(tab, options) => {
               if (tab === 'create-request') setEditingRequest(null);
+              if (options?.pipelineFilter) {
+                setSubmissionsPipelineFilter(options.pipelineFilter);
+              }
+              if (options?.releaseFilter) {
+                setSubmissionsReleaseFilter(options.releaseFilter);
+              } else if (options?.pipelineFilter && options.pipelineFilter !== 'COMPLETED') {
+                setSubmissionsReleaseFilter(null);
+              }
               if (canOpenTab(user.roleType, tab)) setCurrentTab(tab);
             }}
             onOpenRequest={(req) => {
@@ -1967,6 +2121,7 @@ function MainLimsContent() {
         {/* Submissions & Lab Test Requests (Requisition Portal) */}
         {(currentTab === 'lab-requests' ||
           currentTab === 'testing-queue' ||
+          currentTab === 'pickup-management' ||
           currentTab === 'payments' ||
           currentTab === 'all-requests' ||
           currentTab === 'submissions') && (
@@ -1976,12 +2131,17 @@ function MainLimsContent() {
                 ? 'payments'
                 : currentTab === 'testing-queue'
                   ? 'testing-queue'
-                  : currentTab === 'all-requests'
-                    ? 'all-requests'
-                    : 'lab-requests'
+                  : currentTab === 'pickup-management'
+                    ? 'pickup-management'
+                    : currentTab === 'all-requests'
+                      ? 'all-requests'
+                      : 'lab-requests'
             }
             pipelineFilter={submissionsPipelineFilter}
             onPipelineFilterApplied={() => setSubmissionsPipelineFilter(null)}
+            releaseFilter={submissionsReleaseFilter}
+            onReleaseFilterApplied={() => setSubmissionsReleaseFilter(null)}
+            onOpenCompletedReport={openCompletedReport}
             requisitions={requisitions}
             onOpenNewRequisition={
               hasPermission(user, 'canCreateRequest') ? () => setCurrentTab('create-request') : undefined
@@ -1992,7 +2152,11 @@ function MainLimsContent() {
                 setCurrentTab('create-request');
               }
             }}
-            onSelectRequisition={(req) => {
+            onSelectRequisition={(req, context) => {
+              const pipelineFilter =
+                context?.statusFilter && context.statusFilter !== 'ALL'
+                  ? context.statusFilter
+                  : null;
               // If requisition has not yet been received by lab, lock sample details
               if (req.status === 'SUBMITTED') {
                 if (
@@ -2085,8 +2249,17 @@ function MainLimsContent() {
                   notes: req.clinicalNotes,
                 };
               }
-              setSelectedSample(sample);
-              setCurrentTab('sample-detail');
+              const releaseFilterForNav =
+                context?.statusFilter === 'COMPLETED' &&
+                context?.releaseFilter &&
+                context.releaseFilter !== 'ALL'
+                  ? context.releaseFilter
+                  : null;
+              openSampleDetail(sample, {
+                returnTab: currentTab,
+                pipelineFilter,
+                releaseFilter: releaseFilterForNav,
+              });
             }}
             onReceiveAndAccession={handleReceiveAndAccession}
             onUpdatePatientCategory={handleUpdateRequisitionCategory}
@@ -2187,8 +2360,7 @@ function MainLimsContent() {
             onOpenSpecimen={(sample, req) => {
               const resolved = samples.find((s) => s.id === sample.id) || findSampleForRequisition(req, samples);
               if (resolved) {
-                setSelectedSample(resolved);
-                setCurrentTab('sample-detail');
+                openSampleDetail(resolved, { returnTab: 'patient-records' });
               }
             }}
             onPrintResults={(req) => setDetailCoAModalReq(req)}
@@ -2199,13 +2371,13 @@ function MainLimsContent() {
           <SamplesListView
             samples={samples}
             onSelectSample={(sample) => {
-              setSelectedSample(sample);
-              setCurrentTab('sample-detail');
+              openSampleDetail(sample, { returnTab: 'samples' });
             }}
             onUpdateSample={handleUpdateSample}
             onOpenNewModal={() => setIsNewSampleModalOpen(true)}
             onPrintLabels={() => {
-              setCurrentTab('sample-detail');
+              const first = selectedSample || samples[0];
+              if (first) openSampleDetail(first, { returnTab: 'samples' });
               addToast({
                 type: 'info',
                 title: 'LABEL PRINT QUEUE',
@@ -2233,22 +2405,30 @@ function MainLimsContent() {
 
         {/* Sample Detail View (Accurate with Patient Diagnostic Request) */}
         {currentTab === 'sample-detail' && (() => {
-          const currentSample = selectedSample || samples[0];
-          const matchedReq = currentSample ? requisitions.find((r) => {
-            const sExt = (currentSample.externalId || '').trim().toLowerCase();
-            const sPatient = (currentSample.patientOrSourceName || '').trim().toLowerCase();
-            const rCase = (r.caseNo || '').trim().toLowerCase();
-            const rNum = (r.requisitionNumber || '').trim().toLowerCase();
-            const rPatient = (r.patientOrSubjectName || '').trim().toLowerCase();
-            return (rCase && sExt === rCase) || 
-                   (rNum && sExt === rNum) || 
-                   (rPatient && sPatient && (sPatient.includes(rPatient) || rPatient.includes(sPatient)));
-          }) : null;
+          if (!selectedSample) {
+            return (
+              <div className="max-w-lg mx-auto mt-12 p-8 bg-white border border-slate-200 rounded-xl text-center space-y-4">
+                <p className="text-sm text-slate-600">
+                  No specimen is selected. Open a patient from the testing queue or samples list.
+                </p>
+                <button
+                  type="button"
+                  onClick={leaveSampleDetail}
+                  className="text-sm font-semibold text-[#0176d3] hover:underline"
+                >
+                  Go back
+                </button>
+              </div>
+            );
+          }
+
+          const currentSample = selectedSample;
+          const matchedReq = findRequisitionForSample(currentSample, requisitions) ?? null;
 
           return (
             <ErrorBoundary
               fallbackTitle="Error Loading Patient / Specimen Details"
-              onReset={() => setCurrentTab('testing-queue')}
+              onReset={leaveSampleDetail}
             >
               <SampleDetailView
                 sample={currentSample}
@@ -2263,7 +2443,7 @@ function MainLimsContent() {
                     ? lookupStoredRecord(storedMedTechInfo, matchedReq.id, matchedReq.requisitionNumber)
                     : undefined
                 }
-                onBack={() => setCurrentTab('testing-queue')}
+                onBack={leaveSampleDetail}
                 onReceiveSpecimen={(req) => setReceiveModalReq(req)}
                 onViewSlip={(req) => setSlipModalReq(req)}
                 canAccession={hasPermission(user, 'canAccessionSamples')}
@@ -2303,7 +2483,28 @@ function MainLimsContent() {
                     });
                     return;
                   }
+                  setCoaAutoDownloadPdf(false);
                   setDetailCoAModalReq(matchedReq);
+                }}
+                onDownloadCoA={() => {
+                  if (!matchedReq) return;
+                  if (!hasPermission(user, 'canReleaseCoA') && !hasPermission(user, 'canEnterResults')) {
+                    addToast({
+                      type: 'error',
+                      title: 'PERMISSION DENIED',
+                      message: permissionDeniedMessage(user, 'canReleaseCoA'),
+                      duration: 6000,
+                    });
+                    return;
+                  }
+                  setCoaAutoDownloadPdf(true);
+                  setDetailCoAModalReq(matchedReq);
+                  addToast({
+                    type: 'info',
+                    title: 'PREPARING PDF',
+                    message: `Building official results for ${matchedReq.requisitionNumber}…`,
+                    duration: 3500,
+                  });
                 }}
                 canRecordResultsPickup={
                   hasPermission(user, 'canPrintResults') ||
@@ -2361,8 +2562,7 @@ function MainLimsContent() {
             onNavigateToSample={(id) => {
               const found = samples.find((s) => s.id === id);
               if (found) {
-                setSelectedSample(found);
-                setCurrentTab('sample-detail');
+                openSampleDetail(found, { returnTab: 'batches' });
               }
             }}
           />
@@ -2383,8 +2583,7 @@ function MainLimsContent() {
             initialBoxId={activeBoxId}
             initialWell={activeBoxWell}
             onSelectSample={(sample) => {
-              setSelectedSample(sample);
-              setCurrentTab('sample-detail');
+              openSampleDetail(sample, { returnTab: 'boxes' });
             }}
             onBackToSamples={() => setCurrentTab('samples')}
           />
@@ -2438,6 +2637,7 @@ function MainLimsContent() {
             instruments={INITIAL_INSTRUMENTS}
           />
         )}
+        </LimsViewFrame>
       </main>
 
       {/* 1. New Requisition / Lab Test Request Modal */}
@@ -2495,7 +2695,47 @@ function MainLimsContent() {
       {/* 5. Official Certificate of Analysis (CoA) Report Modal (from Sample Details) */}
       <CoAReportModal
         isOpen={!!detailCoAModalReq}
-        onClose={() => setDetailCoAModalReq(null)}
+        onClose={() => {
+          setCoaAutoDownloadPdf(false);
+          setDetailCoAModalReq(null);
+        }}
+        autoDownloadPdf={coaAutoDownloadPdf}
+        onAutoDownloadComplete={(ok) => {
+          setCoaAutoDownloadPdf(false);
+          setDetailCoAModalReq(null);
+          if (ok) {
+            addToast({
+              type: 'success',
+              title: 'PDF DOWNLOADED',
+              message: 'Official result form saved to your chosen location.',
+              duration: 4500,
+            });
+          } else {
+            addToast({
+              type: 'error',
+              title: 'PDF EXPORT FAILED',
+              message: 'Could not build the PDF. Try Print, or Save PDF from Official Result Forms.',
+              duration: 6500,
+            });
+          }
+        }}
+        onManualPdfComplete={(ok) => {
+          if (ok) {
+            addToast({
+              type: 'success',
+              title: 'PDF SAVED',
+              message: 'Official result form PDF saved successfully.',
+              duration: 4500,
+            });
+          } else {
+            addToast({
+              type: 'error',
+              title: 'PDF SAVE FAILED',
+              message: 'Could not save the PDF. Try Print, or allow downloads for this site.',
+              duration: 6500,
+            });
+          }
+        }}
         requisition={detailCoAModalReq}
         examResults={
           detailCoAModalReq
@@ -2599,6 +2839,7 @@ function MainLimsContent() {
 
       {/* 7. Global Toast Alert Notifications */}
       <ToastAlert toasts={toasts} onDismiss={removeToast} />
+      </div>
     </div>
   );
 }

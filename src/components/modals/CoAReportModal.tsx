@@ -1,12 +1,13 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { X, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useMemo, useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { ChevronLeft, ChevronRight, FileDown, Loader2 } from 'lucide-react';
 import { LabTestRequisition } from './NewRequisitionModal';
 import { ExamResultGroup, ExamExaminers, DEFAULT_EXAMINERS } from './ResultEntryModal';
 import { getTemplateForExamination, ExaminationTemplate } from '../../data/testParametersCatalog';
 import { getResultFormForExam, getResultFormById, resolveEntryForm } from '../../data/resultFormsCatalog';
 import { isSendOutExamination } from '../../data/examinationCatalog';
 import { NtpLabRequestForm, NTP_FIELD_KEYS } from '../forms/NtpLabRequestForm';
-import { mergeNtpFormDefaults } from '../../utils/ntpFormPrefill';
+import { applyNtpExaminerSignoff, mergeNtpFormDefaults } from '../../utils/ntpFormPrefill';
+import { formatNtpOfficialDateTime } from '../../utils/resultsPickup';
 import {
   hasEnteredResult,
   isResultFormRowExamined,
@@ -21,6 +22,15 @@ import { formatSpecimenSampleDisplay } from '../common/OfficialResultSpecimenFie
 import { OfficialResultVerificationQr } from '../common/OfficialResultVerificationQr';
 import { OfficialResultLetterhead } from '../common/OfficialResultLetterhead';
 import { resultFormShowsVerifyQr } from '../../utils/resultFormVerifyContext';
+import {
+  awaitPdfCaptureReady,
+  buildPdfBlobFromSheets,
+  resolvePdfSaveTarget,
+  savePdfBlob,
+  withVisibleForCapture,
+} from '../../utils/downloadResultPdf';
+import { paperKindForPreview, printScreenPreview } from '../../utils/printScreenPreview';
+import { DocumentSideDrawer } from './DocumentSideDrawer';
 
 interface CoAReportModalProps {
   isOpen: boolean;
@@ -36,6 +46,11 @@ interface CoAReportModalProps {
     pathologistLicense?: string;
     remarks: string;
   };
+  /** When set, renders forms off-screen and downloads PDF automatically. */
+  autoDownloadPdf?: boolean;
+  onAutoDownloadComplete?: (ok: boolean) => void;
+  /** Manual “Save PDF” in the drawer header. */
+  onManualPdfComplete?: (ok: boolean) => void;
 }
 
 interface ExamSheet {
@@ -95,13 +110,26 @@ const SingleExamFormSheet: React.FC<{
     String(resultGroup?.parameters?.[paramId]?.value ?? '');
 
   if (rf?.layoutStyle === 'ntp-request') {
-    const ntpValues = mergeNtpFormDefaults(
-      Object.fromEntries(
-        NTP_FIELD_KEYS.map((key) => [key, resultGroup?.parameters?.[key]?.value || ''])
+    const panelMembers = (sheet.memberNames || [sheet.template.examName]).map((examName) => {
+      const t = getTemplateForExamination(examName);
+      return {
+        examCode: t?.examCode || '',
+        examName,
+      };
+    });
+    const ntpValues = applyNtpExaminerSignoff(
+      mergeNtpFormDefaults(
+        Object.fromEntries(
+          NTP_FIELD_KEYS.map((key) => [key, resultGroup?.parameters?.[key]?.value || ''])
+        ),
+        requisition,
+        null,
+        panelMembers
       ),
-      requisition,
+      examiners,
       null
     );
+    ntpValues.dateReleased = formatNtpOfficialDateTime(new Date().toISOString());
     const ntpQr =
       resultFormShowsVerifyQr(rf) ? (
         <OfficialResultVerificationQr
@@ -117,16 +145,18 @@ const SingleExamFormSheet: React.FC<{
 
     return (
       <div
-        className={`p-8 sm:p-10 text-slate-900 bg-white print:p-0 ${
+        className={`coa-result-sheet ntp-official-result-form coa-result-sheet--legal p-0 text-slate-900 bg-white flex flex-col print:min-h-0 ${
           pageBreakAfter ? 'print-form-page' : 'print-form-page-last'
         }`}
       >
-        <NtpLabRequestForm
-          values={ntpValues}
-          onChange={() => undefined}
-          readOnly
-          verificationQr={ntpQr}
-        />
+        <div className="coa-result-sheet-body coa-ntp-form-sheet-body flex-1 min-h-0">
+          <NtpLabRequestForm
+            values={ntpValues}
+            onChange={() => undefined}
+            readOnly
+            verificationQr={ntpQr}
+          />
+        </div>
       </div>
     );
   }
@@ -137,7 +167,7 @@ const SingleExamFormSheet: React.FC<{
         pageBreakAfter ? 'print-form-page' : 'print-form-page-last'
       }`}
     >
-      <div className="coa-result-sheet-body space-y-2 print:space-y-1.5 flex-1 min-h-0">
+      <div className="coa-result-sheet-body space-y-2 print:space-y-1.5 flex-1 min-h-0 print:flex-none">
       {!hideFormIndexHint ? (
         <div className="print:hidden text-[10px] font-mono text-slate-500 flex justify-between gap-2">
           <span>
@@ -449,15 +479,9 @@ const SingleExamFormSheet: React.FC<{
           );
         })()}
       </div>
-
-      <div className="p-2.5 sm:p-3 print:p-2 bg-slate-50 print:bg-white rounded border border-slate-200 text-[9px] sm:text-[10px] print:text-[8px] text-slate-600 font-mono leading-relaxed">
-        <strong>LABORATORY ADVISORY:</strong> This official diagnostic report has been verified under
-        ISO 15189 / DOH clinical quality assurance standards. Results correspond directly to the
-        submitted specimen. This form covers <strong>{tmpl.examName}</strong> only.
-      </div>
       </div>
 
-      <footer className="coa-result-sheet-footer mt-6 sm:mt-8 print:mt-auto shrink-0 pt-4 print:pt-6 border-t border-slate-200 print:border-slate-300 space-y-2 print:space-y-1.5">
+      <footer className="coa-result-sheet-footer mt-6 sm:mt-8 print:mt-0 shrink-0 pt-4 print:pt-4 border-t border-slate-200 print:border-slate-300 space-y-2 print:space-y-1.5">
         <OfficialResultSignatureFooter examiners={examiners} />
         <p className="text-[9px] text-slate-400 text-center font-mono print:pb-1">
           - End of Report — {tmpl.examName} -
@@ -474,8 +498,16 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
   embedded = false,
   examResults,
   medTechInfo,
+  autoDownloadPdf = false,
+  onAutoDownloadComplete,
+  onManualPdfComplete,
 }) => {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const printFormsRef = useRef<HTMLDivElement>(null);
+  const autoDownloadCompleteRef = useRef(onAutoDownloadComplete);
+  autoDownloadCompleteRef.current = onAutoDownloadComplete;
+  const autoExportStartedRef = useRef(false);
 
   const sheets: ExamSheet[] = useMemo(() => {
     if (!requisition) return [];
@@ -539,66 +571,210 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
     return sheets;
   }, [requisition, examResults]);
 
+  const allForm2aLegal = useMemo(
+    () =>
+      sheets.length > 0 &&
+      sheets.every((s) => {
+        const rf =
+          (s.resolvedFormId && getResultFormById(s.resolvedFormId)) ||
+          (requisition
+            ? getResultFormForExam(s.template.examCode, requisition.patientGender)
+            : undefined);
+        return rf?.layoutStyle === 'ntp-request' || rf?.id === 'RF-10';
+      }),
+    [sheets, requisition]
+  );
+
+  const layoutHint = allForm2aLegal ? 'Legal paper · Form 2a' : 'matches print layout';
+
   useEffect(() => {
     setActiveIndex(0);
   }, [requisition?.id]);
 
+  /** Match browser print to Form 2a Legal + 11px (drawer preview uses the same metrics). */
+  useEffect(() => {
+    if (!isOpen && !embedded) return;
+
+    const PRINT_PAGE_STYLE_ID = 'lims-dynamic-print-page';
+    const LEGAL_PAGE_CSS = `@media print { @page { size: legal portrait; margin: 8mm 10mm; } }`;
+
+    const syncPrintJob = () => {
+      const hasNtp = Boolean(printFormsRef.current?.querySelector('.ntp-official-result-form'));
+      document.body.classList.toggle('lims-print-ntp-official', hasNtp);
+      let el = document.getElementById(PRINT_PAGE_STYLE_ID) as HTMLStyleElement | null;
+      if (hasNtp) {
+        if (!el) {
+          el = document.createElement('style');
+          el.id = PRINT_PAGE_STYLE_ID;
+          document.head.appendChild(el);
+        }
+        el.textContent = LEGAL_PAGE_CSS;
+      } else {
+        el?.remove();
+      }
+    };
+
+    const clearPrintJob = () => {
+      document.body.classList.remove('lims-print-ntp-official');
+      document.getElementById(PRINT_PAGE_STYLE_ID)?.remove();
+    };
+
+    window.addEventListener('beforeprint', syncPrintJob);
+    window.addEventListener('afterprint', clearPrintJob);
+    return () => {
+      window.removeEventListener('beforeprint', syncPrintJob);
+      window.removeEventListener('afterprint', clearPrintJob);
+      clearPrintJob();
+    };
+  }, [isOpen, embedded, sheets.length]);
+
+  useEffect(() => {
+    if (!autoDownloadPdf) autoExportStartedRef.current = false;
+  }, [autoDownloadPdf]);
+
+  useLayoutEffect(() => {
+    if (!autoDownloadPdf || !isOpen || !requisition?.id || sheets.length === 0) return;
+    if (autoExportStartedRef.current) return;
+    autoExportStartedRef.current = true;
+
+    let finished = false;
+    const complete = (ok: boolean) => {
+      if (finished) return;
+      finished = true;
+      autoExportStartedRef.current = false;
+      autoDownloadCompleteRef.current?.(ok);
+    };
+
+    void (async () => {
+      const root = await awaitPdfCaptureReady(() => printFormsRef.current, 60);
+      if (!root) {
+        console.warn('[CoA] Auto PDF: print stack not ready');
+        complete(false);
+        return;
+      }
+
+      const sheetNodes = Array.from(root.querySelectorAll<HTMLElement>('.coa-result-sheet'));
+      if (!sheetNodes.length) {
+        console.warn('[CoA] Auto PDF: no .coa-result-sheet nodes');
+        complete(false);
+        return;
+      }
+
+      const fileName = `PTSI-Result-${requisition.requisitionNumber || 'report'}.pdf`;
+      setPdfBusy(true);
+      try {
+        const blob = await withVisibleForCapture(root, () => buildPdfBlobFromSheets(sheetNodes));
+        const target = await resolvePdfSaveTarget(fileName);
+        await savePdfBlob(blob, target);
+        complete(true);
+      } catch (err) {
+        console.error('[CoA] Auto PDF export failed:', err);
+        complete(false);
+      } finally {
+        setPdfBusy(false);
+      }
+    })();
+
+    return () => {
+      if (!finished) {
+        /* StrictMode remount — let the in-flight export finish; do not signal failure on cleanup */
+      }
+    };
+  }, [autoDownloadPdf, isOpen, requisition?.id, sheets.length]);
+
   if (!requisition) return null;
   if (!isOpen && !embedded) return null;
 
-  const activeSheet = sheets[activeIndex] || sheets[0];
+  const printFormSheets = (
+    <div ref={printFormsRef} className="print-coa-forms coa-official-forms-stack">
+      {sheets.map((sheet, i) => (
+        <div
+          key={sheet.examKey}
+          className={
+            i === activeIndex
+              ? 'coa-official-sheet coa-official-sheet--active'
+              : 'coa-official-sheet coa-official-sheet--inactive'
+          }
+        >
+          <SingleExamFormSheet
+            requisition={requisition}
+            sheet={sheet}
+            examiners={resolveExaminers(sheet.resultGroup, medTechInfo)}
+            formIndex={i}
+            formTotal={sheets.length}
+            pageBreakAfter={i < sheets.length - 1}
+            hideFormIndexHint={sheets.length > 1}
+          />
+        </div>
+      ))}
+    </div>
+  );
+
   const formTotal = sheets.length;
 
   const handlePrint = () => {
-    window.print();
+    const frame =
+      (printFormsRef.current?.closest('.coa-official-paper-frame') as HTMLElement | null) ||
+      printFormsRef.current;
+    if (!frame) return;
+    printScreenPreview(frame, paperKindForPreview(frame));
   };
+
+  const handleSavePdf = async () => {
+    if (pdfBusy) return;
+
+    const root = printFormsRef.current;
+    if (!root) {
+      console.warn('[CoA] Save PDF: print stack not mounted');
+      onManualPdfComplete?.(false);
+      return;
+    }
+
+    const fileName = `PTSI-Result-${requisition?.requisitionNumber || 'report'}.pdf`;
+    setPdfBusy(true);
+    let ok = false;
+    try {
+      /** Picker must run in the same click gesture; build the PDF afterward. */
+      const target = await resolvePdfSaveTarget(fileName);
+      const blob = await withVisibleForCapture(root, async () => {
+        const sheetNodes = Array.from(root.querySelectorAll<HTMLElement>('.coa-result-sheet'));
+        if (!sheetNodes.length) {
+          throw new Error('No printable result form sheets in this preview');
+        }
+        return buildPdfBlobFromSheets(sheetNodes);
+      });
+      await savePdfBlob(blob, target);
+      ok = true;
+    } catch (err) {
+      console.error('[CoA] PDF export failed:', err);
+      ok = false;
+    } finally {
+      setPdfBusy(false);
+      onManualPdfComplete?.(ok);
+    }
+  };
+
+  const drawerActions = (
+    <>
+      <button
+        type="button"
+        onClick={() => void handleSavePdf()}
+        disabled={pdfBusy || formTotal === 0}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-[#0176d3] hover:bg-[#014486] disabled:opacity-50 text-white cursor-pointer"
+        title="Download all forms as one PDF file"
+      >
+        {pdfBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+        Save PDF
+      </button>
+    </>
+  );
 
   const panel = (
       <div
-        className={`bg-white w-full overflow-hidden flex flex-col text-slate-900 font-sans print:border-none print:shadow-none print:max-h-none print:w-full print:rounded-none print-modal-container ${
-          embedded
-            ? 'h-full min-h-0 border-0 shadow-none rounded-none'
-            : 'rounded-xl shadow-2xl border border-slate-300 max-w-3xl max-h-[92vh]'
+        className={`bg-white w-full overflow-hidden flex flex-col text-slate-900 font-sans print:border-none print:shadow-none print:max-h-none print:w-full print:h-auto print:min-h-0 print:overflow-visible print:rounded-none print-modal-container ${
+          embedded ? 'h-full min-h-0 border-0 shadow-none rounded-none' : 'h-full min-h-0 border-0 shadow-none rounded-none'
         }`}
       >
-        {/* Toolbar — screen only */}
-        {!embedded ? (
-        <div className="px-4 sm:px-5 py-3 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0 print:hidden">
-          <div className="space-y-0.5 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-sm sm:text-base font-bold text-slate-800">
-                Official Result Forms
-              </h2>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono shrink-0">
-                {formTotal} form{formTotal === 1 ? '' : 's'}
-              </span>
-            </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-500">
-              Preview matches print layout. Use tabs to switch forms; print includes every page.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer active:scale-95"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>
-                Print {formTotal} Form{formTotal === 1 ? '' : 's'}
-              </span>
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
-              title="Close modal"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-        ) : null}
-
         {/* Exam form tabs — screen only */}
         {formTotal > 1 && (
           <div className="px-4 pt-3 pb-0 border-b border-slate-200 bg-white flex items-center gap-2 overflow-x-auto print:hidden shrink-0">
@@ -637,49 +813,52 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
           </div>
         )}
 
-        {/* Screen preview: one form at a time */}
-        <div className="overflow-y-auto flex-1 min-h-0 print:hidden bg-slate-200/60 p-3 sm:p-4">
+        {/* Same DOM for screen preview and print (inactive exam sheets hidden on screen only) */}
+        <div className="overflow-y-auto flex-1 min-h-0 bg-slate-100/90 px-3 py-4 sm:px-6 sm:py-6 print:p-0 print:m-0 print:bg-white print:overflow-visible print:flex-none print:h-auto print:min-h-0">
           {formTotal === 0 && (
-            <p className="p-8 text-sm text-slate-600 bg-white rounded-lg border border-slate-200 max-w-lg mx-auto">
+            <p className="p-8 text-sm text-slate-600 bg-white rounded-lg border border-slate-200 max-w-lg mx-auto print:hidden">
               Every examination on this request is send-out. There is no in-house result form to print.
             </p>
           )}
-          {activeSheet && (
-            <div className="max-w-[720px] mx-auto bg-white shadow-md ring-1 ring-slate-300/80 rounded-sm overflow-hidden">
-              <SingleExamFormSheet
-                requisition={requisition}
-                sheet={activeSheet}
-                examiners={resolveExaminers(activeSheet.resultGroup, medTechInfo)}
-                formIndex={activeIndex}
-                formTotal={formTotal}
-                hideFormIndexHint={formTotal > 1}
-              />
+          {formTotal > 0 && (
+            <div className="coa-official-paper-frame bg-white shadow-md ring-1 ring-slate-300/80 rounded-sm overflow-visible print:shadow-none print:ring-0 print:rounded-none print:w-full print:max-w-none print:mx-0">
+              {printFormSheets}
             </div>
           )}
-        </div>
-
-        {/* Print: every examination as its own full form / page */}
-        <div className="hidden print:block print-coa-forms">
-          {sheets.map((sheet, i) => (
-            <SingleExamFormSheet
-              key={sheet.examKey}
-              requisition={requisition}
-              sheet={sheet}
-              examiners={resolveExaminers(sheet.resultGroup, medTechInfo)}
-              formIndex={i}
-              formTotal={formTotal}
-              pageBreakAfter={i < formTotal - 1}
-            />
-          ))}
         </div>
       </div>
   );
 
-  if (embedded) return panel;
+  if (embedded) {
+    return (
+      <div className="flex flex-col h-full min-h-0">
+        {formTotal > 0 ? (
+          <div className="shrink-0 px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-end gap-2 print:hidden">
+            {drawerActions}
+          </div>
+        ) : null}
+        {panel}
+      </div>
+    );
+  }
+
+  const reqNo = requisition.requisitionNumber || requisition.caseNo || '';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print-modal-backdrop">
+    <DocumentSideDrawer
+      title="Official Result Forms"
+      subtitle={
+        reqNo
+          ? `${reqNo} · ${formTotal} form${formTotal === 1 ? '' : 's'} · ${layoutHint}`
+          : `${formTotal} form${formTotal === 1 ? '' : 's'} · ${layoutHint}`
+      }
+      panelClassName="w-full sm:w-[min(94vw,1120px)]"
+      rootClassName="print-modal-backdrop"
+      onClose={onClose}
+      onPrint={handlePrint}
+      headerActions={drawerActions}
+    >
       {panel}
-    </div>
+    </DocumentSideDrawer>
   );
 };

@@ -79,9 +79,9 @@ export const QCAnalyticsView: React.FC<QCAnalyticsViewProps> = ({
       />
 
       {/* 2. Header Card */}
-      <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="lims-card p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3] shadow-xs">
+          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs">
             <LineChartIcon className="w-6 h-6" />
           </div>
           <div>
@@ -142,7 +142,7 @@ export const QCAnalyticsView: React.FC<QCAnalyticsViewProps> = ({
             {analyteRuns.length > 1 && (
               <polyline
                 fill="none"
-                stroke="#0176d3"
+                stroke="#0878e8"
                 strokeWidth="2.5"
                 points={analyteRuns
                   .map((r, i) => `${getXForIndex(i, analyteRuns.length)},${getYForZ(r.zScore)}`)
@@ -163,7 +163,7 @@ export const QCAnalyticsView: React.FC<QCAnalyticsViewProps> = ({
                   cx={cx}
                   cy={cy}
                   r={isError ? 6 : 5}
-                  fill={isError ? '#c23934' : isWarning ? '#e28704' : '#0176d3'}
+                  fill={isError ? '#c23934' : isWarning ? '#e28704' : '#0878e8'}
                   stroke="#ffffff"
                   strokeWidth="1.5"
                 />

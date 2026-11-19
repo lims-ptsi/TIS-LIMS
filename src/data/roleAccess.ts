@@ -99,13 +99,14 @@ const NAV: { id: string; label: string; roles: AppRole[] }[] = [
   { id: 'create-request', label: 'Create Lab Test Request', roles: ['STAFF', 'LAB_STAFF', 'ADMIN'] },
   { id: 'lab-requests', label: 'Request queue', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'testing-queue', label: 'Testing queue', roles: ['LAB_STAFF', 'ADMIN'] },
+  { id: 'pickup-management', label: 'Pickup management', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'all-requests', label: 'All requests', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'analytics-reports', label: 'Analytics & reports', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'payments', label: 'Payments', roles: ['CASHIER', 'ADMIN'] },
   { id: 'samples', label: 'Samples', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'patient-records', label: 'Patients', roles: ['LAB_STAFF', 'ADMIN'] },
-  { id: 'result-forms', label: 'Result Forms', roles: ['LAB_STAFF', 'ADMIN'] },
-  { id: 'coa-reports', label: 'Results', roles: ['LAB_STAFF', 'ADMIN'] },
+  { id: 'result-forms', label: 'Result Forms', roles: ['ADMIN'] },
+  { id: 'coa-reports', label: 'Results', roles: ['ADMIN'] },
   { id: 'examinations', label: 'Examinations', roles: ['ADMIN'] },
   { id: 'result-templates', label: 'Result Templates', roles: ['ADMIN'] },
   { id: 'audit-trail', label: 'Audit Trail', roles: ['ADMIN'] },
@@ -125,7 +126,7 @@ export function canOpenTab(role: UserRoleType | string | undefined, tab: string)
   if (tab === 'sample-detail' || tab === 'boxes') return permissionsForRole(role).canViewSamples === true;
   if (tabsForRole(role).some((item) => item.id === tab)) return true;
   if ((role === 'ADMIN' || role === 'LAB_STAFF') && tab === 'submissions') return true;
-  if (role === 'ADMIN' || role === 'LAB_STAFF') {
+  if (role === 'ADMIN') {
     return [
       'batches',
       'projects',

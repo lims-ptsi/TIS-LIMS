@@ -53,6 +53,10 @@ import {
   resolveCorporateOrganizationForSave,
 } from '../../data/quezonCityCorporateSenders';
 import { canReviseRequest, reviseLockReason } from '../../data/requestDesk';
+import { LimsPageHeader } from '../common/LimsPageHeader';
+import { LimsWorkspace } from '../common/LimsWorkspace';
+import { LimsHeroHeader } from '../common/LimsHeroHeader';
+import { APP_NAME } from '../brand/LabTisBrand';
 
 const WIZARD_STEPS: { id: 1 | 2 | 3; label: string; detail: string }[] = [
   { id: 1, label: 'Patient', detail: 'Find a record, or enter a new patient' },
@@ -577,40 +581,39 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
       ? editingRequest.kindOfExamination
       : editingRequest.selectedTestNames || [];
     return (
-      <div className="lims-page-shell">
-        <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="text-xs text-slate-500 font-medium">Requisition &amp; Order Management</div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Request details</h1>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              {editingRequest.caseNo || editingRequest.requisitionNumber} · {editingRequest.patientOrSubjectName}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-            {onViewOfficialSlip ? (
+      <div className="lims-page-shell space-y-3">
+        <LimsPageHeader
+          eyebrow="Requisition & order management"
+          icon={FileText}
+          title="Request details"
+          description={`${editingRequest.caseNo || editingRequest.requisitionNumber} · ${editingRequest.patientOrSubjectName}`}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              {onViewOfficialSlip ? (
+                <button
+                  type="button"
+                  onClick={() => onViewOfficialSlip(editingRequest)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-[#0878e8] border border-[var(--lims-border)] text-xs font-semibold rounded-lg cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Official request slip</span>
+                </button>
+              ) : null}
               <button
                 type="button"
-                onClick={() => onViewOfficialSlip(editingRequest)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 text-[#0176d3] border border-[#d8dde6] text-xs font-semibold rounded shadow-xs cursor-pointer"
+                onClick={onCancel}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-[var(--lims-border)] text-xs font-semibold rounded-lg cursor-pointer"
               >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Official request slip</span>
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to home</span>
               </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-[#d8dde6] text-xs font-semibold rounded shadow-xs cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to home</span>
-            </button>
-          </div>
-        </div>
-        <div className="bg-amber-50 border border-amber-200 text-amber-950 rounded-md px-4 py-3 text-sm">
+            </div>
+          }
+        />
+        <div className="lims-card border-amber-200 bg-amber-50/90 text-amber-950 px-4 py-3 text-sm">
           {reviseLockReason(editingRequest)}
         </div>
-        <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm p-5 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-xs">
+        <div className="lims-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-xs">
           <div><span className="block text-slate-500">Patient</span><span className="font-semibold text-slate-900">{editingRequest.patientOrSubjectName}</span></div>
           <div><span className="block text-slate-500">Category</span><span className="font-semibold text-slate-900">{editingRequest.patientCategory || 'OPD'}</span></div>
           <div><span className="block text-slate-500">Age and sex</span><span className="font-semibold text-slate-900">{editingRequest.patientAge} · {editingRequest.patientGender}</span></div>
@@ -635,70 +638,74 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
   const currentStep = WIZARD_STEPS[step - 1];
 
   return (
-    <div ref={formTopRef} className="lims-page-shell">
-      {/* 1. Chevron Stage Bar */}
+    <div ref={formTopRef} className="lims-page-shell space-y-4">
       <LifecycleChevronBar
         currentStage="Electronic Test Requisition & Intake"
         entityType="Sample"
         onCompleteStage={onCancel}
       />
 
-      {/* 2. Header Card */}
-      <div className="bg-white border border-[#d8dde6] rounded-md p-3 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3]">
-            <FileText className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="text-[10px] text-slate-500 font-medium">Requisition &amp; Order Management</div>
-            <h1 className="text-base font-semibold text-slate-900 tracking-tight">
-              {revising ? 'Request details' : 'Create Lab Test Request'}
-            </h1>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              {revising
-                ? `${editingRequest?.caseNo || editingRequest?.requisitionNumber} — change the details, then save the same request.`
-                : `Step ${step} of ${maxWizardStep} — ${currentStep.detail}`}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-        {revising && onViewOfficialSlip && editingRequest ? (
-          <button
-            type="button"
-            onClick={() => onViewOfficialSlip(editingRequest)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-[#0176d3] border border-[#d8dde6] text-xs font-semibold rounded shadow-xs cursor-pointer"
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Official slip</span>
-          </button>
-        ) : null}
-        {allowQueueLink && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-[#d8dde6] text-xs font-semibold rounded shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>View Submissions Queue</span>
-          </button>
-        )}
-        </div>
-      </div>
-
-      {/* 3. Form Card Container */}
-      <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm overflow-hidden">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (step < maxWizardStep) {
-              goToStep((step + 1) as 1 | 2 | 3);
+      <LimsWorkspace
+        header={
+          <LimsHeroHeader
+            icon={FileText}
+            title={revising ? 'Request details' : 'Create lab test request'}
+            description={
+              revising
+                ? `${editingRequest?.caseNo || editingRequest?.requisitionNumber} — update and save the same request.`
+                : currentStep.detail
             }
-          }}
-          className="text-xs"
-        >
-          <div className="px-3 sm:px-4 pt-3 pb-2.5 border-b border-slate-200 bg-slate-50/70">
-            <div className="flex items-center">
+            badges={
+              <>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#0878e8] bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
+                  {APP_NAME}
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-600 bg-white border border-[var(--lims-border)] px-2 py-0.5 rounded-full">
+                  Requisition &amp; order
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-[#0878e8] border border-sky-100">
+                  Step {step} · {currentStep.label}
+                </span>
+              </>
+            }
+            aside={
+              <div className="text-right w-full">
+                <div className="text-2xl font-bold text-[var(--lims-navy)] tabular-nums leading-none">
+                  {step}
+                  <span className="text-lg font-semibold text-slate-400">/{maxWizardStep}</span>
+                </div>
+                <div className="text-xs text-slate-500 mt-1">{currentStep.label}</div>
+              </div>
+            }
+            actions={
+              <>
+                {revising && onViewOfficialSlip && editingRequest ? (
+                  <button
+                    type="button"
+                    onClick={() => onViewOfficialSlip(editingRequest)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-[#0878e8] border border-[var(--lims-border)] text-xs font-semibold rounded-lg shadow-sm cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Official slip</span>
+                  </button>
+                ) : null}
+                {allowQueueLink ? (
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-[var(--lims-border)] text-xs font-semibold rounded-lg shadow-sm cursor-pointer"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>View queue</span>
+                  </button>
+                ) : null}
+              </>
+            }
+          />
+        }
+        toolbar={
+          <div className="px-4 sm:px-5 pt-4 pb-3 border-b border-[var(--lims-border)] bg-gradient-to-b from-[#f8fafc] to-white">
+            <div className="flex items-center flex-wrap gap-y-2">
               {visibleWizardSteps.map((item, index) => {
                 const active = step === item.id;
                 const done = step > item.id;
@@ -710,35 +717,57 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                       className="flex items-center gap-2.5 min-w-0 text-left cursor-pointer"
                     >
                       <span
-                        className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 border ${
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 border shadow-sm ${
                           active
-                            ? 'bg-[#0176d3] border-[#0176d3] text-white'
+                            ? 'bg-[#0878e8] border-[#0878e8] text-white shadow-blue-200/50'
                             : done
                               ? 'bg-emerald-600 border-emerald-600 text-white'
-                              : 'bg-white border-slate-300 text-slate-500'
+                              : 'bg-white border-[var(--lims-border)] text-slate-500'
                         }`}
                       >
                         {done ? <Check className="w-4 h-4" /> : item.id}
                       </span>
                       <span className="min-w-0">
-                        <span className={`block text-[10px] font-bold uppercase tracking-wide ${active ? 'text-[#0176d3]' : done ? 'text-emerald-700' : 'text-slate-400'}`}>
+                        <span
+                          className={`block text-[10px] font-bold uppercase tracking-wide ${
+                            active ? 'text-[#0878e8]' : done ? 'text-emerald-700' : 'text-slate-400'
+                          }`}
+                        >
                           Step {item.id}
                         </span>
-                        <span className={`block text-xs font-semibold truncate ${active || done ? 'text-slate-900' : 'text-slate-500'}`}>
+                        <span
+                          className={`block text-xs font-semibold truncate ${
+                            active || done ? 'text-slate-900' : 'text-slate-500'
+                          }`}
+                        >
                           {item.label}
                         </span>
                       </span>
                     </button>
                     {index < visibleWizardSteps.length - 1 && (
-                      <div className={`flex-1 h-0.5 mx-3 rounded ${step > item.id ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+                      <div
+                        className={`flex-1 h-0.5 mx-3 rounded min-w-[1.5rem] max-w-[4rem] ${
+                          step > item.id ? 'bg-emerald-500' : 'bg-slate-200'
+                        }`}
+                      />
                     )}
                   </React.Fragment>
                 );
               })}
             </div>
           </div>
-
-          <div className="p-3 sm:p-4 space-y-4 min-h-[320px]">
+        }
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (step < maxWizardStep) {
+              goToStep((step + 1) as 1 | 2 | 3);
+            }
+          }}
+          className="text-xs"
+        >
+          <div className="p-4 sm:p-5 space-y-4 min-h-[320px]">
           {/* Validation Error Alert */}
           {formError && (
             <div className="p-3 rounded-lg bg-rose-50 border border-rose-300 text-rose-900 flex items-center gap-2 text-xs font-semibold animate-shake">
@@ -748,10 +777,14 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
           )}
 
           {step === 2 && (
-          <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 space-y-3">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 border-b border-slate-200 pb-1.5 uppercase">
-              <Receipt className="w-4 h-4 text-[#0176d3]" />
-              <span>REQUEST DATE &amp; BILLING REFERENCES</span>
+          <div className="rounded-xl border border-[var(--lims-border)] bg-white p-4 sm:p-5 space-y-3 shadow-sm">
+            <div className="flex items-center gap-2.5 pb-2 border-b border-[var(--lims-border)]">
+              <span className="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center text-[#0878e8] shrink-0">
+                <Receipt className="w-5 h-5" strokeWidth={1.75} />
+              </span>
+              <span className="text-xs font-bold uppercase tracking-wide text-[var(--lims-navy)]">
+                Request date &amp; billing references
+              </span>
             </div>
 
             <div
@@ -770,7 +803,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   required
                   value={requestDate}
                   onChange={(e) => setRequestDate(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded bg-white border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] text-xs"
+                  className="w-full px-3 py-1.5 rounded bg-white border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0878e8] text-xs"
                 />
               </div>
 
@@ -797,7 +830,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   placeholder="LEAVE BLANK IF NOT YET PAID"
                   value={orNumber}
                   onChange={(e) => setOrNumber(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-1.5 rounded bg-white border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] text-xs uppercase"
+                  className="w-full px-3 py-1.5 rounded bg-white border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0878e8] text-xs uppercase"
                 />
                 <p className="text-[10px] text-slate-500 mt-1">The cashier assigns this after the patient pays.</p>
               </div>
@@ -810,7 +843,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   type="text"
                   value={chargeSlipNumber}
                   onChange={(e) => setChargeSlipNumber(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-1.5 rounded bg-white border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] text-xs uppercase"
+                  className="w-full px-3 py-1.5 rounded bg-white border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0878e8] text-xs uppercase"
                 />
               </div>
               </>
@@ -820,7 +853,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
             <div className="pt-1">
               <div className="flex items-center justify-between mb-1">
                 <label className="text-slate-700 font-semibold flex items-center gap-1 text-[11px]">
-                  <Stethoscope className="w-3.5 h-3.5 text-[#0176d3]" />
+                  <Stethoscope className="w-3.5 h-3.5 text-[#0878e8]" />
                   <span>REQUESTING PHYSICIAN *</span>
                 </label>
                 <span className="text-[10px] text-blue-700 font-medium">
@@ -833,7 +866,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                 value={requestingPhysician}
                 onChange={(e) => setRequestingPhysician(e.target.value.toUpperCase())}
                 onBlur={handlePhysicianBlur}
-                className="w-full px-3 py-1.5 rounded bg-white border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] font-medium text-xs uppercase"
+                className="w-full px-3 py-1.5 rounded bg-white border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0878e8] font-medium text-xs uppercase"
               />
             </div>
           </div>
@@ -841,11 +874,15 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
 
           {step === 1 && (
           <>
-          <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 space-y-3">
-            <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-1.5">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 uppercase">
-                <History className="w-4 h-4 text-[#0176d3]" />
-                <span>Patient history</span>
+          <div className="rounded-xl border border-[var(--lims-border)] bg-white p-4 sm:p-5 space-y-3 shadow-sm">
+            <div className="flex items-center justify-between gap-2 pb-2 border-b border-[var(--lims-border)]">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600 shrink-0">
+                  <History className="w-5 h-5" strokeWidth={1.75} />
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wide text-[var(--lims-navy)]">
+                  Patient history
+                </span>
               </div>
               <span className="text-[10px] text-slate-500">
                 {patientDirectory.length} saved {patientDirectory.length === 1 ? 'patient' : 'patients'}
@@ -897,12 +934,13 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
             ) : (
               <div className="space-y-2">
                 <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
                     value={patientQuery}
                     onChange={(e) => setPatientQuery(e.target.value.toUpperCase())}
-                    className="w-full pl-9 pr-3 py-2 rounded border border-[#d8dde6] bg-white text-xs uppercase focus:outline-none focus:border-[#0176d3]"
+                    placeholder="Search saved patients…"
+                    className="lims-input w-full pl-9 pr-3 py-2 text-xs uppercase"
                   />
                 </div>
                 {patientQuery.trim() && patientMatches.length === 0 ? (
@@ -917,11 +955,11 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                         key={record.id}
                         type="button"
                         onClick={() => applyPatientRecord(record)}
-                        className="w-full text-left rounded-lg border border-slate-200 bg-white px-3 py-2 hover:border-[#0176d3] hover:bg-blue-50/40 cursor-pointer"
+                        className="w-full text-left rounded-lg border border-slate-200 bg-white px-3 py-2 hover:border-[#0878e8] hover:bg-blue-50/40 cursor-pointer"
                       >
                         <div className="flex items-center justify-between gap-3">
                           <span className="font-bold text-slate-900">{record.fullName}</span>
-                          <span className="text-[10px] font-bold text-[#0176d3]">{record.visits.length} request{record.visits.length === 1 ? '' : 's'}</span>
+                          <span className="text-[10px] font-bold text-[#0878e8]">{record.visits.length} request{record.visits.length === 1 ? '' : 's'}</span>
                         </div>
                         <div className="text-[11px] text-slate-500 mt-0.5">
                           {record.sex} · {record.birthday || 'No birthday'} · last visit {record.visits[0]?.requestDate || '—'}
@@ -935,10 +973,14 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
             )}
           </div>
 
-          <div className="p-4 rounded-lg bg-white border border-slate-200 space-y-3 shadow-2xs">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 border-b border-slate-100 pb-1.5 uppercase">
-              <User className="w-4 h-4 text-[#0176d3]" />
-              <span>PATIENT DEMOGRAPHICS (ALL CAPS)</span>
+          <div className="rounded-xl border border-[var(--lims-border)] bg-white p-4 sm:p-5 space-y-3 shadow-sm">
+            <div className="flex items-center gap-2.5 pb-2 border-b border-[var(--lims-border)]">
+              <span className="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center text-[#0878e8] shrink-0">
+                <User className="w-5 h-5" strokeWidth={1.75} />
+              </span>
+              <span className="text-xs font-bold uppercase tracking-wide text-[var(--lims-navy)]">
+                Patient demographics (all caps)
+              </span>
             </div>
 
             {/* First Name, Middle Name, Last Name, Suffix */}
@@ -952,7 +994,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   required
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] text-xs font-semibold uppercase"
+                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0878e8] text-xs font-semibold uppercase"
                 />
               </div>
 
@@ -964,7 +1006,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   type="text"
                   value={middleName}
                   onChange={(e) => setMiddleName(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] text-xs uppercase"
+                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0878e8] text-xs uppercase"
                 />
               </div>
 
@@ -977,7 +1019,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   required
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] text-xs font-semibold uppercase"
+                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0878e8] text-xs font-semibold uppercase"
                 />
               </div>
 
@@ -988,7 +1030,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                 <select
                   value={suffix}
                   onChange={(e) => setSuffix(e.target.value)}
-                  className="w-full px-2 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] text-xs uppercase bg-white font-medium cursor-pointer"
+                  className="w-full px-2 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0878e8] text-xs uppercase bg-white font-medium cursor-pointer"
                 >
                   <option value="">NONE</option>
                   <option value="JR.">JR.</option>
@@ -1007,7 +1049,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
               <div className="col-span-2 sm:col-span-4">
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-slate-700 font-semibold text-[11px] flex items-center gap-1">
-                    <Tag className="w-3.5 h-3.5 text-[#0176d3]" />
+                    <Tag className="w-3.5 h-3.5 text-[#0878e8]" />
                     <span>PATIENT CATEGORY *</span>
                   </label>
                   <span className="text-[10px] text-blue-700 font-semibold">(Classification)</span>
@@ -1027,7 +1069,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   <select
                     value={patientCategory}
                     onChange={(e) => setPatientCategory(e.target.value as PatientCategory)}
-                    className="w-full px-3 py-1.5 rounded border border-[#0176d3] bg-blue-50/50 text-slate-900 font-bold text-xs uppercase focus:outline-none focus:ring-1 focus:ring-[#0176d3] cursor-pointer"
+                    className="w-full px-3 py-1.5 rounded border border-[#0878e8] bg-blue-50/50 text-slate-900 font-bold text-xs uppercase focus:outline-none focus:ring-1 focus:ring-[#0878e8] cursor-pointer"
                   >
                     <option value="OPD">OPD</option>
                     <option value="PhilHealth">PhilHealth</option>
@@ -1140,7 +1182,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                       value={corporateSenderOther}
                       onChange={(e) => setCorporateSenderOther(e.target.value.toUpperCase())}
                       placeholder="FACILITY NAME"
-                      className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] text-xs uppercase"
+                      className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0878e8] text-xs uppercase"
                     />
                   </div>
                 ) : null}
@@ -1158,7 +1200,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                 required
                 value={address}
                 onChange={(e) => setAddress(e.target.value.toUpperCase())}
-                className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] text-xs uppercase"
+                className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0878e8] text-xs uppercase"
               />
             </div>
 
@@ -1171,7 +1213,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   type="tel"
                   value={patientPhone}
                   onChange={(e) => setPatientPhone(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] text-xs"
+                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0878e8] text-xs"
                 />
               </div>
               <div>
@@ -1182,7 +1224,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   type="email"
                   value={patientEmail}
                   onChange={(e) => setPatientEmail(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0176d3] text-xs"
+                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 focus:outline-none focus:border-[#0878e8] text-xs"
                 />
               </div>
             </div>
@@ -1219,8 +1261,10 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
 
           {step === 3 && (
           <>
-          <div className="p-4 rounded-lg bg-white border border-slate-200">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-3">Review before you choose tests</div>
+          <div className="rounded-xl border border-[var(--lims-border)] bg-white p-4 sm:p-5 shadow-sm">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-[var(--lims-navy)] mb-3">
+              Review before you choose tests
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
               <div>
                 <div className="text-[10px] font-semibold text-slate-400 uppercase">Patient</div>
@@ -1240,13 +1284,13 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                     Existing record · {selectedPatient.visits.length} previous request{selectedPatient.visits.length === 1 ? '' : 's'}
                   </div>
                 )}
-                <button type="button" onClick={() => goToStep(1)} className="mt-1.5 text-[11px] font-bold text-[#0176d3] hover:underline cursor-pointer">Edit patient</button>
+                <button type="button" onClick={() => goToStep(1)} className="mt-1.5 text-[11px] font-bold text-[#0878e8] hover:underline cursor-pointer">Edit patient</button>
               </div>
               <div>
                 <div className="text-[10px] font-semibold text-slate-400 uppercase">Request</div>
                 <div className="font-bold text-slate-900 mt-0.5">{requestingPhysician || '—'}</div>
                 <div className="text-slate-600 mt-0.5">{requestDate}{caseNo ? ` · ${caseNo}` : ''}</div>
-                <button type="button" onClick={() => goToStep(2)} className="mt-1.5 text-[11px] font-bold text-[#0176d3] hover:underline cursor-pointer">Edit request</button>
+                <button type="button" onClick={() => goToStep(2)} className="mt-1.5 text-[11px] font-bold text-[#0878e8] hover:underline cursor-pointer">Edit request</button>
               </div>
               <div>
                 <div className="text-[10px] font-semibold text-slate-400 uppercase">Next desk</div>
@@ -1265,11 +1309,15 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
             </div>
           </div>
 
-          <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 space-y-3 shadow-2xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 uppercase">
-                <Activity className="w-4 h-4 text-[#0176d3]" />
-                <span>KIND OF EXAMINATION (CATEGORIZED LABORATORY ASSAYS) *</span>
+          <div className="rounded-xl border border-[var(--lims-border)] bg-white p-4 sm:p-5 space-y-3 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[var(--lims-border)]">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
+                  <Activity className="w-5 h-5" strokeWidth={1.75} />
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wide text-[var(--lims-navy)]">
+                  Kind of examination (categorized laboratory assays) *
+                </span>
                 {patientCategory === 'Corporate' && (
                   <span className="text-[10px] font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
                     CORPORATE PRICELIST APPLIED
@@ -1292,7 +1340,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
             {/* Selected Examinations Display or Empty State */}
             {selectedExaminations.length === 0 ? (
               <div className="text-center py-7 px-4 bg-white rounded-lg border-2 border-dashed border-slate-200 space-y-2.5">
-                <div className="w-10 h-10 rounded-full bg-blue-50 text-[#0176d3] flex items-center justify-center mx-auto">
+                <div className="w-10 h-10 rounded-full bg-blue-50 text-[#0878e8] flex items-center justify-center mx-auto">
                   <Activity className="w-5 h-5" />
                 </div>
                 <div>
@@ -1304,7 +1352,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsExamModalOpen(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white rounded-md text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                  className="lims-btn-primary gap-2 px-4 py-2 text-xs rounded-lg shadow-xs"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Select Examinations from Catalog</span>
@@ -1317,7 +1365,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsExamModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0176d3] hover:bg-[#0060b2] text-white rounded text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                    className="lims-btn-primary gap-1.5 px-3.5 py-1.5 text-xs rounded-lg shadow-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Modify / Add Examinations ({selectedExaminations.length})</span>
@@ -1353,7 +1401,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                           <div className="flex flex-col pr-5">
                             {effectiveCode && (
                               <div className="flex items-center gap-1 mb-0.5">
-                                <span className="text-[9px] font-extrabold text-[#0176d3] bg-blue-50 px-1 py-0.2 rounded border border-blue-200 self-start">
+                                <span className="text-[9px] font-extrabold text-[#0878e8] bg-blue-50 px-1 py-0.2 rounded border border-blue-200 self-start">
                                   CODE: {effectiveCode}
                                 </span>
                                 {isCorporateTier && item?.corporatePrice !== undefined && (
@@ -1398,13 +1446,13 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
           )}
           </div>
 
-          <div className="px-3 sm:px-4 py-2.5 border-t border-slate-200 bg-white flex items-center justify-between gap-3">
+          <div className="px-4 sm:px-5 py-3 border-t border-[var(--lims-border)] bg-[#f8fafc]/90 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={onCancel}
                 disabled={isSubmitting}
-                className="px-4 py-2 border border-[#d8dde6] rounded-md text-slate-600 hover:bg-slate-100 text-xs font-semibold transition-colors cursor-pointer"
+                className="px-4 py-2 border border-[var(--lims-border)] rounded-lg text-slate-600 hover:bg-white text-xs font-semibold transition-colors cursor-pointer bg-white/80"
               >
                 Cancel
               </button>
@@ -1413,7 +1461,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   type="button"
                   onClick={() => goToStep((step - 1) as 1 | 2 | 3)}
                   disabled={isSubmitting}
-                  className="flex items-center gap-1.5 px-4 py-2 border border-[#d8dde6] rounded-md text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-4 py-2 border border-[var(--lims-border)] rounded-lg text-slate-700 hover:bg-white text-xs font-semibold transition-colors cursor-pointer bg-white/80"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span>Back</span>
@@ -1430,7 +1478,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   e.stopPropagation();
                   goToStep((step + 1) as 1 | 2 | 3);
                 }}
-                className="flex items-center gap-2 px-6 py-2.5 bg-[#0176d3] hover:bg-[#0060b2] text-white rounded-md text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                className="lims-btn-primary gap-2 px-6 py-2.5 text-xs rounded-lg shadow-sm"
               >
                 <span>Continue</span>
                 <ArrowRight className="w-4 h-4" />
@@ -1445,7 +1493,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   e.stopPropagation();
                   handleSubmit(e);
                 }}
-                className="flex items-center gap-2 px-6 py-2.5 bg-[#0176d3] hover:bg-[#0060b2] disabled:opacity-70 text-white rounded-md text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                className="lims-btn-primary gap-2 px-6 py-2.5 text-xs rounded-lg shadow-sm disabled:opacity-70"
               >
                 {isSubmitting ? (
                   <>
@@ -1471,19 +1519,19 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
           </div>
 
         </form>
-      </div>
+      </LimsWorkspace>
 
       {/* ======================================================== */}
       {/* POP-UP MODAL: SELECT EXAMINATIONS CATALOG                */}
       {/* ======================================================== */}
       {isExamModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-hidden animate-fadeIn">
-          <div className="bg-white border border-[#d8dde6] rounded-xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-slate-900">
+          <div className="lims-card rounded-xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-slate-900">
             
             {/* Modal Header */}
             <div className="px-5 py-3.5 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3] shadow-xs shrink-0">
+                <div className="w-8 h-8 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs shrink-0">
                   <Activity className="w-4 h-4" />
                 </div>
                 <div>
@@ -1532,7 +1580,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                     type="text"
                     value={searchTestQuery}
                     onChange={(e) => setSearchTestQuery(e.target.value)}
-                    className="w-full pl-9 pr-8 py-1.5 text-xs rounded border border-[#d8dde6] bg-white text-slate-800 focus:outline-none focus:border-[#0176d3]"
+                    className="w-full pl-9 pr-8 py-1.5 text-xs rounded border border-[#d8dde6] bg-white text-slate-800 focus:outline-none focus:border-[#0878e8]"
                   />
                   {searchTestQuery && (
                     <button
@@ -1553,7 +1601,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                       const allInCurrent = filteredExaminations.map((e) => e.name);
                       setSelectedExaminations((prev) => Array.from(new Set([...prev, ...allInCurrent])));
                     }}
-                    className="text-[11px] font-bold text-[#0176d3] hover:underline px-2.5 py-1 rounded bg-blue-50 border border-blue-200 cursor-pointer"
+                    className="text-[11px] font-bold text-[#0878e8] hover:underline px-2.5 py-1 rounded bg-blue-50 border border-blue-200 cursor-pointer"
                   >
                     + Select All Filtered ({filteredExaminations.length})
                   </button>
@@ -1574,7 +1622,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                   onClick={() => setActiveCategoryTab('ALL')}
                   className={`px-2.5 py-1 rounded text-[11px] font-bold whitespace-nowrap transition-colors cursor-pointer ${
                     activeCategoryTab === 'ALL'
-                      ? 'bg-[#0176d3] text-white shadow-2xs'
+                      ? 'bg-[#0878e8] text-white shadow-2xs'
                       : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                   }`}
                 >
@@ -1589,7 +1637,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                       onClick={() => setActiveCategoryTab(cat)}
                       className={`px-2.5 py-1 rounded text-[11px] font-bold whitespace-nowrap transition-colors cursor-pointer ${
                         activeCategoryTab === cat
-                          ? 'bg-[#0176d3] text-white shadow-2xs'
+                          ? 'bg-[#0878e8] text-white shadow-2xs'
                           : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                       }`}
                     >
@@ -1615,7 +1663,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                       onClick={() => toggleExamination(exam)}
                       className={`p-2.5 rounded-lg text-left text-xs transition-all flex flex-col justify-between border uppercase cursor-pointer relative ${
                         isSelected
-                          ? 'bg-blue-50/90 border-[#0176d3] text-slate-900 shadow-2xs ring-1 ring-[#0176d3]'
+                          ? 'bg-blue-50/90 border-[#0878e8] text-slate-900 shadow-2xs ring-1 ring-[#0878e8]'
                           : 'bg-white border-[#d8dde6] text-slate-800 hover:bg-slate-50 hover:border-slate-300'
                       }`}
                     >
@@ -1623,7 +1671,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                         <div className="flex flex-col">
                           {effectiveCode && (
                             <div className="flex items-center gap-1 mb-0.5">
-                              <span className="text-[9px] font-extrabold text-[#0176d3] bg-blue-50 px-1 py-0.2 rounded border border-blue-200 self-start">
+                              <span className="text-[9px] font-extrabold text-[#0878e8] bg-blue-50 px-1 py-0.2 rounded border border-blue-200 self-start">
                                 CODE: {effectiveCode}
                               </span>
                               {isCorporateTier && exam.corporatePrice !== undefined && (
@@ -1639,7 +1687,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                         </div>
 
                         <span className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-colors ${
-                          isSelected ? 'bg-[#0176d3] border-[#0176d3] text-white' : 'border-slate-300 bg-white'
+                          isSelected ? 'bg-[#0878e8] border-[#0878e8] text-white' : 'border-slate-300 bg-white'
                         }`}>
                           {isSelected && <Check className="w-3 h-3" />}
                         </span>
@@ -1668,7 +1716,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                       setSearchTestQuery('');
                       setActiveCategoryTab('ALL');
                     }}
-                    className="text-[11px] text-[#0176d3] font-bold hover:underline"
+                    className="text-[11px] text-[#0878e8] font-bold hover:underline"
                   >
                     Reset Filter
                   </button>
@@ -1695,7 +1743,7 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsExamModalOpen(false)}
-                  className="flex items-center gap-1.5 px-5 py-1.5 bg-[#0176d3] hover:bg-[#0060b2] text-white rounded-md text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-5 py-1.5 bg-[#0878e8] hover:bg-[#0669c9] text-white rounded-md text-xs font-bold shadow-sm transition-colors cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
                   <span>Done / Apply Selection</span>

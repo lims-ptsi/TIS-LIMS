@@ -39,7 +39,7 @@ export function OfficialResultVerificationQr({
     (async () => {
       try {
         const origin =
-          typeof window !== 'undefined' ? window.location.origin : 'https://lab-tis.local';
+          typeof window !== 'undefined' ? window.location.origin : 'https://lab-tis.vercel.app';
         const url = await buildOfficialResultVerifyUrl({
           origin,
           requisition,

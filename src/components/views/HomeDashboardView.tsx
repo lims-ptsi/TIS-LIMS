@@ -2,16 +2,27 @@ import React, { useEffect, useState } from 'react';
 import {
   ArrowRight,
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
+  Clock,
+  ExternalLink,
   FileText,
+  FlaskConical,
+  MoreVertical,
+  PackageCheck,
+  Printer,
   Receipt,
   ScrollText,
   Stethoscope,
   TestTubes,
+  Hourglass,
+  List,
+  type LucideIcon,
 } from 'lucide-react';
 import { LabTestRequisition } from '../../types/lims';
 import { useAuth } from '../../context/AuthContext';
-import { APP_NAME, APP_TAGLINE } from '../brand/LabTisBrand';
+import { APP_NAME } from '../brand/LabTisBrand';
 import { APP_ROLES, AppRole, canOpenTab, isAppRole, roleLabel } from '../../data/roleAccess';
 import {
   onLabRequestDesk,
@@ -22,10 +33,16 @@ import {
   waitingAtCashier,
 } from '../../data/requestDesk';
 import { isAwaitingPatientPickup } from '../../utils/resultsPickup';
+import { DashboardCtaArtwork, DashboardHeroArtwork } from '../common/LimsDashboardArtwork';
+
+interface HomeNavigateOptions {
+  pipelineFilter?: string;
+  releaseFilter?: string;
+}
 
 interface HomeDashboardViewProps {
   requisitions: LabTestRequisition[];
-  onNavigate: (tab: string) => void;
+  onNavigate: (tab: string, options?: HomeNavigateOptions) => void;
   onOpenRequest?: (requisition: LabTestRequisition) => void;
 }
 
@@ -52,14 +69,49 @@ const STATUS_TONE: Record<string, string> = {
   CANCELLED: 'bg-slate-100 text-slate-500 border-slate-200',
 };
 
-const FIGURE_ACCENT: Record<string, string> = {
-  'Requests today': 'bg-slate-300',
-  'Waiting for receipt': 'bg-amber-400',
-  'Waiting to receive': 'bg-sky-500',
-  'In testing': 'bg-[#0176d3]',
-  'Ready to print': 'bg-emerald-500',
-  'Awaiting pickup': 'bg-violet-500',
+const FIGURE_META: Record<
+  string,
+  { icon: LucideIcon; iconWrap: string; iconColor: string; valueColor?: string }
+> = {
+  'Requests today': {
+    icon: FileText,
+    iconWrap: 'bg-sky-50',
+    iconColor: 'text-[#0878e8]',
+  },
+  'Waiting for receipt': {
+    icon: Hourglass,
+    iconWrap: 'bg-emerald-50',
+    iconColor: 'text-emerald-600',
+    valueColor: 'text-emerald-600',
+  },
+  'Request queue': {
+    icon: List,
+    iconWrap: 'bg-violet-50',
+    iconColor: 'text-violet-600',
+  },
+  'Ready to receive': {
+    icon: PackageCheck,
+    iconWrap: 'bg-orange-50',
+    iconColor: 'text-orange-500',
+  },
+  'In testing': {
+    icon: FlaskConical,
+    iconWrap: 'bg-teal-50',
+    iconColor: 'text-teal-600',
+  },
+  'Ready to print': {
+    icon: Printer,
+    iconWrap: 'bg-sky-50',
+    iconColor: 'text-[#0878e8]',
+  },
+  'Awaiting pickup': {
+    icon: Clock,
+    iconWrap: 'bg-violet-50',
+    iconColor: 'text-violet-600',
+  },
 };
+
+const REQUEST_PAGE_SIZE = 12;
 
 function todayKey(date = new Date()): string {
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
@@ -127,6 +179,12 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
   const role: AppRole | null = isAppRole(user?.roleType) ? user.roleType : null;
   const [now, setNow] = useState(() => new Date());
   const [requestListTab, setRequestListTab] = useState<'all' | 'week' | 'today'>('all');
+  const [requestPage, setRequestPage] = useState(0);
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRequestPage(0);
+  }, [requestListTab]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -155,8 +213,8 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
   const awaitingPickup = requisitions.filter((item) => isAwaitingPatientPickup(item)).length;
   const unpaid = requisitions.filter((item) => waitingAtCashier(item)).length;
 
-  const open = (tab: string) => {
-    if (canOpenTab(role || undefined, tab)) onNavigate(tab);
+  const open = (tab: string, options?: HomeNavigateOptions) => {
+    if (canOpenTab(role || undefined, tab)) onNavigate(tab, options);
   };
 
   const actions: DeskAction[] = [
@@ -264,14 +322,33 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
         ? weekRequests
         : allRequests;
 
-  const figures: { label: string; value: number; tab?: string; hint: string }[] = [
+  const figures: {
+    label: string;
+    value: number;
+    tab?: string;
+    pipelineFilter?: string;
+    releaseFilter?: string;
+    hint: string;
+  }[] = [
     { label: 'Requests today', value: todayCount, hint: 'Filed with today’s date' },
     { label: 'Waiting for receipt', value: unpaid, tab: 'payments', hint: 'OPD official receipt still open' },
     { label: 'Request queue', value: labRequestPipeline, tab: 'lab-requests', hint: 'Intake through receive' },
     { label: 'Ready to receive', value: readyToReceive, tab: 'lab-requests', hint: 'Paid or non-OPD — accession next' },
     { label: 'In testing', value: inTesting, tab: 'testing-queue', hint: 'Results are being entered' },
-    { label: 'Ready to print', value: completed, tab: 'coa-reports', hint: 'Released laboratory reports' },
-    { label: 'Awaiting pickup', value: awaitingPickup, tab: 'coa-reports', hint: 'Completed — patient has not collected results' },
+    {
+      label: 'Ready to print',
+      value: completed,
+      tab: 'pickup-management',
+      releaseFilter: 'ALL',
+      hint: 'Validated results — print and release',
+    },
+    {
+      label: 'Awaiting pickup',
+      value: awaitingPickup,
+      tab: 'pickup-management',
+      releaseFilter: 'NOT_PICKED_UP',
+      hint: 'Completed — patient has not collected results',
+    },
   ].filter((figure) => !figure.tab || canOpenTab(role || undefined, figure.tab) || role === 'STAFF');
 
   const staffFigures = role === 'STAFF'
@@ -292,43 +369,34 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
   const figureCols =
     figureCount <= 2
       ? 'sm:grid-cols-2'
-      : figureCount === 3
-        ? 'sm:grid-cols-2 lg:grid-cols-3'
-        : figureCount === 4
-          ? 'sm:grid-cols-2 lg:grid-cols-4'
-          : figureCount === 5
-            ? 'sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5'
-            : figureCount === 6
-              ? 'sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3'
-              : 'sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
+      : 'sm:grid-cols-2 lg:grid-cols-4';
 
-  const renderRequestTable = (items: LabTestRequisition[], scrollable = false) => {
+  const pagedRequests = activeRequestList.slice(
+    requestPage * REQUEST_PAGE_SIZE,
+    requestPage * REQUEST_PAGE_SIZE + REQUEST_PAGE_SIZE
+  );
+  const requestPageCount = Math.max(1, Math.ceil(activeRequestList.length / REQUEST_PAGE_SIZE));
+
+  const renderRequestTable = (items: LabTestRequisition[]) => {
     if (items.length === 0) {
       return (
         <div className="px-5 py-10 text-center text-sm text-slate-500">No laboratory requests yet.</div>
       );
     }
     return (
-      <div className={scrollable ? 'overflow-x-auto max-h-[min(28rem,55vh)] overflow-y-auto' : 'overflow-x-auto'}>
-        <table className="w-full min-w-[40rem] text-left table-fixed">
-          <colgroup>
-            <col className={hideExaminations ? 'w-[34%]' : 'w-[min(14rem,26%)]'} />
-            <col className="w-[8.5rem]" />
-            <col className={hideExaminations ? 'w-[11rem]' : 'w-[9.5rem]'} />
-            {!hideExaminations ? <col className="w-auto" /> : null}
-            <col className="w-[7rem]" />
-            <col className="w-[8.25rem]" />
-          </colgroup>
-          <thead className={scrollable ? 'sticky top-0 z-[1]' : undefined}>
-            <tr className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-5 py-2 font-semibold">Patient</th>
-              <th className="px-3 py-2 font-semibold">Case</th>
-              <th className="px-3 py-2 font-semibold">Category</th>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[44rem] text-left">
+          <thead>
+            <tr className="bg-[#f8fafc] text-[11px] font-semibold uppercase tracking-wide text-slate-500 border-b border-[var(--lims-border)]">
+              <th className="px-5 py-3 font-semibold">Patient</th>
+              <th className="px-3 py-3 font-semibold">Case</th>
+              <th className="px-3 py-3 font-semibold">Category</th>
               {!hideExaminations ? (
-                <th className="px-3 py-2 font-semibold">Examinations</th>
+                <th className="px-3 py-3 font-semibold">Examinations</th>
               ) : null}
-              <th className="px-3 py-2 font-semibold">Date</th>
-              <th className="px-5 py-2 font-semibold text-right">Status</th>
+              <th className="px-3 py-3 font-semibold">Date</th>
+              <th className="px-3 py-3 font-semibold text-right">Status</th>
+              <th className="w-12 px-2 py-3" aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
@@ -366,24 +434,67 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
                   <td className="px-3 py-2.5 text-xs text-slate-500 whitespace-nowrap overflow-hidden">
                     {formatRequestDate(item.requestDate)}
                   </td>
-                  <td className="px-5 py-2.5 text-right">
+                  <td className="px-3 py-3 text-right">
                     {submittedNext ? (
                       <span
-                        className={`inline-flex text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded border ${
+                        className={`inline-flex text-[10px] font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full ${
                           submittedNext === 'Cashier'
-                            ? 'bg-amber-50 text-amber-800 border-amber-200'
-                            : 'bg-sky-50 text-sky-800 border-sky-200'
+                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                            : 'bg-sky-50 text-sky-800 border border-sky-200'
                         }`}
                       >
                         {submittedNext}
                       </span>
                     ) : (
                       <span
-                        className={`inline-flex text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded border ${STATUS_TONE[item.status] || STATUS_TONE.CANCELLED}`}
+                        className={`inline-flex text-[10px] font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full border ${STATUS_TONE[item.status] || STATUS_TONE.CANCELLED}`}
                       >
                         {STATUS_LABEL[item.status] || item.status}
                       </span>
                     )}
+                  </td>
+                  <td className="px-2 py-3 text-right relative">
+                    <button
+                      type="button"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                      aria-label="Row actions"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRowMenuId((id) => (id === item.id ? null : item.id));
+                      }}
+                    >
+                      <MoreVertical className="w-4 h-4" strokeWidth={1.75} />
+                    </button>
+                    {rowMenuId === item.id ? (
+                      <div className="absolute right-2 top-full z-20 mt-1 w-40 rounded-lg border border-[var(--lims-border)] bg-white shadow-lg py-1 text-left">
+                        {onOpenRequest ? (
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 text-left cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenRequest(item);
+                              setRowMenuId(null);
+                            }}
+                          >
+                            Open request
+                          </button>
+                        ) : null}
+                        {queueTab ? (
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 text-left cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              open(queueTab);
+                              setRowMenuId(null);
+                            }}
+                          >
+                            Open queue
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </td>
                 </>
               );
@@ -392,12 +503,12 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
                 <tr
                   key={item.id}
                   onClick={() => (openThisRequest ? onOpenRequest(item) : open(queueTab))}
-                  className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
+                  className="border-b border-[var(--lims-border)] hover:bg-[#f8fafc] cursor-pointer"
                 >
                   {cells}
                 </tr>
               ) : (
-                <tr key={item.id} className="border-t border-slate-100">
+                <tr key={item.id} className="border-b border-[var(--lims-border)]">
                   {cells}
                 </tr>
               );
@@ -409,85 +520,119 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
   };
 
   return (
-    <div className="lims-page-shell">
-      <section className="bg-white border border-[#d8dde6] rounded-md shadow-sm overflow-hidden">
-        <div className="px-3 py-2.5 sm:px-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#0176d3]">
-                  {APP_NAME}
-                </span>
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5">
-                  {roleLabel(role || undefined)}
-                </span>
-                <span className="text-[10px] text-slate-500 hidden md:inline">{APP_TAGLINE}</span>
-              </div>
-              <h1 className="text-lg leading-tight font-semibold text-slate-900 mt-1">
-                {greeting}, {displayName}
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">{roleText}</p>
-            </div>
-            <div className="sm:text-right shrink-0 sm:pl-4">
-              <div className="text-base font-semibold text-slate-900 tabular-nums leading-none">{formatClock(now)}</div>
-              <div className="text-[11px] text-slate-500 mt-0.5">{formatLongDate(now)}</div>
-            </div>
+    <div className="lims-page-shell space-y-4">
+      <section className="lims-card relative overflow-hidden border-[var(--lims-border)] bg-gradient-to-br from-white via-white to-sky-50/30">
+        <DashboardHeroArtwork />
+        <div className="relative z-[1] px-5 py-5 sm:px-6 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-[#0878e8] text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-200/50">
+            <FlaskConical className="w-7 h-7" strokeWidth={1.75} aria-hidden />
           </div>
-        </section>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#0878e8] bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
+                {APP_NAME}
+              </span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-600 bg-white border border-[var(--lims-border)] px-2 py-0.5 rounded-full">
+                {roleLabel(role || undefined)}
+              </span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold text-[var(--lims-navy)] mt-2 tracking-tight">
+              {greeting}, {displayName}
+            </h1>
+            <p className="text-sm text-slate-600 mt-1 max-w-2xl">{roleText}</p>
+          </div>
+          <div className="sm:text-right shrink-0 sm:pl-4 border-l border-[var(--lims-border)] sm:pl-6">
+            <div className="text-2xl font-bold text-[var(--lims-navy)] tabular-nums leading-none">
+              {formatClock(now)}
+            </div>
+            <div className="text-xs text-slate-500 mt-1">{formatLongDate(now)}</div>
+          </div>
+        </div>
+      </section>
 
-        <section className={`grid grid-cols-1 ${figureCols} gap-2`}>
-          {staffFigures.map((figure) => {
-            const clickable = Boolean(figure.tab && canOpenTab(role || undefined, figure.tab));
-            const body = (
-              <>
-                <span className={`absolute inset-x-0 top-0 h-1 ${FIGURE_ACCENT[figure.label] || 'bg-slate-300'}`} />
-                <span className="min-w-0">
-                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">{figure.label}</span>
-                  <span className="block text-xs text-slate-500 mt-1">{figure.hint}</span>
-                </span>
-                <span className="text-xl font-semibold text-slate-900 tabular-nums leading-none shrink-0 pt-0.5">
-                  {figure.value}
-                </span>
-              </>
-            );
-            const className =
-              'relative h-full overflow-hidden rounded-md border border-[#d8dde6] bg-white shadow-sm px-3 py-2.5 flex items-start justify-between gap-2 sm:gap-3 text-left min-h-[4.25rem]';
-            return clickable ? (
-              <button key={figure.label} type="button" onClick={() => open(figure.tab || '')} className={`${className} hover:border-[#0176d3] cursor-pointer`}>
-                {body}
-              </button>
-            ) : (
-              <div key={figure.label} className={className}>
-                {body}
+      <section className={`grid grid-cols-1 ${figureCols} gap-3`}>
+        {staffFigures.map((figure) => {
+          const meta = FIGURE_META[figure.label] || FIGURE_META['Requests today'];
+          const Icon = meta.icon;
+          const clickable = Boolean(figure.tab && canOpenTab(role || undefined, figure.tab));
+          const className =
+            'lims-card h-full p-4 sm:px-5 sm:py-4 text-left transition-all shadow-sm hover:shadow-md hover:border-[#0878e8]/35';
+          const valueClass = meta.valueColor ?? 'text-[var(--lims-navy)]';
+          const body = (
+            <div className="flex items-center gap-3 sm:gap-4 w-full min-h-[4.5rem]">
+              <span
+                className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${meta.iconWrap}`}
+              >
+                <Icon className={`w-6 h-6 ${meta.iconColor}`} strokeWidth={1.75} aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1 pr-2">
+                <p className="text-[11px] sm:text-xs font-bold uppercase tracking-wide text-[var(--lims-navy)] leading-snug">
+                  {figure.label}
+                </p>
+                <p className="text-[10px] sm:text-[11px] text-slate-500 mt-1 leading-snug line-clamp-2">
+                  {figure.hint}
+                </p>
               </div>
-            );
-          })}
-        </section>
+              <span
+                className={`text-3xl sm:text-[2rem] font-bold tabular-nums leading-none shrink-0 ${valueClass}`}
+              >
+                {figure.value}
+              </span>
+            </div>
+          );
+          return clickable ? (
+            <button
+              key={figure.label}
+              type="button"
+              onClick={() =>
+                open(figure.tab || '', {
+                  pipelineFilter: figure.pipelineFilter,
+                  releaseFilter: figure.releaseFilter,
+                })
+              }
+              className={`${className} cursor-pointer`}
+            >
+              {body}
+            </button>
+          ) : (
+            <div key={figure.label} className={className}>
+              {body}
+            </div>
+          );
+        })}
+      </section>
 
-        {canCreate && (
-          <button
-            type="button"
-            onClick={() => open('create-request')}
-            className="w-full text-left bg-[#0176d3] hover:bg-[#0060b2] text-white rounded-md shadow-sm px-3 py-2.5 sm:px-4 flex items-center justify-between gap-3 cursor-pointer"
-          >
+      {canCreate && (
+        <button
+          type="button"
+          onClick={() => open('create-request')}
+          className="relative overflow-hidden w-full text-left rounded-xl bg-gradient-to-r from-[var(--lims-navy)] via-[#0c2d55] to-[#0a2240] hover:from-[#0c2d55] hover:to-[#081a33] text-white shadow-md px-5 py-4 flex items-center justify-between gap-4 cursor-pointer border border-[#0a2240]"
+        >
+          <DashboardCtaArtwork />
+          <span className="relative z-[1] flex items-center gap-3 min-w-0">
+            <span className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+              <FlaskConical className="w-5 h-5 text-sky-200" strokeWidth={1.75} />
+            </span>
             <span className="min-w-0">
-              <span className="block text-sm font-semibold">Start a lab test request</span>
-              <span className="block text-xs text-white/80 mt-0.5">
+              <span className="block text-base font-semibold">Start a lab test request</span>
+              <span className="block text-sm text-slate-300 mt-0.5">
                 {hideExaminations
                   ? 'Patient details, then request date and physician.'
                   : 'Patient, then the request, then the examinations.'}
               </span>
             </span>
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold shrink-0">
-              Begin
-              <ArrowRight className="w-3.5 h-3.5" />
-            </span>
-          </button>
-        )}
+          </span>
+          <span className="relative z-[1] inline-flex items-center gap-2 text-sm font-semibold bg-white text-[var(--lims-navy)] px-4 py-2 rounded-lg shrink-0 shadow-sm">
+            Begin
+            <ArrowRight className="w-4 h-4" />
+          </span>
+        </button>
+      )}
 
         {!canCreate && otherDesks[0] && (
-          <section className="bg-white border border-[#d8dde6] rounded-md shadow-sm px-3 py-2.5 sm:px-4 flex items-center justify-between gap-3">
+          <section className="lims-card px-3 py-2.5 sm:px-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <span className="w-9 h-9 rounded-md bg-[#e8f3fc] text-[#0176d3] flex items-center justify-center shrink-0">
+              <span className="w-9 h-9 rounded-xl bg-sky-50 text-[#0878e8] flex items-center justify-center shrink-0">
                 {otherDesks[0].icon}
               </span>
               <div className="min-w-0">
@@ -498,7 +643,7 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
             <button
               type="button"
               onClick={() => open(otherDesks[0].tab)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white text-xs font-semibold rounded-md cursor-pointer shrink-0"
+              className="lims-btn-primary gap-1.5 px-3.5 py-2 text-xs rounded-lg shrink-0"
             >
               Open
               <ArrowRight className="w-3.5 h-3.5" />
@@ -506,26 +651,27 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
           </section>
         )}
 
-        <section className="bg-white border border-[#d8dde6] rounded-md shadow-sm overflow-hidden">
-          <div className="px-3 py-2 sm:px-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <section className="lims-card overflow-hidden">
+          <div className="px-5 py-4 border-b border-[var(--lims-border)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-xs font-semibold text-slate-900">Laboratory requests</div>
+              <h2 className="text-base font-semibold text-[var(--lims-navy)]">Laboratory requests</h2>
               {role === 'STAFF' && (
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Select a row to open request details. You can correct it there before the cashier or laboratory takes it.
+                <p className="text-xs text-slate-500 mt-1">
+                  Select a row to open request details. You can correct it there before the cashier or laboratory
+                  takes it.
                 </p>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-100 border border-slate-200">
+              <div className="flex items-center gap-1 p-1 rounded-lg bg-[#f4f7fb] border border-[var(--lims-border)]">
                 {requestListTabs.map((tab) => (
                   <button
                     key={tab.key}
                     type="button"
                     onClick={() => setRequestListTab(tab.key)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-semibold transition-all cursor-pointer whitespace-nowrap ${
                       requestListTab === tab.key
-                        ? 'bg-[#0176d3] text-white shadow-2xs'
+                        ? 'bg-[#0878e8] text-white shadow-sm'
                         : 'bg-transparent text-slate-600 hover:text-slate-900'
                     }`}
                   >
@@ -544,33 +690,61 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
                 <button
                   type="button"
                   onClick={() => open(queueTab)}
-                  className="text-xs font-semibold text-[#0176d3] hover:underline cursor-pointer"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#0878e8] hover:underline cursor-pointer"
                 >
                   {queueTab === 'payments' ? 'Open the payment desk' : 'Open the queue'}
+                  <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.75} />
                 </button>
               ) : null}
             </div>
           </div>
-          {renderRequestTable(activeRequestList, activeRequestList.length > 12)}
+          {renderRequestTable(pagedRequests)}
+          {activeRequestList.length > REQUEST_PAGE_SIZE ? (
+            <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-[var(--lims-border)] text-xs text-slate-600">
+              <span>
+                Page {requestPage + 1} of {requestPageCount} · {activeRequestList.length} requests
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={requestPage === 0}
+                  onClick={() => setRequestPage((p) => Math.max(0, p - 1))}
+                  className="p-1.5 rounded-lg border border-[var(--lims-border)] disabled:opacity-40 cursor-pointer hover:bg-slate-50"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={requestPage >= requestPageCount - 1}
+                  onClick={() => setRequestPage((p) => Math.min(requestPageCount - 1, p + 1))}
+                  className="p-1.5 rounded-lg border border-[var(--lims-border)] disabled:opacity-40 cursor-pointer hover:bg-slate-50"
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         {otherDesks.length > (canCreate ? 0 : 1) && (
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {otherDesks.slice(canCreate ? 0 : 1).map((action) => (
               <button
                 key={action.tab}
                 type="button"
                 onClick={() => open(action.tab)}
-                className="h-full text-left bg-white border border-[#d8dde6] hover:border-[#0176d3] rounded-md shadow-sm px-3 py-2.5 flex items-center gap-2.5 cursor-pointer group"
+                className="h-full text-left lims-card hover:border-[#0878e8]/60 px-4 py-3 flex items-center gap-3 cursor-pointer group"
               >
-                <span className="w-9 h-9 rounded-md bg-[#e8f3fc] text-[#0176d3] flex items-center justify-center shrink-0">
+                <span className="w-10 h-10 rounded-xl bg-sky-50 text-[#0878e8] flex items-center justify-center shrink-0">
                   {action.icon}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-semibold text-slate-900">{action.title}</span>
-                  <span className="block text-xs text-slate-500 mt-0.5">{action.detail}</span>
+                  <span className="block text-sm font-semibold text-slate-900">{action.title}</span>
+                  <span className="block text-xs text-slate-500 mt-0.5 leading-snug">{action.detail}</span>
                 </span>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-[#0176d3] shrink-0" />
+                <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-[#0878e8] shrink-0" />
               </button>
             ))}
           </section>

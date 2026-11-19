@@ -4,6 +4,10 @@ import {
   Plus, 
   Search, 
   Receipt,
+  PackageCheck,
+  Bell,
+  Printer,
+  ExternalLink,
 } from 'lucide-react';
 import { LabTestRequisition } from '../modals/NewRequisitionModal';
 import { LifecycleChevronBar } from '../layout/LifecycleChevronBar';
@@ -12,6 +16,7 @@ import { ReceiveAccessionModal } from '../modals/ReceiveAccessionModal';
 import { OrderOfPaymentModal } from '../modals/OrderOfPaymentModal';
 import { ResultEntryModal, ExamResultGroup } from '../modals/ResultEntryModal';
 import { CoAReportModal } from '../modals/CoAReportModal';
+import { paperKindForPreview, printScreenPreview } from '../../utils/printScreenPreview';
 import { DocumentSideDrawer } from '../modals/DocumentSideDrawer';
 import { PatientCategory, Sample, PriorityLevel } from '../../types/lims';
 import type { AuthUser } from '../../types/auth';
@@ -32,12 +37,29 @@ import {
 import { ExaminationItem } from '../../data/examinationCatalog';
 import { LabExamSelectionModal } from '../modals/LabExamSelectionModal';
 import { PageController } from '../common/PageController';
+import { LimsWorkspace } from '../common/LimsWorkspace';
+import { LimsHeroHeader } from '../common/LimsHeroHeader';
+import { APP_NAME } from '../brand/LabTisBrand';
 import { paginateSlice, usePagination } from '../../utils/pagination';
+import {
+  formatResultsPickupWhen,
+  isAwaitingPatientNotify,
+  isAwaitingPatientPickup,
+  isResultsPickedUp,
+  matchesReleaseFilter,
+  patientWasNotified,
+  requestReleaseLabel,
+  type RequestReleaseFilter,
+} from '../../utils/resultsPickup';
+import { isPatientSmsConfigured } from '../../services/patientNotificationService';
 
 interface SubmissionsViewProps {
   requisitions: LabTestRequisition[];
   onOpenNewRequisition?: () => void;
-  onSelectRequisition?: (req: LabTestRequisition) => void;
+  onSelectRequisition?: (
+    req: LabTestRequisition,
+    context?: { statusFilter: string; releaseFilter?: RequestReleaseFilter }
+  ) => void;
   onReceiveAndAccession: (
     req: LabTestRequisition,
     accessionData: {
@@ -78,7 +100,13 @@ interface SubmissionsViewProps {
   storedMedTechInfo?: Record<string, any>;
   currentUserName?: string;
   permissions?: AuthUser['permissions'];
-  variant?: 'lab-requests' | 'testing-queue' | 'payments' | 'all-requests' | 'queue';
+  variant?:
+    | 'lab-requests'
+    | 'testing-queue'
+    | 'payments'
+    | 'all-requests'
+    | 'pickup-management'
+    | 'queue';
   onMarkResultsPickedUp?: (req: LabTestRequisition, pickedUp: boolean) => void;
   onNotifyResultsReady?: (req: LabTestRequisition) => void;
   examinationCatalog?: ExaminationItem[];
@@ -86,6 +114,9 @@ interface SubmissionsViewProps {
   onOpenRequestDetails?: (req: LabTestRequisition) => void;
   pipelineFilter?: string | null;
   onPipelineFilterApplied?: () => void;
+  releaseFilter?: string | null;
+  onReleaseFilterApplied?: () => void;
+  onOpenCompletedReport?: (req: LabTestRequisition) => void;
 }
 
 function examinationNames(req: LabTestRequisition): string[] {
@@ -134,7 +165,7 @@ function nextStepToneClass(tone: NextStepTone, disabled?: boolean): string {
   if (disabled) return 'text-slate-300 cursor-not-allowed no-underline hover:no-underline';
   switch (tone) {
     case 'primary':
-      return 'text-[#0176d3] hover:text-[#014486]';
+      return 'text-[#0878e8] hover:text-[#065bb0]';
     case 'receive':
       return 'text-[#2e844a] hover:text-[#1b5e30]';
     case 'print':
@@ -169,7 +200,7 @@ function NextStepLink({
       disabled={disabled}
       title={title}
       onClick={onClick}
-      className={`inline-flex items-center gap-1 text-[11px] font-normal uppercase leading-none bg-transparent border-0 p-0 m-0 cursor-pointer underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0176d3] disabled:cursor-not-allowed ${nextStepToneClass(tone, disabled)}`}
+      className={`inline-flex items-center gap-1 text-[11px] font-normal uppercase leading-none bg-transparent border-0 p-0 m-0 cursor-pointer underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0878e8] disabled:cursor-not-allowed ${nextStepToneClass(tone, disabled)}`}
     >
       {Icon ? <Icon className="w-3.5 h-3.5 shrink-0 opacity-80" aria-hidden /> : null}
       <span className="uppercase">{children}</span>
@@ -182,6 +213,201 @@ function NextStepDot() {
     <span className="text-slate-300 select-none px-0.5 text-xs font-semibold leading-none" aria-hidden>
       ·
     </span>
+  );
+}
+
+const RELEASE_QUEUE_TABS: { key: RequestReleaseFilter; label: string; shortLabel: string }[] = [
+  { key: 'NOT_PICKED_UP', label: 'Not picked up', shortLabel: 'To release' },
+  { key: 'AWAITING_NOTIFY', label: 'Awaiting notify', shortLabel: 'Needs notify' },
+  { key: 'AWAITING_PICKUP', label: 'Awaiting pickup', shortLabel: 'Ready for pickup' },
+  { key: 'PICKED_UP', label: 'Picked up', shortLabel: 'Picked up' },
+  { key: 'ALL', label: 'All completed', shortLabel: 'All' },
+];
+
+function PickupReleaseBadge({ req }: { req: LabTestRequisition }) {
+  if (isResultsPickedUp(req)) {
+    return (
+      <span className="inline-flex flex-col gap-0.5 items-start">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-50 text-sky-900 border border-sky-200">
+          Picked up
+        </span>
+        {formatResultsPickupWhen(req.resultsPickedUpAt) ? (
+          <span className="text-[10px] text-slate-500 tabular-nums">{formatResultsPickupWhen(req.resultsPickedUpAt)}</span>
+        ) : null}
+      </span>
+    );
+  }
+  if (isAwaitingPatientNotify(req)) {
+    return (
+      <span className="inline-flex flex-col gap-0.5 items-start">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-950 border border-amber-200">
+          Notify patient
+        </span>
+        <span className="text-[10px] text-slate-500">
+          {isPatientSmsConfigured() ? 'SMS / email not sent yet' : 'Email not sent yet'}
+        </span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex flex-col gap-0.5 items-start">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-50 text-violet-900 border border-violet-200">
+        Awaiting collection
+      </span>
+      <span className="text-[10px] text-slate-500">
+        {patientWasNotified(req) ? 'Patient notified' : 'Print before release'}
+      </span>
+    </span>
+  );
+}
+
+function PickupQueueFilters({
+  releaseSubFilter,
+  releaseCounts,
+  onChange,
+  compact,
+}: {
+  releaseSubFilter: RequestReleaseFilter;
+  releaseCounts: {
+    all: number;
+    notPickedUp: number;
+    awaitingNotify: number;
+    awaitingPickup: number;
+    pickedUp: number;
+  };
+  onChange: (key: RequestReleaseFilter) => void;
+  compact?: boolean;
+}) {
+  const countFor = (key: RequestReleaseFilter) => {
+    switch (key) {
+      case 'ALL':
+        return releaseCounts.all;
+      case 'NOT_PICKED_UP':
+        return releaseCounts.notPickedUp;
+      case 'AWAITING_NOTIFY':
+        return releaseCounts.awaitingNotify;
+      case 'AWAITING_PICKUP':
+        return releaseCounts.awaitingPickup;
+      case 'PICKED_UP':
+        return releaseCounts.pickedUp;
+      default:
+        return 0;
+    }
+  };
+  return (
+    <div className={`flex items-center gap-1.5 overflow-x-auto ${compact ? 'pb-0' : 'pb-0.5'}`}>
+      {RELEASE_QUEUE_TABS.map((tab) => (
+        <button
+          key={tab.key}
+          type="button"
+          onClick={() => onChange(tab.key)}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
+            releaseSubFilter === tab.key
+              ? compact
+                ? 'bg-[#0878e8] text-white shadow-2xs'
+                : 'bg-emerald-700 text-white shadow-2xs'
+              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <span>{compact ? tab.shortLabel : tab.label}</span>
+          <span
+            className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center ${
+              releaseSubFilter === tab.key
+                ? 'bg-white/20 text-white'
+                : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {countFor(tab.key)}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PickupRowActions({
+  req,
+  canReleaseDesk,
+  onOpenSlip,
+  onOpenRecord,
+  onPrint,
+  onNotify,
+  onMarkPickup,
+}: {
+  req: LabTestRequisition;
+  canReleaseDesk: boolean;
+  onOpenSlip: () => void;
+  onOpenRecord: () => void;
+  onPrint?: () => void;
+  onNotify?: () => void;
+  onMarkPickup?: () => void;
+}) {
+  const pickedUp = isResultsPickedUp(req);
+  const needsNotify = isAwaitingPatientNotify(req);
+
+  return (
+    <div className="flex flex-col items-stretch gap-2 min-w-[10.5rem] max-w-[14rem] ml-auto">
+      {!pickedUp && needsNotify && onNotify && canReleaseDesk ? (
+        <button
+          type="button"
+          onClick={onNotify}
+          className="inline-flex items-center justify-center gap-1.5 w-full px-2.5 py-2 text-xs font-semibold rounded-lg bg-[#0878e8] hover:bg-[#0669c9] text-white shadow-sm cursor-pointer border-0"
+        >
+          <Bell className="w-3.5 h-3.5 shrink-0" aria-hidden />
+          Notify patient
+        </button>
+      ) : !pickedUp && onMarkPickup && canReleaseDesk ? (
+        <button
+          type="button"
+          onClick={onMarkPickup}
+          className="inline-flex items-center justify-center gap-1.5 w-full px-2.5 py-2 text-xs font-semibold rounded-lg bg-violet-700 hover:bg-violet-800 text-white shadow-sm cursor-pointer border-0"
+        >
+          <PackageCheck className="w-3.5 h-3.5 shrink-0" aria-hidden />
+          Record pickup
+        </button>
+      ) : pickedUp ? (
+        <div className="text-right pr-0.5">
+          <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Release complete</span>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[10px] font-medium">
+        {onPrint && canReleaseDesk ? (
+          <button
+            type="button"
+            onClick={onPrint}
+            className="inline-flex items-center gap-1 text-emerald-800 hover:text-emerald-950 cursor-pointer bg-transparent border-0 p-0"
+          >
+            <Printer className="w-3 h-3" aria-hidden />
+            Print
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onOpenRecord}
+          className="inline-flex items-center gap-1 text-[#0878e8] hover:text-[#065bb0] cursor-pointer bg-transparent border-0 p-0"
+        >
+          <ExternalLink className="w-3 h-3" aria-hidden />
+          Open
+        </button>
+        <button
+          type="button"
+          onClick={onOpenSlip}
+          className="text-slate-500 hover:text-slate-800 cursor-pointer bg-transparent border-0 p-0"
+        >
+          Slip
+        </button>
+        {pickedUp && onMarkPickup && canReleaseDesk ? (
+          <button
+            type="button"
+            onClick={onMarkPickup}
+            className="text-violet-700 hover:text-violet-900 cursor-pointer bg-transparent border-0 p-0"
+          >
+            Undo pickup
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -215,19 +441,26 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
   onOpenRequestDetails,
   pipelineFilter,
   onPipelineFilterApplied,
+  releaseFilter,
+  onReleaseFilterApplied,
+  onOpenCompletedReport,
 }) => {
   const deskVariant =
     variant === 'all-requests'
       ? 'all-requests'
-      : variant === 'queue' || variant === 'lab-requests'
-        ? 'lab-requests'
-        : variant === 'testing-queue'
-          ? 'testing-queue'
-          : 'payments';
+      : variant === 'pickup-management'
+        ? 'pickup-management'
+        : variant === 'queue' || variant === 'lab-requests'
+          ? 'lab-requests'
+          : variant === 'testing-queue'
+            ? 'testing-queue'
+            : 'payments';
   const isPayments = deskVariant === 'payments';
   const isLabRequests = deskVariant === 'lab-requests';
   const isTestingQueue = deskVariant === 'testing-queue';
   const isAllRequests = deskVariant === 'all-requests';
+  const isPickupManagement = deskVariant === 'pickup-management';
+  const isReleaseDesk = isAllRequests || isPickupManagement;
   const canAccession = !isPayments && permissions?.canAccessionSamples === true;
   const canAssignExams =
     !isPayments &&
@@ -237,13 +470,21 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
   const canCreate = !isPayments && Boolean(onOpenNewRequisition);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>(isPayments ? 'UNPAID' : 'ALL');
+  const [releaseSubFilter, setReleaseSubFilter] = useState<RequestReleaseFilter>('ALL');
 
   /** Pipeline pills differ per desk; reusing a filter from another tab hides every row while counts stay full. */
   useEffect(() => {
     if (isPayments) setStatusFilter('UNPAID');
     else if (isTestingQueue) setStatusFilter('ALL');
+    else if (isPickupManagement) setStatusFilter('COMPLETED');
     else if (isLabRequests || isAllRequests) setStatusFilter('ALL');
-  }, [deskVariant, isPayments, isTestingQueue, isLabRequests, isAllRequests]);
+  }, [deskVariant, isPayments, isTestingQueue, isPickupManagement, isLabRequests, isAllRequests]);
+
+  useEffect(() => {
+    if (isPickupManagement && !releaseFilter) {
+      setReleaseSubFilter('NOT_PICKED_UP');
+    }
+  }, [isPickupManagement, releaseFilter]);
 
   useEffect(() => {
     if (!pipelineFilter) return;
@@ -251,9 +492,26 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
     onPipelineFilterApplied?.();
   }, [pipelineFilter, onPipelineFilterApplied]);
 
+  useEffect(() => {
+    if (!releaseFilter) return;
+    const allowed = new Set<RequestReleaseFilter>([
+      'ALL',
+      'NOT_PICKED_UP',
+      'AWAITING_NOTIFY',
+      'AWAITING_PICKUP',
+      'PICKED_UP',
+    ]);
+    if (allowed.has(releaseFilter as RequestReleaseFilter)) {
+      setReleaseSubFilter(releaseFilter as RequestReleaseFilter);
+    }
+    onReleaseFilterApplied?.();
+  }, [releaseFilter, onReleaseFilterApplied]);
+
   const allowedStatusFilters = isPayments
     ? new Set(['UNPAID', 'PAID', 'ALL'])
-    : isAllRequests
+    : isPickupManagement
+      ? new Set(['COMPLETED'])
+      : isAllRequests
       ? new Set(['ALL', 'NEEDS_EXAMS', 'AT_CASHIER', 'READY_RECEIVE', 'IN_TESTING', 'COMPLETED'])
       : isLabRequests
         ? new Set(['ALL', 'NEEDS_EXAMS', 'AT_CASHIER', 'READY_RECEIVE'])
@@ -262,6 +520,24 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
           : new Set(['ALL']);
 
   const activeStatusFilter = allowedStatusFilters.has(statusFilter) ? statusFilter : 'ALL';
+
+  useEffect(() => {
+    if (activeStatusFilter !== 'COMPLETED' && !isPickupManagement) setReleaseSubFilter('ALL');
+  }, [activeStatusFilter, isPickupManagement]);
+
+  const canReleaseDesk =
+    Boolean(permissions?.canReleaseCoA) ||
+    Boolean(permissions?.canPrintResults) ||
+    Boolean(permissions?.canAccessionSamples) ||
+    Boolean(permissions?.canAssignOrNumber);
+
+  const selectRequisition = (req: LabTestRequisition) => {
+    onSelectRequisition?.(req, {
+      statusFilter: isPickupManagement ? 'COMPLETED' : activeStatusFilter,
+      releaseFilter:
+        activeStatusFilter === 'COMPLETED' || isPickupManagement ? releaseSubFilter : undefined,
+    });
+  };
   const [docPanel, setDocPanel] = useState<{
     kind: 'slip' | 'payment' | 'print';
     req: LabTestRequisition;
@@ -288,7 +564,9 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
   };
 
   const deskRequests = sortDeskRequests(
-    isAllRequests
+    isPickupManagement
+      ? requisitions.filter((r) => r.status === 'COMPLETED')
+      : isAllRequests
       ? requisitions
       : requisitions.filter((r) => {
           if (isPayments) return readyForCashierSettlement(r);
@@ -328,10 +606,19 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
               (activeStatusFilter === 'IN_TESTING' &&
                 (r.status === 'IN_TESTING' || r.status === 'RECEIVED'))
             : activeStatusFilter === 'ALL' || r.status === activeStatusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesRelease = isPickupManagement
+      ? matchesReleaseFilter(r, releaseSubFilter)
+      : !isAllRequests ||
+        activeStatusFilter !== 'COMPLETED' ||
+        matchesReleaseFilter(r, releaseSubFilter);
+    return matchesSearch && matchesStatus && matchesRelease;
   });
 
-  const pagination = usePagination(filtered.length, [searchQuery, activeStatusFilter, deskVariant], 15);
+  const pagination = usePagination(
+    filtered.length,
+    [searchQuery, activeStatusFilter, releaseSubFilter, deskVariant],
+    15
+  );
   const pagedRequests = paginateSlice(filtered, pagination.page, pagination.pageSize);
 
   const openDocPanel = (kind: 'slip' | 'payment' | 'print', req: LabTestRequisition) => {
@@ -352,9 +639,24 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
     other: deskRequests.filter((r) => requestTrackingPhase(r) === 'OTHER').length,
   };
 
+  const completedReqs = deskRequests.filter((r) => r.status === 'COMPLETED');
+  const releaseCounts = {
+    all: completedReqs.length,
+    awaitingNotify: completedReqs.filter((r) => isAwaitingPatientNotify(r)).length,
+    notPickedUp: completedReqs.filter((r) => isAwaitingPatientPickup(r)).length,
+    awaitingPickup: completedReqs.filter(
+      (r) => isAwaitingPatientPickup(r) && !isAwaitingPatientNotify(r)
+    ).length,
+    pickedUp: completedReqs.filter((r) => isResultsPickedUp(r)).length,
+  };
+
   const handlePipelineRowClick = (req: LabTestRequisition) => {
+    if (isPickupManagement) {
+      selectRequisition(req);
+      return;
+    }
     if (isTestingQueue || (isAllRequests && (req.status === 'IN_TESTING' || req.status === 'RECEIVED' || req.status === 'COMPLETED'))) {
-      onSelectRequisition?.(req);
+      selectRequisition(req);
       return;
     }
     if (req.status === 'SUBMITTED') {
@@ -374,13 +676,13 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
       handleOpenSlip(req);
       return;
     }
-    if (onSelectRequisition) onSelectRequisition(req);
+    selectRequisition(req);
   };
 
   return (
-    <div className="lims-page-shell">
+    <div className="lims-page-shell space-y-4">
       {/* Printable page background content wrapper (Hidden in Print Mode) */}
-      <div className="print:hidden space-y-2">
+      <div className="print:hidden space-y-4">
         {/* 1. Chevron Pipeline Workflow */}
         {isLabRequests ? (
         <LifecycleChevronBar
@@ -397,73 +699,120 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
         />
         ) : null}
 
-      {/* 2. Record Header Card */}
-      <div className="bg-white border border-slate-200 rounded-md p-3 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-md bg-blue-50 border border-blue-100 flex items-center justify-center text-[#0176d3] shrink-0">
-            <FileText className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Requisition &amp; Order Management
-              </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-[#0176d3] border border-blue-200">
-                {deskRequests.length} Total
-              </span>
-            </div>
-            <h1 className="text-base font-semibold text-slate-900 tracking-tight leading-tight">
-              {isPayments
-                ? 'Payment Desk'
+      <LimsWorkspace
+        header={
+          <LimsHeroHeader
+            icon={isPayments ? Receipt : isPickupManagement ? PackageCheck : FileText}
+            title={
+              isPayments
+                ? 'Payment desk'
                 : isTestingQueue
                   ? 'Testing queue'
-                  : isAllRequests
-                    ? 'All requests'
-                    : 'Request queue'}
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {isPayments
+                  : isPickupManagement
+                    ? 'Pickup management'
+                    : isAllRequests
+                      ? 'All requests'
+                      : 'Request queue'
+            }
+            description={
+              isPayments
                 ? 'OPD only. Assign the official receipt after the patient pays. Other categories go to the laboratory.'
                 : isTestingQueue
                   ? 'Specimens already received — enter and finalize analytical results here.'
-                  : isAllRequests
-                    ? 'Monitor every request from intake through testing and completion. Open a row to view details or the next action.'
-                    : 'Info desk intake and OPD cashier/receive. Corporate requests skip this queue and go straight to Testing after create.'}
-            </p>
-          </div>
-        </div>
-
-        {/* Action Button: Create New Request */}
-        {canCreate && (isLabRequests || isAllRequests) && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onOpenNewRequisition}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0176d3] hover:bg-[#0060b2] text-white text-[11px] font-semibold rounded-md shadow-sm transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Create Lab Test Request</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* 3. Requisitions Table Card */}
-      <div className="bg-white border border-slate-200 rounded-md overflow-hidden shadow-sm">
-        
-        {/* Search & Filter Bar */}
-        <div className="p-2 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50/70">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search case no, patient, physician, OR#, CS#..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#0176d3] focus:ring-1 focus:ring-[#0176d3]"
-            />
+                  : isPickupManagement
+                    ? 'Completed results — notify patients, print official reports, and record physical pickup.'
+                    : isAllRequests
+                      ? 'Monitor every request from intake through testing and completion.'
+                      : 'Info desk intake and OPD cashier/receive. Corporate requests skip this queue and go straight to Testing after create.'
+            }
+            badges={
+              <>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#0878e8] bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
+                  {APP_NAME}
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-600 bg-white border border-[var(--lims-border)] px-2 py-0.5 rounded-full">
+                  {isPickupManagement ? 'Results release' : 'Requisition & order'}
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-[#0878e8] border border-sky-100">
+                  {deskRequests.length} total
+                </span>
+              </>
+            }
+            aside={
+              <div className="text-right w-full">
+                {isPickupManagement ? (
+                  <>
+                    <div className="text-2xl font-bold text-violet-800 tabular-nums leading-none">
+                      {releaseCounts.notPickedUp}
+                    </div>
+                    <div className="text-xs text-slate-600 mt-1 font-medium">Still at the lab</div>
+                    <div className="text-[10px] text-slate-400 mt-1">{releaseCounts.all} completed total</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold text-[var(--lims-navy)] tabular-nums leading-none">
+                      {deskRequests.length}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {isTestingQueue
+                        ? 'In queue'
+                        : isAllRequests
+                          ? 'Tracked'
+                          : isPayments
+                            ? 'At desk'
+                            : 'On desk'}
+                    </div>
+                  </>
+                )}
+              </div>
+            }
+            actions={
+              canCreate && (isLabRequests || isAllRequests) ? (
+                <button
+                  type="button"
+                  onClick={onOpenNewRequisition}
+                  className="lims-btn-primary px-4 py-2 text-sm rounded-lg shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create lab test request</span>
+                </button>
+              ) : undefined
+            }
+          />
+        }
+        toolbar={
+        <div
+          className={`p-3 sm:p-4 border-b border-[var(--lims-border)] flex flex-col gap-3 bg-[#f8fafc]/80 ${
+            isPickupManagement ? '' : 'sm:flex-row sm:items-center justify-between'
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder={
+                  isPickupManagement
+                    ? 'Search patient, case no., or exam…'
+                    : 'Search case no, patient, physician, OR#, CS#...'
+                }
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="lims-input pl-9 pr-3 py-2 text-xs"
+              />
+            </div>
+            {isPickupManagement ? (
+              <PickupQueueFilters
+                compact
+                releaseSubFilter={releaseSubFilter}
+                releaseCounts={releaseCounts}
+                onChange={setReleaseSubFilter}
+              />
+            ) : null}
           </div>
 
           {/* Status Filter Tabs */}
+          {!isPickupManagement ? (
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
             {(isPayments
               ? [
@@ -497,7 +846,7 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                 onClick={() => setStatusFilter(tab.key)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
                   activeStatusFilter === tab.key
-                    ? 'bg-[#0176d3] text-white shadow-2xs'
+                    ? 'bg-[#0878e8] text-white shadow-2xs'
                     : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
@@ -510,8 +859,10 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
               </button>
             ))}
           </div>
+          ) : null}
         </div>
-
+        }
+      >
         {isLabRequests && statusFilter === 'AT_CASHIER' && counts.atCashier > 0 ? (
           <div className="px-3 py-2 border-b border-amber-100 bg-amber-50/60">
             <p className="text-[11px] text-amber-950 leading-relaxed">
@@ -521,12 +872,33 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
           </div>
         ) : null}
 
+        {isPickupManagement ? (
+          <div className="px-4 py-2.5 border-b border-sky-100 bg-gradient-to-r from-sky-50/80 to-white">
+            <p className="text-xs text-slate-700 leading-relaxed max-w-3xl">
+              <span className="font-semibold text-[var(--lims-navy)]">Suggested flow:</span>{' '}
+              notify the patient → print the official report → hand results and tap{' '}
+              <span className="font-semibold">Record pickup</span>.
+            </p>
+          </div>
+        ) : isAllRequests && activeStatusFilter === 'COMPLETED' && releaseCounts.all > 0 ? (
+          <div className="px-3 py-2.5 border-b border-emerald-100 bg-emerald-50/50 space-y-2">
+            <p className="text-[11px] text-emerald-950 leading-relaxed">
+              <strong>Results release</strong> — notify the patient, print official forms, then record pickup.
+            </p>
+            <PickupQueueFilters
+              releaseSubFilter={releaseSubFilter}
+              releaseCounts={releaseCounts}
+              onChange={setReleaseSubFilter}
+            />
+          </div>
+        ) : null}
+
         {/* Table Container */}
         {isPayments ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse lims-table">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
                   <th className="px-5 py-2.5 font-semibold">Patient</th>
                   <th className="px-3 py-2.5 font-semibold">Case</th>
                   <th className="px-3 py-2.5 font-semibold">Examinations</th>
@@ -555,7 +927,7 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                       onClick={() => {
                         openDocPanel('payment', req);
                       }}
-                      className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
+                      className="cursor-pointer"
                     >
                       <td className="px-5 py-3 align-middle">
                         <div className="text-xs font-medium text-slate-900">{req.patientOrSubjectName || 'Patient'}</div>
@@ -575,7 +947,7 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                           className={`inline-flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-md cursor-pointer disabled:opacity-60 ${
                             paid
                               ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                              : 'bg-[#0176d3] text-white hover:bg-[#0060b2]'
+                              : 'bg-[#0878e8] text-white hover:bg-[#0669c9]'
                           }`}
                         >
                           <Receipt className="w-3.5 h-3.5" />
@@ -590,16 +962,16 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
           </div>
         ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-[11px] leading-snug">
+          <table className="w-full text-left border-collapse text-[11px] leading-snug lims-table">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              <tr>
                 <th className="px-4 py-2 font-semibold">Patient</th>
                 <th className="px-2.5 py-2 font-semibold">Case</th>
                 <th className="px-2.5 py-2 font-semibold">Date</th>
                 <th className="px-2.5 py-2 font-semibold">Examinations</th>
                 <th className="px-2.5 py-2 font-semibold">Category</th>
-                <th className="px-2.5 py-2 font-semibold">Status</th>
-                <th className="px-4 py-2 font-semibold text-right">Next step</th>
+                <th className="px-2.5 py-2 font-semibold">{isPickupManagement ? 'Release status' : 'Status'}</th>
+                <th className="px-4 py-2 font-semibold text-right">{isPickupManagement ? 'Actions' : 'Next step'}</th>
               </tr>
             </thead>
             <tbody>
@@ -609,16 +981,20 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                     <p className="text-sm font-medium text-slate-700">No requests in this list.</p>
                     <p className="text-xs text-slate-500 mt-1">
                       {deskRequests.length === 0
-                        ? isAllRequests
-                          ? 'No lab test requests have been filed yet.'
-                          : 'Requests appear here when they are ready for the laboratory.'
+                        ? isPickupManagement
+                          ? 'No completed results yet. Finalize testing from the Testing queue first.'
+                          : isAllRequests
+                            ? 'No lab test requests have been filed yet.'
+                            : 'Requests appear here when they are ready for the laboratory.'
                         : 'Nothing matches this search or status.'}
                     </p>
                   </td>
                 </tr>
               ) : (
                 pagedRequests.map((req) => {
-                  const statusLabel = isAllRequests
+                  const statusLabel = isPickupManagement
+                    ? 'Completed'
+                    : isAllRequests
                     ? requestTrackingLabel(req)
                     : needsLaboratoryExamSelection(req)
                       ? 'Info desk intake'
@@ -641,8 +1017,8 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                     <tr
                       key={req.id}
                       onClick={() => {
-                        if (isTestingQueue) {
-                          onSelectRequisition?.(req);
+                        if (isPickupManagement || isTestingQueue) {
+                          selectRequisition(req);
                           return;
                         }
                         if (isAllRequests) {
@@ -662,10 +1038,12 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                           handleOpenSlip(req);
                           return;
                         }
-                        if (onSelectRequisition) onSelectRequisition(req);
+                        selectRequisition(req);
                       }}
                       title={
-                        isAllRequests
+                        isPickupManagement
+                          ? 'Open completed result — notify, print, or record pickup'
+                          : isAllRequests
                           ? 'Open request or next action'
                           : isTestingQueue
                           ? 'Open accessioned diagnostic specimen'
@@ -679,10 +1057,10 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                                   : 'View request slip'
                             : 'View request'
                       }
-                      className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer whitespace-nowrap"
+                      className={`cursor-pointer ${isPickupManagement ? '' : 'whitespace-nowrap'}`}
                     >
                       <td className="px-4 py-2 align-middle">
-                        {(isTestingQueue || isAllRequests) && onSelectRequisition ? (
+                        {(isTestingQueue || isReleaseDesk) && onSelectRequisition ? (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -690,11 +1068,17 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                               if (isAllRequests && req.status === 'SUBMITTED') {
                                 handlePipelineRowClick(req);
                               } else {
-                                onSelectRequisition(req);
+                                selectRequisition(req);
                               }
                             }}
-                            className="text-[11px] font-normal text-[#0176d3] hover:text-[#014486] underline-offset-2 hover:underline text-left cursor-pointer bg-transparent border-0 p-0"
-                            title={isAllRequests ? 'Open request' : 'Accessioned diagnostic specimen'}
+                            className="text-[11px] font-normal text-[#0878e8] hover:text-[#065bb0] underline-offset-2 hover:underline text-left cursor-pointer bg-transparent border-0 p-0"
+                            title={
+                              isPickupManagement
+                                ? 'Open completed result'
+                                : isAllRequests
+                                  ? 'Open request'
+                                  : 'Accessioned diagnostic specimen'
+                            }
                           >
                             {req.patientOrSubjectName || 'Patient'}
                           </button>
@@ -713,23 +1097,70 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                       </td>
                       <td className="px-2.5 py-2 align-middle font-normal text-slate-600 uppercase">{req.patientCategory || '—'}</td>
                       <td className="px-2.5 py-2 align-middle">
-                        <span
-                          className={`font-normal uppercase ${
-                            needsLaboratoryExamSelection(req)
-                              ? 'text-violet-800'
-                              : waitingAtCashier(req)
-                                ? 'text-amber-800'
-                                : req.status === 'IN_TESTING' || req.status === 'RECEIVED'
-                                  ? 'text-[#014486]'
-                                  : req.status === 'COMPLETED'
-                                    ? 'text-emerald-700'
-                                    : requestStatusTextClass(req.status)
-                          }`}
-                        >
-                          {statusLabel}
-                        </span>
+                        {isPickupManagement ? (
+                          <PickupReleaseBadge req={req} />
+                        ) : (
+                          <>
+                            <p
+                              className={`font-normal uppercase ${
+                                needsLaboratoryExamSelection(req)
+                                  ? 'text-violet-800'
+                                  : waitingAtCashier(req)
+                                    ? 'text-amber-800'
+                                    : req.status === 'IN_TESTING' || req.status === 'RECEIVED'
+                                      ? 'text-[#014486]'
+                                      : req.status === 'COMPLETED'
+                                        ? 'text-emerald-700'
+                                        : requestStatusTextClass(req.status)
+                              }`}
+                            >
+                              {statusLabel}
+                            </p>
+                            {req.status === 'COMPLETED' ? (
+                              <p
+                                className={`text-[10px] font-medium mt-0.5 normal-case ${
+                                  isResultsPickedUp(req)
+                                    ? 'text-[#0878e8]'
+                                    : isAwaitingPatientNotify(req)
+                                      ? 'text-sky-700'
+                                      : 'text-violet-800'
+                                }`}
+                              >
+                                {isResultsPickedUp(req)
+                                  ? `Picked up${formatResultsPickupWhen(req.resultsPickedUpAt) ? ` · ${formatResultsPickupWhen(req.resultsPickedUpAt)}` : ''}`
+                                  : requestReleaseLabel(req)}
+                              </p>
+                            ) : null}
+                          </>
+                        )}
                       </td>
                       <td className="px-4 py-2 align-middle text-right uppercase" onClick={(e) => e.stopPropagation()}>
+                        {isPickupManagement ? (
+                          <PickupRowActions
+                            req={req}
+                            canReleaseDesk={canReleaseDesk}
+                            onOpenSlip={() => handleOpenSlip(req)}
+                            onOpenRecord={() => selectRequisition(req)}
+                            onPrint={
+                              onOpenCompletedReport
+                                ? () => {
+                                    if (!canReleaseDesk) return;
+                                    onOpenCompletedReport(req);
+                                  }
+                                : undefined
+                            }
+                            onNotify={
+                              onNotifyResultsReady && !isResultsPickedUp(req)
+                                ? () => onNotifyResultsReady(req)
+                                : undefined
+                            }
+                            onMarkPickup={
+                              onMarkResultsPickedUp
+                                ? () => onMarkResultsPickedUp(req, !isResultsPickedUp(req))
+                                : undefined
+                            }
+                          />
+                        ) : (
                         <div className="inline-flex items-center justify-end flex-nowrap gap-0.5">
                           <NextStepLink tone="muted" title="Request slip" onClick={() => handleOpenSlip(req)}>
                             Slip
@@ -800,7 +1231,73 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                               </NextStepLink>
                             </>
                           ) : null}
+                          {isReleaseDesk && req.status === 'COMPLETED' ? (
+                            <>
+                              <NextStepDot />
+                              <NextStepLink
+                                tone="primary"
+                                title="Open specimen and results"
+                                onClick={() => selectRequisition(req)}
+                              >
+                                Results
+                              </NextStepLink>
+                            </>
+                          ) : null}
+                          {isReleaseDesk && req.status === 'COMPLETED' && onOpenCompletedReport ? (
+                            <>
+                              <NextStepDot />
+                              <NextStepLink
+                                tone="print"
+                                disabled={!canReleaseDesk}
+                                title="Print official result forms"
+                                onClick={() => {
+                                  if (!canReleaseDesk) return;
+                                  onOpenCompletedReport(req);
+                                }}
+                              >
+                                Print
+                              </NextStepLink>
+                            </>
+                          ) : null}
+                          {isReleaseDesk &&
+                          req.status === 'COMPLETED' &&
+                          onNotifyResultsReady &&
+                          canReleaseDesk &&
+                          !isResultsPickedUp(req) ? (
+                            <>
+                              <NextStepDot />
+                              <NextStepLink
+                                tone="notify"
+                                title="Send SMS or email that results are ready"
+                                onClick={() => onNotifyResultsReady(req)}
+                              >
+                                Notify
+                              </NextStepLink>
+                            </>
+                          ) : null}
+                          {isReleaseDesk &&
+                          req.status === 'COMPLETED' &&
+                          onMarkResultsPickedUp &&
+                          canReleaseDesk ? (
+                            <>
+                              <NextStepDot />
+                              <NextStepLink
+                                tone="pickup"
+                                title={
+                                  isResultsPickedUp(req)
+                                    ? 'Clear pickup record'
+                                    : 'Record that the patient collected results'
+                                }
+                                onClick={() =>
+                                  onMarkResultsPickedUp(req, !isResultsPickedUp(req))
+                                }
+                              >
+                                {isResultsPickedUp(req) ? 'Undo pickup' : 'Mark pickup'}
+                              </NextStepLink>
+                            </>
+                          ) : null}
                         </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -820,7 +1317,7 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
           onPageChange={pagination.setPage}
           onPageSizeChange={pagination.setPageSize}
         />
-      </div>
+      </LimsWorkspace>
       {/* End of print:hidden page wrapper */}
       </div>
 
@@ -831,11 +1328,20 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
               ? 'Laboratory request slip'
               : docPanel.kind === 'payment'
                 ? 'Order of payment'
-                : 'Print results'
+                : 'Official Result Forms'
           }
           subtitle={docPanel.req.requisitionNumber}
           onClose={() => setDocPanel(null)}
-          onPrint={() => window.print()}
+          onPrint={() => {
+            if (docPanel.kind === 'print') {
+              const frame = document.querySelector('.coa-official-paper-frame');
+              if (frame instanceof HTMLElement) {
+                printScreenPreview(frame, paperKindForPreview(frame));
+                return;
+              }
+            }
+            window.print();
+          }}
         >
           {docPanel.kind === 'slip' ? (
             <RequisitionSlipModal

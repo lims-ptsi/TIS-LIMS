@@ -1,14 +1,15 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import { 
-  ChevronDown, 
-  ChevronRight, 
-  FileText, 
-  Printer, 
-  Info, 
-  Layers, 
+import {
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  FileDown,
+  Printer,
+  Info,
+  Layers,
   ShieldCheck,
-  FileSpreadsheet, 
-  Sparkles, 
+  FileSpreadsheet,
+  Sparkles,
   ArrowLeft,
   FlaskConical,
   Activity,
@@ -22,8 +23,29 @@ import {
   ExternalLink,
   AlertCircle,
   PackageCheck,
-  Mail,
   MessageSquare,
+  User,
+  Bell,
+  Snowflake,
+  RotateCcw,
+  Phone,
+  Mail,
+  Calendar,
+  ScanBarcode,
+  Droplets,
+  TestTubes,
+  CalendarDays,
+  Hash,
+  Building2,
+  IdCard,
+  ClipboardList,
+  BriefcaseMedical,
+  TestTube2,
+  Stethoscope,
+  Receipt,
+  CreditCard,
+  Thermometer,
+  type LucideIcon,
 } from 'lucide-react';
 import { Sample } from '../../types/lims';
 import { LabTestRequisition } from '../modals/NewRequisitionModal';
@@ -57,21 +79,76 @@ import { OfficialResultSpecimenFields } from '../common/OfficialResultSpecimenFi
 import { formatResultsPickupWhen, isResultsPickedUp } from '../../utils/resultsPickup';
 import { DocumentSideDrawer } from '../modals/DocumentSideDrawer';
 
+const LIMS_LUCIDE_STROKE = 1.75;
+
+function LimsLucide({
+  icon: Icon,
+  tone = 'primary',
+  size = 'md',
+  className = '',
+}: {
+  icon: LucideIcon;
+  tone?: 'primary' | 'muted' | 'emerald' | 'violet';
+  size?: 'sm' | 'md';
+  className?: string;
+}) {
+  const toneClass =
+    tone === 'primary'
+      ? 'text-[#0878e8]'
+      : tone === 'muted'
+        ? 'text-slate-400'
+        : tone === 'emerald'
+          ? 'text-emerald-600'
+          : 'text-violet-600';
+  const sizeClass = size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4';
+
+  return (
+    <Icon
+      className={`shrink-0 ${sizeClass} ${toneClass} ${className}`.trim()}
+      strokeWidth={LIMS_LUCIDE_STROKE}
+      aria-hidden
+    />
+  );
+}
+
 function DetailField({
   label,
   value,
   emphasize,
+  icon,
+  layout = 'stacked',
 }: {
   label: string;
   value: React.ReactNode;
   emphasize?: 'accent' | 'default';
+  icon?: LucideIcon;
+  layout?: 'stacked' | 'compact';
 }) {
+  if (layout === 'compact' && icon) {
+    const FieldIcon = icon;
+    return (
+      <div className="flex items-start gap-2.5 py-3 border-b border-slate-100 min-w-0">
+        <LimsLucide icon={FieldIcon} tone="primary" className="mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] font-medium text-slate-500 leading-tight">{label}</div>
+          <div
+            className={`text-sm font-bold text-slate-900 break-words mt-0.5 ${
+              emphasize === 'accent' ? 'text-[#0878e8]' : ''
+            }`}
+          >
+            {value}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-1 pb-3 border-b border-slate-100 min-w-0">
       <div className="text-xs font-medium text-slate-500">{label}</div>
       <div
         className={`text-sm font-semibold text-slate-900 break-words ${
-          emphasize === 'accent' ? 'text-[#0176d3]' : ''
+          emphasize === 'accent' ? 'text-[#0878e8]' : ''
         }`}
       >
         {value}
@@ -98,6 +175,7 @@ function PanelSection({
   onToggle,
   count,
   children,
+  variant = 'default',
 }: {
   title: string;
   icon: React.ReactNode;
@@ -105,13 +183,23 @@ function PanelSection({
   onToggle: () => void;
   count?: number;
   children: React.ReactNode;
+  variant?: 'default' | 'demographics';
 }) {
+  const isDemo = variant === 'demographics';
   return (
-    <div className="bg-white border border-[#d8dde6] rounded-md overflow-hidden">
+    <div
+      className={
+        isDemo
+          ? 'bg-white border border-slate-200/90 rounded-xl shadow-sm overflow-hidden'
+          : 'lims-card overflow-hidden'
+      }
+    >
       <button
         type="button"
         onClick={onToggle}
-        className="w-full px-4 py-3 flex items-center justify-between gap-2 text-left hover:bg-slate-50/80 transition-colors cursor-pointer border-b border-slate-100"
+        className={`w-full px-4 py-3.5 flex items-center justify-between gap-2 text-left hover:bg-slate-50/80 transition-colors cursor-pointer border-b ${
+          isDemo ? 'border-slate-100 bg-white' : 'border-slate-100'
+        }`}
       >
         <span className="flex items-center gap-2 text-sm font-semibold text-slate-900 min-w-0">
           {icon}
@@ -166,6 +254,7 @@ interface SampleDetailViewProps {
     options?: { silent?: boolean }
   ) => void;
   onOpenCoA?: (sample: Sample) => void;
+  onDownloadCoA?: (sample: Sample) => void;
   currentUserName?: string;
   onReceiveSpecimen?: (req: LabTestRequisition) => void;
   onViewSlip?: (req: LabTestRequisition) => void;
@@ -627,6 +716,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
   onPrintLabel,
   onSaveResults,
   onOpenCoA,
+  onDownloadCoA,
   currentUserName = 'Dr. Katherine Zhang, MD',
   onReceiveSpecimen,
   onViewSlip,
@@ -899,7 +989,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
         {onBack && (
           <button
             onClick={onBack}
-            className="px-4 py-2 bg-[#0176d3] text-white font-bold text-xs rounded-lg hover:bg-[#0060b2] transition-colors cursor-pointer"
+            className="px-4 py-2 bg-[#0878e8] text-white font-bold text-xs rounded-lg hover:bg-[#0669c9] transition-colors cursor-pointer"
           >
             Return to Submissions
           </button>
@@ -1117,7 +1207,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
   const workflowAccent = isCompleted
     ? 'bg-emerald-600'
     : isInTesting
-      ? 'bg-[#0176d3]'
+      ? 'bg-[#0878e8]'
       : requisition?.status === 'RECEIVED'
         ? 'bg-violet-600'
         : 'bg-slate-400';
@@ -1333,6 +1423,14 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
     setTimeout(() => setSaveToast(null), 4000);
   };
 
+  const recordUpdatedLabel = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date());
+
   return (
     <div className="lims-page-shell text-slate-900">
       
@@ -1345,280 +1443,355 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
         />
       </div>
 
-      {/* 2. Record Header Card */}
-      <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm overflow-hidden print:hidden">
-        <div className={`h-1 ${workflowAccent}`} aria-hidden />
-        <div className="px-4 sm:px-5 py-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-start gap-3 min-w-0 flex-1">
-            {onBack && (
+      {/* 2. Patient record shell (hero + tabs + panels) */}
+      <div className="rounded-xl border border-slate-200/90 bg-white shadow-sm overflow-hidden print:hidden mb-1">
+        <div className="lims-sample-hero-banner relative overflow-hidden">
+          <svg
+            className="absolute bottom-0 left-0 w-full h-14 text-white/70 pointer-events-none"
+            viewBox="0 0 1440 56"
+            preserveAspectRatio="none"
+            aria-hidden
+          >
+            <path
+              fill="currentColor"
+              d="M0,32 C240,56 480,8 720,36 C960,64 1200,20 1440,40 L1440,56 L0,56 Z"
+            />
+          </svg>
+
+          <div className="relative z-10 px-4 sm:px-6 pt-4 pb-8 lg:pb-10">
+            {onBack ? (
               <button
                 type="button"
                 onClick={onBack}
-                className="mt-0.5 p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-md border border-slate-200 transition-colors cursor-pointer shrink-0"
+                className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-[#0878e8] transition-colors cursor-pointer"
                 title="Back to Submissions Portal"
               >
                 <ArrowLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Back</span>
               </button>
-            )}
+            ) : null}
 
-            <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#c5daf8] flex items-center justify-center text-[#0176d3] shrink-0">
-              <FlaskConical className="w-5 h-5" />
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  Accessioned diagnostic specimen
-                </span>
-                <span
-                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border ${workflowStatusTone}`}
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+              <div className="flex gap-4 min-w-0 flex-1">
+                <div
+                  className="w-16 h-16 sm:w-[4.25rem] sm:h-[4.25rem] rounded-full bg-white border-2 border-white shadow-md flex items-center justify-center text-[#0878e8] shrink-0"
+                  aria-hidden
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" aria-hidden />
-                  {workflowStatusLabel}
-                </span>
-                {isCompleted && requisition ? (
-                  isResultsPickedUp(requisition) ? (
-                    <span
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border bg-slate-100 text-slate-700 border-slate-200"
-                      title={
-                        requisition.resultsPickedUpBy
-                          ? `Picked up by ${requisition.resultsPickedUpBy}${formatResultsPickupWhen(requisition.resultsPickedUpAt) ? ` Â· ${formatResultsPickupWhen(requisition.resultsPickedUpAt)}` : ''}`
-                          : formatResultsPickupWhen(requisition.resultsPickedUpAt) || 'Picked up'
-                      }
-                    >
-                      Picked up
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border bg-violet-50 text-violet-900 border-violet-200">
-                      Awaiting pickup
-                    </span>
-                  )
-                ) : null}
-                {isCompleted && requisition?.resultsReadySmsSentAt ? (
-                  <span
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border bg-sky-50 text-sky-800 border-sky-200"
-                    title={`SMS sent ${formatResultsPickupWhen(requisition.resultsReadySmsSentAt) || ''}`}
-                  >
-                    SMS sent
-                  </span>
-                ) : null}
-                {isCompleted && requisition?.resultsReadyEmailSentAt ? (
-                  <span
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border bg-sky-50 text-sky-800 border-sky-200"
-                    title={`Email sent ${formatResultsPickupWhen(requisition.resultsReadyEmailSentAt) || ''}`}
-                  >
-                    Email sent
-                  </span>
-                ) : null}
+                  <User className="w-8 h-8 sm:w-9 sm:h-9 opacity-90" strokeWidth={1.75} />
+                </div>
+
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    {isCompleted ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wide shadow-sm">
+                        <CheckCircle2 className="w-3.5 h-3.5" aria-hidden />
+                        Completed
+                      </span>
+                    ) : (
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border shadow-sm ${workflowStatusTone}`}
+                      >
+                        {workflowStatusLabel}
+                      </span>
+                    )}
+                    {isCompleted && requisition ? (
+                      isResultsPickedUp(requisition) ? (
+                        <span
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#0878e8] text-white text-[10px] font-bold uppercase tracking-wide shadow-sm"
+                          title={
+                            requisition.resultsPickedUpBy
+                              ? `Picked up by ${requisition.resultsPickedUpBy}${formatResultsPickupWhen(requisition.resultsPickedUpAt) ? ` · ${formatResultsPickupWhen(requisition.resultsPickedUpAt)}` : ''}`
+                              : formatResultsPickupWhen(requisition.resultsPickedUpAt) || 'Picked up'
+                          }
+                        >
+                          <PackageCheck className="w-3.5 h-3.5" aria-hidden />
+                          Picked up
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/90 text-violet-900 border border-violet-200 text-[10px] font-bold uppercase tracking-wide">
+                          Awaiting pickup
+                        </span>
+                      )
+                    ) : null}
+                    {isCompleted && requisition?.resultsReadySmsSentAt ? (
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border bg-white/80 text-sky-800 border-sky-200"
+                        title={`SMS sent ${formatResultsPickupWhen(requisition.resultsReadySmsSentAt) || ''}`}
+                      >
+                        SMS sent
+                      </span>
+                    ) : null}
+                    {isCompleted && requisition?.resultsReadyEmailSentAt ? (
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border bg-white/80 text-sky-800 border-sky-200"
+                        title={`Email sent ${formatResultsPickupWhen(requisition.resultsReadyEmailSentAt) || ''}`}
+                      >
+                        Email sent
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <h1 className="text-2xl sm:text-[1.65rem] font-bold text-[#0b1f3a] tracking-tight leading-tight uppercase">
+                    {patientDisplayName}
+                  </h1>
+
+                  <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-3xl">
+                    {[
+                      { label: 'Case No.', value: caseNumber },
+                      { label: 'Requisition No.', value: reqNumber },
+                      { label: 'Barcode', value: sample.barcode, accent: true },
+                      { label: 'Category', value: patientCategory },
+                    ].map((item) => (
+                      <div
+                        key={item.label}
+                        className="rounded-lg bg-white/75 backdrop-blur-sm border border-white px-3 py-2 shadow-xs min-w-0"
+                      >
+                        <p className="text-[10px] font-medium text-slate-500">{item.label}</p>
+                        <p
+                          className={`text-xs font-bold truncate tabular-nums mt-0.5 ${
+                            item.accent ? 'text-[#0878e8]' : 'text-slate-900'
+                          }`}
+                        >
+                          {item.value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
-              <h1 className="text-xl sm:text-[1.35rem] font-semibold text-slate-900 tracking-tight mt-1 leading-tight">
-                {patientDisplayName}
-              </h1>
+              <div
+                className="flex flex-col gap-2.5 w-full lg:w-[14.5rem] shrink-0 lg:pt-1"
+                role="toolbar"
+                aria-label="Specimen actions"
+              >
+                {activeTab !== 'results' ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('results')}
+                    className={`w-full inline-flex items-center justify-center gap-2 h-10 px-4 text-sm font-semibold rounded-lg transition-colors cursor-pointer ${
+                      isCompleted
+                        ? 'bg-white text-slate-800 hover:bg-slate-50 border border-slate-200 shadow-sm'
+                        : 'bg-[#0878e8] hover:bg-[#0669c9] text-white border border-transparent shadow-md'
+                    }`}
+                    title="Edit analytical results on this page"
+                  >
+                    <Edit className="w-4 h-4 shrink-0" />
+                    <span>{isCompleted ? 'Edit Results' : 'Enter Results'}</span>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleDirectSave(false)}
+                      className="w-full inline-flex items-center justify-center gap-2 h-10 px-4 text-sm font-semibold bg-white text-slate-800 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer shadow-sm"
+                      title="Save draft results"
+                    >
+                      <Save className="w-4 h-4 text-slate-500" />
+                      <span>Save Draft</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDirectSave(true)}
+                      className="w-full inline-flex items-center justify-center gap-2 h-10 px-4 text-sm font-semibold bg-slate-900 hover:bg-black text-white rounded-lg transition-colors cursor-pointer shadow-md"
+                      title="Complete and validate results"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>Complete</span>
+                    </button>
+                  </>
+                )}
 
-              <dl className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-600">
-                <div className="flex items-baseline gap-1.5 min-w-0">
-                  <dt className="text-slate-500 shrink-0">Case</dt>
-                  <dd className="font-semibold text-slate-900 tabular-nums truncate">{caseNumber}</dd>
-                </div>
-                <div className="flex items-baseline gap-1.5 min-w-0">
-                  <dt className="text-slate-500 shrink-0">Requisition</dt>
-                  <dd className="font-semibold text-slate-900 tabular-nums truncate">{reqNumber}</dd>
-                </div>
-                <div className="flex items-baseline gap-1.5 min-w-0">
-                  <dt className="text-slate-500 shrink-0">Barcode</dt>
-                  <dd className="font-semibold text-[#0176d3] tabular-nums truncate">{sample.barcode}</dd>
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <dt className="text-slate-500 shrink-0">Category</dt>
-                  <dd className="font-semibold text-slate-900">{patientCategory}</dd>
-                </div>
-              </dl>
+                {isCompleted && (onOpenCoA || onDownloadCoA) ? (
+                  <div className="grid grid-cols-2 gap-2 w-full">
+                    {onOpenCoA ? (
+                      <div className="flex min-w-0 h-10 rounded-lg overflow-hidden shadow-sm col-span-1">
+                        <button
+                          type="button"
+                          onClick={() => onOpenCoA(sample)}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 bg-[#2e844a] hover:bg-[#26713f] text-white text-xs font-semibold transition-colors cursor-pointer min-w-0"
+                          title="Preview and print official result forms"
+                        >
+                          <Printer className="w-4 h-4 shrink-0" />
+                          <span>Print</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onOpenCoA(sample)}
+                          className="px-2 bg-[#26713f] hover:bg-[#1f5c34] text-white border-l border-emerald-900/20 cursor-pointer"
+                          aria-label="Open print options"
+                          title="Open official result forms"
+                        >
+                          <ChevronDown className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : null}
+                    {onDownloadCoA ? (
+                      <button
+                        type="button"
+                        onClick={() => onDownloadCoA(sample)}
+                        className="inline-flex items-center justify-center gap-1.5 h-10 bg-[#0878e8] hover:bg-[#0669c9] text-white text-[11px] font-semibold rounded-lg transition-colors cursor-pointer shadow-sm min-w-0 px-1.5 col-span-1"
+                        title="Download official result PDF"
+                      >
+                        <FileDown className="w-4 h-4 shrink-0" />
+                        <span>Download PDF</span>
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {isCompleted &&
+                requisition &&
+                ((canNotifyPatient && onNotifyResultsReady) ||
+                  (canRecordResultsPickup && onMarkResultsPickedUp)) ? (
+                  <div className="flex gap-2 w-full">
+                    {canNotifyPatient && onNotifyResultsReady ? (
+                      <button
+                        type="button"
+                        onClick={() => onNotifyResultsReady(requisition)}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-2 text-xs font-semibold rounded-lg border border-[#7eb8f2] bg-white text-slate-800 hover:bg-sky-50/50 transition-colors cursor-pointer shadow-xs"
+                        title="Send results-ready SMS or email"
+                      >
+                        <Bell className="w-3.5 h-3.5 text-[#0878e8]" />
+                        <span>Notify</span>
+                      </button>
+                    ) : null}
+                    {canRecordResultsPickup && onMarkResultsPickedUp ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onMarkResultsPickedUp(requisition, !isResultsPickedUp(requisition))
+                        }
+                        className={`flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-2 text-xs font-semibold rounded-lg border transition-colors cursor-pointer shadow-xs ${
+                          isResultsPickedUp(requisition)
+                            ? 'bg-violet-100 border-violet-200 text-violet-900 hover:bg-violet-50'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                        }`}
+                        title={
+                          isResultsPickedUp(requisition)
+                            ? 'Clear pickup record'
+                            : 'Record patient pickup'
+                        }
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-violet-700" />
+                        <span className="truncate">
+                          {isResultsPickedUp(requisition) ? 'Undo PickUp' : 'Mark Pickup'}
+                        </span>
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCryoLabelOpen(true);
+                    onPrintLabel?.(sample);
+                  }}
+                  className="w-full lg:w-auto lg:self-end inline-flex items-center justify-center gap-1.5 py-1.5 text-sm font-semibold text-[#0878e8] hover:text-[#014486] transition-colors cursor-pointer"
+                  title="Print cryogenic specimen label"
+                >
+                  <Snowflake className="w-4 h-4" />
+                  <span>Cryo Label</span>
+                </button>
+              </div>
             </div>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100 lg:pl-5 lg:border-l lg:border-slate-100">
-            {activeTab !== 'results' ? (
-              <button
-                type="button"
-                onClick={() => setActiveTab('results')}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white text-xs font-semibold rounded-md transition-colors cursor-pointer"
-                title="Edit analytical results directly on this page"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
-                <span>Enter results</span>
-              </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => handleDirectSave(false)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 text-xs font-semibold rounded-md transition-colors cursor-pointer"
-                  title="Save draft results directly on this page"
-                >
-                  <Save className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Save draft</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDirectSave(true)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-black text-white text-xs font-semibold rounded-md transition-colors cursor-pointer"
-                  title="Complete and validate results directly on this page"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Complete</span>
-                </button>
-              </>
-            )}
-
-            {isCompleted && onOpenCoA && (
-              <button
-                type="button"
-                onClick={() => onOpenCoA(sample)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-md transition-colors cursor-pointer"
-                title="View and print official result forms"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Print results</span>
-              </button>
-            )}
-
-            {isCompleted &&
-              requisition &&
-              canNotifyPatient &&
-              onNotifyResultsReady && (
-                <button
-                  type="button"
-                  onClick={() => onNotifyResultsReady(requisition)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-md border border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100 transition-colors cursor-pointer"
-                  title="Review SMS/email preview and send pickup alert"
-                >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <Mail className="w-3.5 h-3.5 opacity-70" />
-                  <span>Notify patient</span>
-                </button>
-              )}
-
-            {isCompleted &&
-              requisition &&
-              canRecordResultsPickup &&
-              onMarkResultsPickedUp && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onMarkResultsPickedUp(requisition, !isResultsPickedUp(requisition))
-                  }
-                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-md border transition-colors cursor-pointer ${
-                    isResultsPickedUp(requisition)
-                      ? 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-                      : 'border-violet-300 bg-violet-50 text-violet-900 hover:bg-violet-100'
-                  }`}
-                  title={
-                    isResultsPickedUp(requisition)
-                      ? 'Review and clear pickup record'
-                      : 'Review release checklist and record patient pickup'
-                  }
-                >
-                  <PackageCheck className="w-3.5 h-3.5" />
-                  <span>{isResultsPickedUp(requisition) ? 'Undo pickup' : 'Mark picked up'}</span>
-                </button>
-              )}
-
-            <button
-              type="button"
-              onClick={() => {
-                setCryoLabelOpen(true);
-                onPrintLabel?.(sample);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-md border border-slate-300 transition-colors cursor-pointer"
-            >
-              <Printer className="w-3.5 h-3.5 text-slate-500" />
-              <span>Cryo label</span>
-            </button>
-          </div>
         </div>
-      </div>
 
-      {/* Save Notification Banner */}
-      {saveToast && (
-        <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-lg flex items-center gap-2 text-xs font-semibold text-emerald-900 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
-          <span>{saveToast}</span>
-        </div>
-      )}
-
-      {/* 3. Main workspace panel */}
-      <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm overflow-hidden print:hidden">
-        <div className="flex items-center gap-1 border-b border-slate-200 bg-slate-50/80 px-2 sm:px-4 overflow-x-auto">
+        <nav
+          className="flex items-center justify-center sm:justify-start gap-8 border-b border-slate-200 bg-white px-4 sm:px-8 overflow-x-auto"
+          aria-label="Specimen sections"
+        >
           <button
             type="button"
             onClick={() => setActiveTab('details')}
-            className={`py-3 px-3 text-sm font-semibold transition-colors border-b-2 -mb-px whitespace-nowrap cursor-pointer ${
+            className={`py-3.5 px-0.5 text-sm font-semibold transition-colors border-b-[3px] -mb-px whitespace-nowrap cursor-pointer ${
               activeTab === 'details'
-                ? 'text-[#0176d3] border-[#0176d3] bg-white'
-                : 'text-slate-600 border-transparent hover:text-slate-900'
+                ? 'text-[#0878e8] border-[#0878e8]'
+                : 'text-slate-500 border-transparent hover:text-slate-800'
             }`}
           >
-            Patient &amp; specimen details
+            Patient &amp; Specimen Details
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('results')}
-            className={`py-3 px-3 text-sm font-semibold transition-colors border-b-2 -mb-px whitespace-nowrap cursor-pointer ${
+            className={`py-3.5 px-0.5 text-sm font-semibold transition-colors border-b-[3px] -mb-px whitespace-nowrap cursor-pointer ${
               activeTab === 'results'
-                ? 'text-[#0176d3] border-[#0176d3] bg-white'
-                : 'text-slate-600 border-transparent hover:text-slate-900'
+                ? 'text-[#0878e8] border-[#0878e8]'
+                : 'text-slate-500 border-transparent hover:text-slate-800'
             }`}
           >
-            Analytical results
+            Analytical Results
             {inHouseExams.length > 0 ? (
-              <span className="ml-1.5 text-[11px] font-semibold text-slate-400 tabular-nums">
+              <span className="ml-1 text-slate-400 tabular-nums font-semibold">
                 ({inHouseExams.length})
               </span>
             ) : null}
           </button>
-        </div>
+        </nav>
 
       {/* 4. Tab 1: DETAILS */}
       {activeTab === 'details' && (
-        <div className="p-4 lg:p-5 grid grid-cols-1 lg:grid-cols-12 gap-4 print:hidden">
+        <>
+        <div className="p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5 print:hidden bg-slate-50/30">
           
-          {/* Left Column (8 of 12 = 66%) */}
-          <div className="lg:col-span-8 space-y-4">
+          <div className="space-y-4 min-w-0">
             
             <PanelSection
               title="Patient demographics & specimen verification"
-              icon={<Info className="w-4 h-4 text-[#0176d3] shrink-0" />}
+              icon={<LimsLucide icon={ClipboardList} tone="primary" />}
               expanded={infoExpanded}
               onToggle={() => setInfoExpanded(!infoExpanded)}
+              variant="demographics"
             >
-              <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
-                <DetailField label="Patient full name" value={patientDisplayName} />
-                <DetailField label="Patient category" value={patientCategory} />
-                <DetailField label="Case number" value={caseNumber} />
-                <DetailField label="Requisition number" value={reqNumber} />
+              <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0">
+                <DetailField layout="compact" icon={User} label="Patient full name" value={patientDisplayName} />
+                <DetailField layout="compact" icon={Building2} label="Patient category" value={patientCategory} />
+                <DetailField layout="compact" icon={BriefcaseMedical} label="Case number" value={caseNumber} />
+                <DetailField layout="compact" icon={FileText} label="Requisition number" value={reqNumber} />
                 <DetailField
+                  layout="compact"
+                  icon={Calendar}
                   label="Age and gender"
-                  value={`${requisition?.patientAge || 35} yrs Â· ${requisition?.patientGender || 'Male'}`}
+                  value={`${requisition?.patientAge || 35} yrs · ${requisition?.patientGender || 'Male'}`}
                 />
-                <DetailField label="Civil status" value={requisition?.civilStatus || 'Single'} />
                 <DetailField
+                  layout="compact"
+                  icon={IdCard}
+                  label="Civil status"
+                  value={requisition?.civilStatus || 'Single'}
+                />
+                <DetailField
+                  layout="compact"
+                  icon={Phone}
                   label="Mobile (SMS)"
-                  value={requisition?.patientPhone?.trim() || 'â€”'}
+                  value={requisition?.patientPhone?.trim() || '—'}
                 />
                 <DetailField
+                  layout="compact"
+                  icon={Mail}
                   label="Email"
-                  value={requisition?.patientEmail?.trim() || 'â€”'}
+                  value={requisition?.patientEmail?.trim() || '—'}
                 />
-                <DetailField label="Sample barcode" value={sample.barcode} emphasize="accent" />
-                <DetailField label="Specimen type" value={sample.sampleType} />
-                <DetailField label="Matrix / preservative" value={sample.matrix} />
                 <DetailField
+                  layout="compact"
+                  icon={ScanBarcode}
+                  label="Sample barcode"
+                  value={sample.barcode}
+                  emphasize="accent"
+                />
+                <DetailField layout="compact" icon={Droplets} label="Specimen type" value={sample.sampleType} />
+                <DetailField layout="compact" icon={FlaskConical} label="Matrix / preservative" value={sample.matrix} />
+                <DetailField
+                  layout="compact"
+                  icon={TestTubes}
                   label="Tubes / aliquots"
                   value={`${sample.aliquotCount || 1} tube${(sample.aliquotCount || 1) === 1 ? '' : 's'}`}
                 />
-                <DetailField label="Date of collection" value={collectionDateStr} />
-                <DetailField label="Days since collection" value={daysSinceCollectionText} />
+                <DetailField layout="compact" icon={CalendarDays} label="Date of collection" value={collectionDateStr} />
+                <DetailField layout="compact" icon={Clock} label="Days since collection" value={daysSinceCollectionText} />
               </div>
             </PanelSection>
 
@@ -1626,12 +1799,11 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
 
           </div>
 
-          {/* Right Column (4 of 12 = 34%) */}
-          <div className="lg:col-span-4 space-y-4">
+          <div className="space-y-4 min-w-0">
             
             <PanelSection
               title="Requested examinations"
-              icon={<FileText className="w-4 h-4 text-[#0176d3] shrink-0" />}
+              icon={<LimsLucide icon={FileText} tone="primary" />}
               expanded={orderExpanded}
               onToggle={() => setOrderExpanded(!orderExpanded)}
               count={requestedExams.length}
@@ -1647,7 +1819,10 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                       key={idx}
                       className="flex items-start justify-between gap-2 px-3 py-2.5 rounded-md border border-slate-200 bg-slate-50/80"
                     >
-                      <span className="text-sm font-medium text-slate-800 leading-snug">{exam}</span>
+                      <span className="text-sm font-medium text-slate-800 leading-snug flex items-start gap-2.5 min-w-0">
+                        <LimsLucide icon={TestTube2} tone="primary" className="mt-0.5" />
+                        <span className="min-w-0">{exam}</span>
+                      </span>
                       {sendOut ? (
                         <span
                           className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200 shrink-0 text-right max-w-[48%]"
@@ -1656,7 +1831,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                           Send out
                         </span>
                       ) : (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#eef4ff] text-[#0176d3] border border-[#c5daf8] shrink-0">
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#eef4ff] text-[#0878e8] border border-[#c5daf8] shrink-0">
                           In-house
                         </span>
                       )}
@@ -1665,19 +1840,28 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                   })}
                 </ul>
 
-                <dl className="pt-3 border-t border-slate-100 grid grid-cols-1 gap-2 text-xs">
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-slate-500">Requesting physician</dt>
+                <dl className="pt-3 border-t border-slate-100 grid grid-cols-1 gap-2.5 text-xs">
+                  <div className="flex justify-between gap-3 items-center">
+                    <dt className="text-slate-500 inline-flex items-center gap-2">
+                      <LimsLucide icon={Stethoscope} tone="muted" />
+                      Requesting physician
+                    </dt>
                     <dd className="font-semibold text-slate-900 text-right">{physician}</dd>
                   </div>
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-slate-500">Official receipt</dt>
+                  <div className="flex justify-between gap-3 items-center">
+                    <dt className="text-slate-500 inline-flex items-center gap-2">
+                      <LimsLucide icon={Receipt} tone="muted" />
+                      Official receipt
+                    </dt>
                     <dd className="font-semibold text-slate-900 tabular-nums text-right">
                       {requisition?.orNumber || 'N/A'}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-slate-500">Charge slip</dt>
+                  <div className="flex justify-between gap-3 items-center">
+                    <dt className="text-slate-500 inline-flex items-center gap-2">
+                      <LimsLucide icon={CreditCard} tone="muted" />
+                      Charge slip
+                    </dt>
                     <dd className="font-semibold text-slate-900 tabular-nums text-right">
                       {requisition?.chargeSlipNumber || 'N/A'}
                     </dd>
@@ -1697,7 +1881,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
               return (
                 <PanelSection
                   title="Accessioned specimen containers"
-                  icon={<Layers className="w-4 h-4 text-emerald-600 shrink-0" />}
+                  icon={<LimsLucide icon={Layers} tone="emerald" />}
                   expanded={aliquotsExpanded}
                   onToggle={() => setAliquotsExpanded(!aliquotsExpanded)}
                   count={specimenContainers.length}
@@ -1709,16 +1893,13 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                           className="rounded-md border border-slate-200 bg-white overflow-hidden"
                         >
                           <div className="px-3 py-2.5 flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80">
-                            <span className="font-semibold text-[#0176d3] tabular-nums flex items-center gap-2 min-w-0">
-                              <span
-                                className="w-2 h-2 rounded-full shrink-0 ring-2 ring-white shadow-sm"
-                                style={{ backgroundColor: container.capColor }}
-                                aria-hidden
-                              />
+                            <span className="font-semibold text-[#0878e8] tabular-nums flex items-center gap-2.5 min-w-0">
+                              <LimsLucide icon={TestTubes} tone="violet" />
                               <span className="truncate">{container.tubeBarcode}</span>
                             </span>
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
-                              {container.temp}
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0 inline-flex items-center gap-1.5">
+                              <LimsLucide icon={Thermometer} tone="emerald" size="sm" />
+                              {container.temp.replace(/\u00c2\u00b0/g, '°').replace('Â°C', '°C')}
                             </span>
                           </div>
                           <div className="px-3 py-2.5 space-y-1.5">
@@ -1746,6 +1927,18 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
           </div>
 
         </div>
+
+        <div className="mx-4 lg:mx-6 mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg bg-[#eef6fc] border border-sky-100 px-4 py-2.5 text-xs print:hidden">
+          <p className="text-slate-600">
+            Last Updated:{' '}
+            <span className="font-semibold text-slate-800 tabular-nums">{recordUpdatedLabel}</span>
+          </p>
+          <p className="inline-flex items-center gap-1.5 font-semibold text-emerald-700">
+            <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden />
+            Record is up to date
+          </p>
+        </div>
+        </>
       )}
 
       {/* 5. Tab 2: ANALYTICAL RESULTS & DIRECT ON-PAGE EDITOR */}
@@ -1793,7 +1986,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                 onClick={() => setExaminedResultsOnly((v) => !v)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border shadow-2xs transition-all cursor-pointer ${
                   examinedResultsOnly
-                    ? 'bg-[#0176d3]/10 border-[#0176d3]/40 text-[#014486]'
+                    ? 'bg-[#0878e8]/10 border-[#0878e8]/40 text-[#014486]'
                     : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
                 }`}
                 title={
@@ -1916,7 +2109,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                     <select
                       value={selectValue}
                       onChange={(e) => writeParam(param.id, e.target.value)}
-                      className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                      className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0878e8]"
                     >
                       {param.options.map((opt) => (
                         <option key={opt} value={opt}>{opt}</option>
@@ -1931,7 +2124,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                     value={currentValue}
                     onChange={(e) => writeParam(param.id, e.target.value)}
                     placeholder=""
-                    className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                    className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0878e8]"
                   />
                 );
               };
@@ -1944,7 +2137,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                         {resultForm?.panelTitle || tmpl.examName}
                       </h4>
                       {resultForm ? (
-                        <span className="px-2 py-0.5 rounded bg-[#0176d3]/10 text-[#0176d3] text-[10px] font-semibold tabular-nums border border-[#0176d3]/30">
+                        <span className="px-2 py-0.5 rounded bg-[#0878e8]/10 text-[#0878e8] text-[10px] font-semibold tabular-nums border border-[#0878e8]/30">
                           {resultForm.shortName}
                         </span>
                       ) : (
@@ -1973,7 +2166,11 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                         values={mergeNtpFormDefaults(
                           Object.fromEntries(NTP_FIELD_KEYS.map((key) => [key, readParam(key)])),
                           requisition,
-                          sample
+                          sample,
+                          panel.members.map((m) => ({
+                            examCode: m.examCode,
+                            examName: m.examName,
+                          }))
                         )}
                         onChange={writeParam}
                       />
@@ -1999,7 +2196,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                                   ''
                                 }
                                 onChange={(e) => writeParam(param.id, e.target.value)}
-                                className={`border-0 border-b-2 border-slate-700 bg-transparent px-2 py-1 text-center font-bold text-slate-900 focus:outline-none focus:border-[#0176d3] ${
+                                className={`border-0 border-b-2 border-slate-700 bg-transparent px-2 py-1 text-center font-bold text-slate-900 focus:outline-none focus:border-[#0878e8] ${
                                   isRh ? 'min-w-[11rem] text-lg' : 'min-w-[4.5rem] text-xl'
                                 }`}
                                 aria-label={param.name}
@@ -2035,7 +2232,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                                 'NEGATIVE'
                               }
                               onChange={(e) => writeParam(param.id, e.target.value)}
-                              className="min-w-[12rem] border-0 border-b-2 border-slate-700 bg-transparent px-3 py-1 text-center text-xl font-bold tracking-wide text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                              className="min-w-[12rem] border-0 border-b-2 border-slate-700 bg-transparent px-3 py-1 text-center text-xl font-bold tracking-wide text-slate-900 focus:outline-none focus:border-[#0878e8]"
                               aria-label="Pregnancy test result"
                             >
                               {(param.options || ['POSITIVE', 'NEGATIVE']).map((opt) => (
@@ -2168,7 +2365,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                                           writeParam(row.id, '');
                                         }
                                       }}
-                                      className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                                      className="w-full border-0 border-b border-slate-400 bg-transparent px-0.5 py-1 text-sm text-slate-900 focus:outline-none focus:border-[#0878e8]"
                                       aria-label="Culture method"
                                     >
                                       {row.examOptions.map((opt) => (
@@ -2443,7 +2640,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                             <button
                               type="button"
                               onClick={() => applyExaminersToAllExams(examKey)}
-                              className="text-[10px] font-bold text-[#0176d3] hover:underline cursor-pointer"
+                              className="text-[10px] font-bold text-[#0878e8] hover:underline cursor-pointer"
                             >
                               Apply to all examinations
                             </button>
@@ -2511,6 +2708,13 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
       )}
 
       </div>
+
+      {saveToast && (
+        <div className="mt-3 p-3 bg-emerald-50 border border-emerald-300 rounded-lg flex items-center gap-2 text-xs font-semibold text-emerald-900 animate-in fade-in print:hidden">
+          <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+          <span>{saveToast}</span>
+        </div>
+      )}
 
       {cryoLabelOpen && (() => {
         const safeExams = requestedExams.length > 0 ? requestedExams : ['CBC WITH PLATELET COUNT'];
@@ -2606,7 +2810,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                         onClick={() => setSelectedContainerIndex(idx)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border ${
                           isSelected
-                            ? 'bg-[#0176d3] text-white border-[#0176d3] shadow-2xs'
+                            ? 'bg-[#0878e8] text-white border-[#0878e8] shadow-2xs'
                             : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                         }`}
                       >
@@ -2704,12 +2908,12 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="w-9 h-9 bg-white rounded-full border-2 border-slate-800 flex flex-col items-center justify-center font-mono font-bold text-[7px] text-slate-900 shrink-0 shadow-2xs leading-none">
                       <span className="text-[10px] font-black">T{activeContainer.tubeNumber}</span>
-                      <span className="text-[7px] text-[#0176d3] font-bold mt-0.5">{activeContainer.primaryAbbr}</span>
+                      <span className="text-[7px] text-[#0878e8] font-bold mt-0.5">{activeContainer.primaryAbbr}</span>
                     </div>
                     <div>
                       <div className="font-semibold text-slate-900 text-[11px] leading-snug">
                         Cap dot (11mm)
-                        <span className="ml-1 px-1 py-0.5 bg-blue-50 text-[#0176d3] rounded text-[9px] font-bold border border-blue-200">
+                        <span className="ml-1 px-1 py-0.5 bg-blue-50 text-[#0878e8] rounded text-[9px] font-bold border border-blue-200">
                           {activeContainer.primaryAbbr}
                         </span>
                       </div>
@@ -2820,7 +3024,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                         <div className="p-3 bg-white rounded-lg border border-slate-200 max-w-md mx-auto flex items-center gap-3 text-xs">
                           <div className="w-10 h-10 bg-white rounded-full border-2 border-slate-800 flex flex-col items-center justify-center font-mono font-bold text-[8px] text-slate-900 shrink-0 leading-none">
                             <span className="text-[9px] font-black">T{c.tubeNumber}</span>
-                            <span className="text-[7px] text-[#0176d3] font-bold mt-0.5">{c.primaryAbbr}</span>
+                            <span className="text-[7px] text-[#0878e8] font-bold mt-0.5">{c.primaryAbbr}</span>
                           </div>
                           <div className="text-[11px] font-mono text-slate-600">
                             Cap Dot: <strong>{c.tubeBarcode}</strong> Â· Tube #{c.tubeNumber} Â· [{c.primaryAbbr}] Â· <span className="font-sans font-medium">{c.shortContainer}</span>

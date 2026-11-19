@@ -232,7 +232,7 @@ export function PublicVerifyResultView() {
             url.search = '';
             window.location.href = url.href;
           }}
-          className="w-full py-2 text-sm font-semibold text-[#0176d3] hover:underline print:hidden"
+          className="w-full py-2 text-sm font-semibold text-[#0878e8] hover:underline print:hidden"
         >
           Return to Lab-TIS
         </button>

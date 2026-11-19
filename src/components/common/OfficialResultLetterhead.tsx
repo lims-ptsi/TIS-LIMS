@@ -1,5 +1,6 @@
 import React from 'react';
 import { PtsiLogo } from '../brand/PtsiLogo';
+import { PTSI_LAB_ADDRESS, PTSI_LAB_MOBILE_LABEL } from '../../data/labContact';
 
 export interface OfficialResultLetterheadProps {
   /** @deprecated Form name is shown in the report title, not the letterhead */
@@ -10,10 +11,6 @@ export interface OfficialResultLetterheadProps {
   previewCaption?: string;
   verificationQr?: React.ReactNode;
 }
-
-const PTSI_ADDRESS =
-  'Quezon Institute Compound, E. Rodriguez Sr. Avenue, Quezon City';
-const PTSI_PHONE = 'Tel: (02) 0000 - 0000';
 
 /** PTSI official letterhead — classic typography, address, verification QR. */
 export function OfficialResultLetterhead({
@@ -42,9 +39,9 @@ export function OfficialResultLetterhead({
             {sheetNote}
           </h2>
           <p className="text-[10px] sm:text-[11px] print:text-[9px] text-slate-600 leading-snug mt-1">
-            {PTSI_ADDRESS}
+            {PTSI_LAB_ADDRESS}
             <span className="hidden sm:inline"> · </span>
-            <span className="block sm:inline">{PTSI_PHONE}</span>
+            <span className="block sm:inline">{PTSI_LAB_MOBILE_LABEL}</span>
           </p>
         </div>
       </div>

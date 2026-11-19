@@ -1,4 +1,6 @@
 import type { LabTestRequisition, Sample } from '../types/lims';
+import type { ExamExaminers } from '../components/modals/ResultEntryModal';
+import { formatNtpOfficialDateTime } from './resultsPickup';
 import {
   NTP_FIELD_KEYS,
   resolveNtpSelectedDiagnosticChkId,
@@ -75,7 +77,42 @@ export const NTP_REQ_TO_RESULT_CHECK: Record<string, string> = {
   req_smear: 'res_ck_smear',
 };
 
-/** Results “Diagnostic tests” follow Test Requested — not the catalog assignment. */
+/** Map catalog examination to Form 2a “Test requested” checkbox id. */
+export function ntpRequestKeyForExam(examCode: string, examName: string): string | undefined {
+  const code = (examCode || '').trim();
+  const name = (examName || '').toUpperCase();
+  if (code === '1086' || name.includes('XPERT') || name.includes('GENEXPERT')) return 'req_xpert';
+  if (code === '1017' || code === '1001' || name.includes('DSSM') || name.includes('SMEAR MICROSCOPY')) {
+    return 'req_smear';
+  }
+  if (name.includes('TRUENAT') && name.includes('PLUS')) return 'req_truenat_plus';
+  if (name.includes('TRUENAT')) return 'req_truenat_rif';
+  if (name.includes('TB LAMP') || name.includes('TBLAMP')) return 'req_tblamp';
+  if (name.includes('XDR')) return 'req_xpert_xdr';
+  if (name.includes('ULTRA')) return 'req_xpert_ultra';
+  return undefined;
+}
+
+export function ntpResultCheckForExam(examCode: string, examName: string): string | undefined {
+  const req = ntpRequestKeyForExam(examCode, examName);
+  return req ? NTP_REQ_TO_RESULT_CHECK[req] : undefined;
+}
+
+/** Turn on Test requested checks for examinations on this RF-10 panel (does not turn off manual picks). */
+export function syncNtpRequestChecksFromPanel(
+  values: Record<string, string>,
+  members: { examCode: string; examName: string }[]
+): void {
+  for (const m of members) {
+    const reqKey = ntpRequestKeyForExam(m.examCode, m.examName);
+    if (reqKey) values[reqKey] = '1';
+  }
+}
+
+/**
+ * Results row checks follow Test requested. All requested tests stay checked for print;
+ * res_diagnostic_test is only the active row in workflow entry.
+ */
 export function syncNtpResultChecksFromRequest(values: Record<string, string>): void {
   const resChecks = Object.values(NTP_REQ_TO_RESULT_CHECK);
   const requestedResCks = Object.entries(NTP_REQ_TO_RESULT_CHECK)
@@ -91,19 +128,39 @@ export function syncNtpResultChecksFromRequest(values: Record<string, string>): 
   }
 
   const explicit = (values.res_diagnostic_test || '').trim();
-  const keep =
+  const focus =
     explicit && requestedResCks.includes(explicit) ? explicit : requestedResCks[0];
 
   resChecks.forEach((ck) => {
-    values[ck] = ck === keep ? '1' : '';
+    values[ck] = requestedResCks.includes(ck) ? '1' : '';
   });
-  values.res_diagnostic_test = keep;
+  values.res_diagnostic_test = focus;
+}
+
+export function resolveNtpWorkflowDiagnosticFocus(
+  values: Record<string, string>,
+  members: { examCode: string; examName: string }[]
+): string {
+  const requestedResCks = Object.entries(NTP_REQ_TO_RESULT_CHECK)
+    .filter(([reqKey]) => values[reqKey] === '1')
+    .map(([, resCk]) => resCk);
+  if (requestedResCks.length === 0) return '';
+
+  const explicit = (values.res_diagnostic_test || '').trim();
+  if (explicit && requestedResCks.includes(explicit)) return explicit;
+
+  for (const m of members) {
+    const chk = ntpResultCheckForExam(m.examCode, m.examName);
+    if (chk && requestedResCks.includes(chk)) return chk;
+  }
+  return requestedResCks[0];
 }
 
 export function mergeNtpFormDefaults(
   stored: Record<string, string>,
   requisition?: LabTestRequisition | null,
-  sample?: Sample | null
+  sample?: Sample | null,
+  panelMembers?: { examCode: string; examName: string }[]
 ): Record<string, string> {
   const defaults = buildNtpFormDefaults(requisition, sample);
   const merged = { ...stored };
@@ -111,11 +168,39 @@ export function mergeNtpFormDefaults(
     const cur = (merged[key] || '').trim();
     if (!cur && defaults[key]) merged[key] = defaults[key];
   }
+  if (panelMembers?.length) {
+    const anyReqChecked = Object.keys(NTP_REQ_TO_RESULT_CHECK).some((k) => merged[k] === '1');
+    if (!anyReqChecked) syncNtpRequestChecksFromPanel(merged, panelMembers);
+    if (!(merged.res_diagnostic_test || '').trim()) {
+      merged.res_diagnostic_test = resolveNtpWorkflowDiagnosticFocus(merged, panelMembers);
+    }
+  }
   syncNtpResultChecksFromRequest(merged);
   return merged;
 }
 
 /** Apply requisition/sample defaults into a parameter map when values are still empty. */
+/** Map per-examination sign-off roster into Form 2a footer fields (official print / CoA). */
+export function applyNtpExaminerSignoff(
+  values: Record<string, string>,
+  examiners?: ExamExaminers | null,
+  dateReleased?: string | null
+): Record<string, string> {
+  const next = { ...values };
+  if (!examiners) return next;
+  const performed = (examiners.labTechName || '').trim();
+  const verified = (examiners.rmtName || '').trim();
+  const noted = (examiners.pathologistName || '').trim();
+  if (performed && !(next.performedBy || '').trim()) next.performedBy = performed;
+  if (verified && !(next.verifiedBy || '').trim()) next.verifiedBy = verified;
+  if (noted && !(next.notedBy || '').trim()) next.notedBy = noted;
+  const released = (dateReleased || '').trim();
+  if (released && !(next.dateReleased || '').trim()) {
+    next.dateReleased = formatNtpOfficialDateTime(released);
+  }
+  return next;
+}
+
 export function applyNtpFormDefaultsToParamMap(
   paramMap: Record<string, { value?: string } | undefined>,
   requisition: LabTestRequisition | null | undefined,

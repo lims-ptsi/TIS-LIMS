@@ -498,7 +498,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">
               Diagnostic Administration &amp; Master LIMS Engine
             </span>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono bg-blue-50 text-[#0176d3] border border-blue-200">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono bg-blue-50 text-[#0878e8] border border-blue-200">
               Analyte Studio
             </span>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-slate-100 text-slate-600 border border-slate-200">
@@ -506,7 +506,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
             </span>
           </div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5 mt-1">
-            <Sliders className="w-6 h-6 text-[#0176d3]" />
+            <Sliders className="w-6 h-6 text-[#0878e8]" />
             <span>Examination Result Templates &amp; Parameters</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1 max-w-2xl">
@@ -527,7 +527,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
           <button
             type="button"
             onClick={() => setIsNewModalOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer active:scale-95"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#0878e8] hover:bg-[#0669c9] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer active:scale-95"
           >
             <Plus className="w-4 h-4" />
             <span>+ New Template</span>
@@ -592,7 +592,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
           <div className="p-4 border-b border-slate-200 bg-slate-50/80 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                <ListFilter className="w-4 h-4 text-[#0176d3]" />
+                <ListFilter className="w-4 h-4 text-[#0878e8]" />
                 <span>Examinations ({filteredExaminations.length})</span>
               </h2>
               <span className="text-[10px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
@@ -608,7 +608,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by code or test name..."
-                className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#0176d3] focus:ring-2 focus:ring-[#0176d3]/20 shadow-xs"
+                className="w-full pl-9 pr-8 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#0878e8] focus:ring-2 focus:ring-[#0878e8]/20 shadow-xs"
               />
               {searchQuery && (
                 <button
@@ -657,7 +657,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                 <button
                   type="button"
                   onClick={() => { setSearchQuery(''); setCategoryFilter('ALL'); }}
-                  className="text-xs text-[#0176d3] font-bold hover:underline"
+                  className="text-xs text-[#0878e8] font-bold hover:underline"
                 >
                   Clear search &amp; filters
                 </button>
@@ -674,7 +674,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                     onClick={() => setSelectedKey(item.code)}
                     className={`w-full p-4 text-left transition-all flex items-center justify-between cursor-pointer group relative ${
                       isSelected
-                        ? 'bg-blue-50/90 border-l-4 border-l-[#0176d3] shadow-xs'
+                        ? 'bg-blue-50/90 border-l-4 border-l-[#0878e8] shadow-xs'
                         : 'hover:bg-slate-50/80'
                     }`}
                   >
@@ -683,7 +683,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                         <span className="font-mono text-[10px] font-bold text-slate-700 bg-white border border-slate-300 px-2 py-0.5 rounded-md shadow-2xs">
                           {item.code}
                         </span>
-                        <span className="text-[10px] font-mono font-bold text-[#0176d3] bg-blue-50/60 px-2 py-0.5 rounded">
+                        <span className="text-[10px] font-mono font-bold text-[#0878e8] bg-blue-50/60 px-2 py-0.5 rounded">
                           {item.category}
                         </span>
                         {item.corporatePrice && (
@@ -707,7 +707,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                     </div>
 
                     <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${
-                      isSelected ? 'text-[#0176d3] translate-x-1' : 'text-slate-300 group-hover:text-slate-500'
+                      isSelected ? 'text-[#0878e8] translate-x-1' : 'text-slate-300 group-hover:text-slate-500'
                     }`} />
                   </button>
                 );
@@ -723,12 +723,12 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
           {/* Active Template Sticky Quick Action Banner */}
           <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0176d3] flex items-center justify-center font-bold border border-blue-100 shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0878e8] flex items-center justify-center font-bold border border-blue-100 shrink-0">
                 <FlaskConical className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-bold text-[#0176d3]">
+                  <span className="text-xs font-mono font-bold text-[#0878e8]">
                     {draftTemplate.examCode}
                   </span>
                   <span className="text-[10px] text-slate-400">•</span>
@@ -765,7 +765,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                 className={`flex items-center gap-2 px-5 py-2 text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer active:scale-95 ${
                   hasUnsavedChanges
                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400/30'
-                    : 'bg-[#0176d3] hover:bg-[#0060b2] text-white'
+                    : 'bg-[#0878e8] hover:bg-[#0669c9] text-white'
                 }`}
               >
                 <Save className="w-4 h-4" />
@@ -778,7 +778,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
-                <FileCode className="w-4 h-4 text-[#0176d3]" />
+                <FileCode className="w-4 h-4 text-[#0878e8]" />
                 <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
                   Examination Header &amp; Laboratory Protocol
                 </h3>
@@ -797,7 +797,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                   type="text"
                   value={draftTemplate.examName}
                   onChange={(e) => setDraftTemplate((prev) => ({ ...prev, examName: e.target.value.toUpperCase() }))}
-                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-[#0176d3] focus:ring-2 focus:ring-[#0176d3]/20 shadow-xs"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-[#0878e8] focus:ring-2 focus:ring-[#0878e8]/20 shadow-xs"
                 />
               </div>
 
@@ -809,7 +809,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                   type="text"
                   value={draftTemplate.examCode}
                   onChange={(e) => setDraftTemplate((prev) => ({ ...prev, examCode: e.target.value.toUpperCase() }))}
-                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-[#0176d3] focus:ring-2 focus:ring-[#0176d3]/20 shadow-xs"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-[#0878e8] focus:ring-2 focus:ring-[#0878e8]/20 shadow-xs"
                 />
               </div>
 
@@ -820,7 +820,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                 <select
                   value={draftTemplate.category}
                   onChange={(e) => setDraftTemplate((prev) => ({ ...prev, category: e.target.value }))}
-                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-[#0176d3] shadow-xs cursor-pointer"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-[#0878e8] shadow-xs cursor-pointer"
                 >
                   <option value="HEMATOLOGY">HEMATOLOGY</option>
                   <option value="CLINICAL MICROSCOPY">CLINICAL MICROSCOPY</option>
@@ -842,7 +842,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                   value={draftTemplate.specimenType || ''}
                   onChange={(e) => setDraftTemplate((prev) => ({ ...prev, specimenType: e.target.value }))}
                   placeholder="e.g. Whole Blood (K2-EDTA), Serum (SST), Clean-Catch Urine"
-                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-[#0176d3] shadow-xs"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-[#0878e8] shadow-xs"
                 />
               </div>
 
@@ -855,7 +855,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                   value={draftTemplate.methodology || ''}
                   onChange={(e) => setDraftTemplate((prev) => ({ ...prev, methodology: e.target.value }))}
                   placeholder="e.g. Automated 5-Part Cell Counter & Flow Cytometry, Chemiluminescent Immunoassay (CMIA)"
-                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-[#0176d3] shadow-xs"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-[#0878e8] shadow-xs"
                 />
               </div>
             </div>
@@ -867,7 +867,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-3">
               <div>
                 <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <FileSpreadsheet className="w-4 h-4 text-[#0176d3]" />
+                  <FileSpreadsheet className="w-4 h-4 text-[#0878e8]" />
                   <span>Configured Analyte Parameters ({draftTemplate.parameters.length})</span>
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-0.5">
@@ -880,7 +880,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                 <button
                   type="button"
                   onClick={() => handleAddParameter('NUMERIC')}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#0176d3] text-xs font-bold rounded-lg transition-colors cursor-pointer border border-blue-200"
+                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#0878e8] text-xs font-bold rounded-lg transition-colors cursor-pointer border border-blue-200"
                   title="Add continuous numeric quantitative parameter"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -995,7 +995,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                         value={param.code}
                         onChange={(e) => handleUpdateParamField(idx, 'code', e.target.value.toUpperCase())}
                         placeholder="e.g. WBC, HGB, CREAT"
-                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-[#0878e8]"
                       />
                     </div>
 
@@ -1009,7 +1009,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                         value={param.name}
                         onChange={(e) => handleUpdateParamField(idx, 'name', e.target.value)}
                         placeholder="e.g. White Blood Cell Count (WBC)"
-                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-[#0878e8]"
                       />
                     </div>
 
@@ -1021,7 +1021,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                       <select
                         value={param.dataType}
                         onChange={(e) => handleUpdateParamField(idx, 'dataType', e.target.value as any)}
-                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-[#0176d3] cursor-pointer"
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-[#0878e8] cursor-pointer"
                       >
                         <option value="NUMERIC">🔢 NUMERIC (Continuous Values)</option>
                         <option value="SELECT">📋 SELECT (Qualitative Dropdown)</option>
@@ -1318,7 +1318,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveTemplate}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-[#0176d3] hover:bg-[#0060b2] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer active:scale-95"
+                  className="flex items-center gap-2 px-6 py-2.5 bg-[#0878e8] hover:bg-[#0669c9] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer active:scale-95"
                 >
                   <Save className="w-4 h-4" />
                   <span>Save Changes</span>
@@ -1331,7 +1331,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
-                <Eye className="w-4 h-4 text-[#0176d3]" />
+                <Eye className="w-4 h-4 text-[#0878e8]" />
                 <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
                   Live Laboratory Entry &amp; CoA Preview Bench
                 </h3>
@@ -1373,7 +1373,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                             <select
                               value={sandboxValues[param.id] || ''}
                               onChange={(e) => setSandboxValues((prev) => ({ ...prev, [param.id]: e.target.value }))}
-                              className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                              className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:border-[#0878e8]"
                             >
                               {(param.options || []).map((opt) => (
                                 <option key={opt} value={opt}>{opt}</option>
@@ -1389,7 +1389,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                               value={sandboxValues[param.id] || ''}
                               onChange={(e) => setSandboxValues((prev) => ({ ...prev, [param.id]: e.target.value }))}
                               placeholder="Enter value"
-                              className="w-32 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                              className="w-32 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-[#0878e8]"
                             />
                           )}
                         </td>
@@ -1453,7 +1453,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <Plus className="w-5 h-5 text-[#0176d3]" />
+                <Plus className="w-5 h-5 text-[#0878e8]" />
                 <h3 className="text-base font-black text-slate-900">
                   Create New Examination Template
                 </h3>
@@ -1478,7 +1478,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                   onChange={(e) => setNewExamCode(e.target.value.toUpperCase())}
                   placeholder="e.g. 1099, CHEM-01"
                   required
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-[#0878e8]"
                 />
               </div>
 
@@ -1492,7 +1492,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                   onChange={(e) => setNewExamName(e.target.value)}
                   placeholder="e.g. C-REACTIVE PROTEIN (QUANTITATIVE)"
                   required
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-[#0878e8]"
                 />
               </div>
 
@@ -1568,7 +1568,7 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+                  className="px-5 py-2 bg-[#0878e8] hover:bg-[#0669c9] text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
                 >
                   Create Template
                 </button>

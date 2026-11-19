@@ -1,26 +1,28 @@
-import React, { useState } from 'react';
-import { 
-  Leaf, 
-  ChevronDown, 
-  Pin, 
-  Search, 
-  Settings, 
-  RefreshCw, 
-  Edit, 
-  Filter, 
-  Plus, 
-  Upload, 
-  Printer, 
-  Snowflake, 
-  Sun,
-  LayoutGrid,
+import React, { useMemo, useState } from 'react';
+import {
+  ArrowRight,
   Box,
-  X,
   Check,
-  AlertCircle,
+  ChevronDown,
+  Edit,
   ExternalLink,
+  Filter,
+  LayoutGrid,
+  Leaf,
+  Plus,
+  Printer,
+  RefreshCw,
+  Search,
+  Settings,
+  Snowflake,
+  Sun,
+  TestTubes,
+  X,
+  AlertCircle,
+  type LucideIcon,
 } from 'lucide-react';
 import { Sample } from '../../types/lims';
+import { DashboardHeroArtwork } from '../common/LimsDashboardArtwork';
 import { 
   isWellOccupiedInBox, 
   findNextAvailableWell, 
@@ -38,6 +40,53 @@ interface SamplesListViewProps {
   onUpdateSample?: (sample: Sample) => void;
   onNavigateToBox?: (boxId: string, well?: string) => void;
 }
+
+function HomeMetricCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  iconWrap,
+  iconColor,
+  valueClass = 'text-[var(--lims-navy)]',
+}: {
+  label: string;
+  value: string | number;
+  hint: string;
+  icon: LucideIcon;
+  iconWrap: string;
+  iconColor: string;
+  valueClass?: string;
+}) {
+  return (
+    <article className="lims-card h-full p-4 sm:px-5 sm:py-4 shadow-sm transition-all hover:shadow-md hover:border-[#0878e8]/35">
+      <div className="flex items-center gap-3 sm:gap-4 w-full min-h-[4.5rem]">
+        <span className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${iconWrap}`}>
+          <Icon className={`w-6 h-6 ${iconColor}`} strokeWidth={1.75} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1 pr-2">
+          <p className="text-[11px] sm:text-xs font-bold uppercase tracking-wide text-[var(--lims-navy)] leading-snug">
+            {label}
+          </p>
+          <p className="text-[10px] sm:text-[11px] text-slate-500 mt-1 leading-snug line-clamp-2">{hint}</p>
+        </div>
+        <span className={`text-2xl sm:text-[1.75rem] font-bold tabular-nums leading-none shrink-0 ${valueClass}`}>
+          {value}
+        </span>
+      </div>
+    </article>
+  );
+}
+
+const CATEGORY_BADGE: Record<string, string> = {
+  PhilHealth: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  Indigent: 'bg-violet-50 text-violet-800 border-violet-200',
+  Corporate: 'bg-amber-50 text-amber-800 border-amber-200',
+  'Pre-Employment / Employee': 'bg-cyan-50 text-cyan-800 border-cyan-200',
+  Employee: 'bg-cyan-50 text-cyan-800 border-cyan-200',
+  Projects: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+  OPD: 'bg-sky-50 text-sky-800 border-sky-200',
+};
 
 export const SamplesListView: React.FC<SamplesListViewProps> = ({
   samples,
@@ -137,91 +186,168 @@ export const SamplesListView: React.FC<SamplesListViewProps> = ({
     );
   };
 
+  const uniqueBoxes = useMemo(
+    () => new Set(samples.map((s) => s.storageLocation?.box || 'BX000026')).size,
+    [samples]
+  );
+
+  const cryoCount = useMemo(
+    () => samples.filter((s) => s.storageLocation?.temperature?.includes('-80')).length,
+    [samples]
+  );
+
   return (
-    <div className="lims-page-shell">
-      {/* 1. List View Header Card */}
-      <div className="bg-white border border-[#d8dde6] rounded-md p-3 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          {/* Green Leaf Icon */}
-          <div className="w-8 h-8 rounded-md bg-[#eaf5ea] border border-[#a3d9a5] flex items-center justify-center text-[#2e844a]">
-            <Leaf className="w-4 h-4" />
+    <div className="lims-page-shell space-y-4">
+      <section className="lims-card relative overflow-hidden border-[var(--lims-border)] bg-gradient-to-br from-white via-white to-sky-50/30">
+        <DashboardHeroArtwork />
+        <div className="relative z-[1] px-5 py-5 sm:px-6 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-[#0878e8] text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-200/50">
+            <TestTubes className="w-7 h-7" strokeWidth={1.75} aria-hidden />
           </div>
-          <div>
-            <div className="text-[10px] text-slate-500 font-medium">Samples</div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-semibold text-slate-900 tracking-tight flex items-center gap-1.5 cursor-pointer">
-                <span>Today's Samples</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-              </h1>
-              <button className="text-slate-400 hover:text-slate-700" title="Pin this view">
-                <Pin className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              {filteredSamples.length} items • Sorted by Customer Sample Name • Filtered by My samples - Record Type, Created Date • Updated a few seconds ago
+          <div className="min-w-0 flex-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#0878e8] bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
+              Specimen repository
+            </span>
+            <h1 className="text-xl sm:text-2xl font-bold text-[var(--lims-navy)] mt-2 tracking-tight">
+              Today&apos;s samples
+            </h1>
+            <p className="text-sm text-slate-600 mt-1 max-w-2xl">
+              Accessioned specimens, box placement, and cryo storage — sorted by customer sample name.
+            </p>
+          </div>
+          <div className="sm:text-right shrink-0 sm:pl-6 border-l border-[var(--lims-border)]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">In this list</p>
+            <p className="text-2xl font-bold text-[var(--lims-navy)] tabular-nums leading-none mt-1">
+              {filteredSamples.length}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              {selectedIds.length > 0 ? `${selectedIds.length} selected` : 'My samples filter'}
             </p>
           </div>
         </div>
+      </section>
 
-        {/* Right Action Buttons Toolbar */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            onClick={onOpenNewModal}
-            className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded border border-[#d8dde6] shadow-xs transition-colors"
-          >
-            New
-          </button>
-          <button
-            onClick={() => onImportSamples?.()}
-            className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded border border-[#d8dde6] shadow-xs transition-colors"
-          >
-            Import Samples
-          </button>
-          <button
-            onClick={onPrintLabels}
-            className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded border border-[#d8dde6] shadow-xs transition-colors"
-          >
-            Print Labels
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (selectedIds.length === 0) {
-                alert('Please select one or more samples from the list using the checkboxes to freeze.');
-                return;
-              }
-              if (onFreezeSamples) onFreezeSamples(selectedIds);
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded border border-[#d8dde6] shadow-xs transition-colors cursor-pointer"
-            title="Move selected specimens to -80°C Cryo-Vault"
-          >
-            <Snowflake className="w-3.5 h-3.5 text-blue-500" />
-            <span>Freeze {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (selectedIds.length === 0) {
-                alert('Please select one or more samples from the list using the checkboxes to thaw.');
-                return;
-              }
-              if (onThawSamples) onThawSamples(selectedIds);
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded border border-[#d8dde6] shadow-xs transition-colors cursor-pointer"
-            title="Initiate controlled thaw cycle for testing"
-          >
-            <Sun className="w-3.5 h-3.5 text-amber-500" />
-            <span>Thaw {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}</span>
-          </button>
-          <button className="p-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded border border-[#d8dde6]">
-            <ChevronDown className="w-3.5 h-3.5" />
-          </button>
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <HomeMetricCard
+          label="Specimens on file"
+          value={samples.length}
+          hint="All accessioned records in the repository"
+          icon={TestTubes}
+          iconWrap="bg-sky-50"
+          iconColor="text-sky-600"
+        />
+        <HomeMetricCard
+          label="Matching search"
+          value={filteredSamples.length}
+          hint="Rows visible with current list filter"
+          icon={Search}
+          iconWrap="bg-slate-100"
+          iconColor="text-slate-600"
+        />
+        <HomeMetricCard
+          label="Storage boxes"
+          value={uniqueBoxes}
+          hint="Distinct box IDs in use"
+          icon={Box}
+          iconWrap="bg-violet-50"
+          iconColor="text-violet-600"
+        />
+        <HomeMetricCard
+          label="Cryo vault (-80°C)"
+          value={cryoCount}
+          hint="Ultra-low temperature placements"
+          icon={Snowflake}
+          iconWrap="bg-blue-50"
+          iconColor="text-blue-600"
+          valueClass="text-blue-700"
+        />
+      </section>
+
+      <button
+        type="button"
+        onClick={onOpenNewModal}
+        className="relative overflow-hidden w-full text-left rounded-xl bg-gradient-to-r from-[var(--lims-navy)] via-[#0c2d55] to-[#0a2240] hover:from-[#0c2d55] hover:to-[#081a33] text-white shadow-md px-5 py-4 flex items-center justify-between gap-4 cursor-pointer border border-[#0a2240]"
+      >
+        <span className="relative z-[1] flex items-center gap-3 min-w-0">
+          <span className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+            <Plus className="w-5 h-5 text-sky-200" strokeWidth={1.75} />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-base font-semibold">Register a new sample</span>
+            <span className="block text-sm text-slate-300 mt-0.5">
+              Barcode, patient link, and cold-chain box position.
+            </span>
+          </span>
+        </span>
+        <span className="relative z-[1] inline-flex items-center gap-2 text-sm font-semibold bg-white text-[var(--lims-navy)] px-4 py-2 rounded-lg shrink-0 shadow-sm">
+          New
+          <ArrowRight className="w-4 h-4" />
+        </span>
+      </button>
+
+      <div className="lims-card overflow-hidden shadow-sm">
+        <div className="px-5 py-4 border-b border-[var(--lims-border)] flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-[var(--lims-navy)]">Specimen inventory</h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Select rows for freeze / thaw; open a row for full sample detail.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => onImportSamples?.()}
+              className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-[var(--lims-border)] shadow-xs cursor-pointer"
+            >
+              Import
+            </button>
+            <button
+              type="button"
+              onClick={onPrintLabels}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-[var(--lims-border)] shadow-xs cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              Print labels
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedIds.length === 0) {
+                  alert('Please select one or more samples from the list using the checkboxes to freeze.');
+                  return;
+                }
+                onFreezeSamples?.(selectedIds);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-[var(--lims-border)] bg-white hover:bg-sky-50 text-slate-700 cursor-pointer"
+            >
+              <Snowflake className="w-3.5 h-3.5 text-blue-500" />
+              Freeze{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedIds.length === 0) {
+                  alert('Please select one or more samples from the list using the checkboxes to thaw.');
+                  return;
+                }
+                onThawSamples?.(selectedIds);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-[var(--lims-border)] bg-white hover:bg-amber-50 text-slate-700 cursor-pointer"
+            >
+              <Sun className="w-3.5 h-3.5 text-amber-500" />
+              Thaw{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
+            </button>
+            <button
+              type="button"
+              className="p-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded-lg border border-[var(--lims-border)] cursor-pointer"
+              aria-label="More actions"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* 2. Search & Table Controls Row */}
-      <div className="bg-white border border-[#d8dde6] rounded-md overflow-hidden shadow-sm">
-        <div className="p-2.5 border-b border-[#e5e7eb] flex items-center justify-between gap-4 bg-white">
+        <div className="px-5 py-3 border-b border-[var(--lims-border)] flex items-center justify-between gap-4 bg-[#f8fafc]/60">
           <div className="relative flex-1 max-w-sm">
             <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
             <input
@@ -229,7 +355,7 @@ export const SamplesListView: React.FC<SamplesListViewProps> = ({
               placeholder="Search this list..."
               value={searchListQuery}
               onChange={(e) => setSearchListQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded border border-[#d8dde6] bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#0176d3]"
+              className="lims-input pl-8 pr-3 py-2 text-xs"
             />
           </div>
 
@@ -252,26 +378,26 @@ export const SamplesListView: React.FC<SamplesListViewProps> = ({
           </div>
         </div>
 
-        {/* 3. Table matching Screenshot 2 */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse lims-table">
+          <table className="w-full min-w-[52rem] text-left">
             <thead>
-              <tr>
-                <th className="w-8 text-center">
+              <tr className="bg-[#f8fafc] text-[11px] font-semibold uppercase tracking-wide text-slate-500 border-b border-[var(--lims-border)]">
+                <th className="w-10 px-3 py-3 text-center">
                   <input
                     type="checkbox"
                     checked={selectedIds.length === filteredSamples.length && filteredSamples.length > 0}
                     onChange={toggleSelectAll}
-                    className="rounded border-slate-300 text-[#0176d3] focus:ring-[#0176d3]"
+                    className="rounded border-slate-300 text-[#0878e8] focus:ring-[#0878e8]"
+                    aria-label="Select all"
                   />
                 </th>
-                <th className="w-10 text-center text-slate-400 font-mono">#</th>
-                <th className="cursor-pointer">Customer Sample Name ↑</th>
-                <th className="cursor-pointer">Sample ID</th>
-                <th className="cursor-pointer">Sample Name</th>
-                <th className="cursor-pointer">Box ID</th>
-                <th className="cursor-pointer">Box Position</th>
-                <th className="w-10 text-right"></th>
+                <th className="w-10 px-2 py-3 text-center font-mono">#</th>
+                <th className="px-3 py-3">Customer sample name</th>
+                <th className="px-3 py-3">Sample ID</th>
+                <th className="px-3 py-3">Sample name</th>
+                <th className="px-3 py-3">Box ID</th>
+                <th className="px-3 py-3">Position</th>
+                <th className="w-20 px-2 py-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -285,7 +411,7 @@ export const SamplesListView: React.FC<SamplesListViewProps> = ({
                     </p>
                     <button
                       onClick={onOpenNewModal}
-                      className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
+                      className="mt-4 lims-btn-primary px-4 py-2 text-xs rounded-lg shadow-xs"
                     >
                       <Plus className="w-4 h-4" />
                       New Sample
@@ -300,66 +426,64 @@ export const SamplesListView: React.FC<SamplesListViewProps> = ({
                     <tr
                       key={sample.id}
                       onClick={() => onSelectSample(sample)}
-                      className="cursor-pointer transition-colors"
+                      className="border-b border-[var(--lims-border)] hover:bg-[#f8fafc] cursor-pointer transition-colors"
                     >
-                    <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelectRow(sample.id)}
-                        className="rounded border-slate-300 text-[#0176d3] focus:ring-[#0176d3]"
+                        className="rounded border-slate-300 text-[#0878e8] focus:ring-[#0878e8]"
                       />
                     </td>
-                    <td className="text-center text-slate-400 font-mono text-xs">
+                    <td className="px-2 py-2.5 text-center text-slate-400 font-mono text-xs">
                       {idx + 1}
                     </td>
-                    <td className="font-semibold text-slate-900">
-                      <div className="flex items-center gap-1.5">
+                    <td className="px-3 py-2.5 text-sm font-medium text-slate-900">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span>{sample.displayCustName}</span>
-                        {sample.patientCategory && (
-                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold font-mono border ${
-                            sample.patientCategory === 'PhilHealth' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' :
-                            sample.patientCategory === 'Indigent' ? 'bg-purple-50 text-purple-800 border-purple-300' :
-                            sample.patientCategory === 'Corporate' ? 'bg-amber-50 text-amber-800 border-amber-300' :
-                            sample.patientCategory === 'Pre-Employment / Employee' || sample.patientCategory === 'Employee' ? 'bg-cyan-50 text-cyan-800 border-cyan-300' :
-                            sample.patientCategory === 'Projects' ? 'bg-indigo-50 text-indigo-800 border-indigo-300' :
-                            'bg-blue-50 text-[#0176d3] border-blue-300'
-                          }`}>
+                        {sample.patientCategory ? (
+                          <span
+                            className={`inline-flex text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${
+                              CATEGORY_BADGE[sample.patientCategory] ||
+                              'bg-sky-50 text-sky-800 border-sky-200'
+                            }`}
+                          >
                             {sample.patientCategory}
                           </span>
-                        )}
+                        ) : null}
                       </div>
                     </td>
-                    <td className="link-blue font-mono font-semibold">
+                    <td className="px-3 py-2.5 text-xs text-[#0878e8] font-mono font-semibold">
                       {sample.displaySampleId}
                     </td>
-                    <td className="text-slate-800 font-medium">
+                    <td className="px-3 py-2.5 text-xs text-slate-700 font-medium">
                       {sample.displaySampleName}
                     </td>
-                    <td className="link-blue font-mono font-bold" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 py-2.5 text-xs font-mono font-semibold" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
                         onClick={() => {
                           if (onNavigateToBox) onNavigateToBox(sample.displayBoxId, sample.displayBoxPos);
                         }}
-                        className="text-[#0176d3] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                        className="text-[#0878e8] hover:underline inline-flex items-center gap-1 cursor-pointer"
                         title={`View ${sample.displayBoxId} in 2D Box Grid`}
                       >
                         <span>{sample.displayBoxId}</span>
                         <ExternalLink className="w-3 h-3 opacity-60" />
                       </button>
                     </td>
-                    <td className="font-mono text-slate-800 font-bold">
+                    <td className="px-3 py-2.5 font-mono text-xs text-slate-800 font-bold">
                       {sample.displayBoxPos}
                     </td>
-                    <td className="text-right" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-2 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
                         onClick={() => handleOpenEdit(sample)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-slate-700 hover:text-[#0176d3] hover:bg-blue-50 rounded text-xs font-semibold border border-slate-200 transition-colors shadow-2xs cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-slate-700 hover:text-[#0878e8] hover:bg-blue-50 rounded text-xs font-semibold border border-slate-200 transition-colors shadow-2xs cursor-pointer"
                         title="Set Sample Name, Box ID & Position"
                       >
-                        <Edit className="w-3 h-3 text-[#0176d3]" />
+                        <Edit className="w-3 h-3 text-[#0878e8]" />
                         <span>Set</span>
                       </button>
                     </td>
@@ -374,7 +498,7 @@ export const SamplesListView: React.FC<SamplesListViewProps> = ({
       {/* Edit Sample Name, Box ID & Box Position Modal */}
       {editingSample && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className="bg-white border border-[#d8dde6] rounded-xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative text-slate-900 font-sans">
+          <div className="lims-card rounded-xl max-w-lg w-full p-6 space-y-4 shadow-2xl relative text-slate-900 font-sans">
             <button
               onClick={() => setEditingSample(null)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 rounded hover:bg-slate-100 transition-colors cursor-pointer"
@@ -414,7 +538,7 @@ export const SamplesListView: React.FC<SamplesListViewProps> = ({
                   value={editForm.sampleName}
                   onChange={(e) => setEditForm((prev) => ({ ...prev, sampleName: e.target.value }))}
                   placeholder="E.G. Lockbox_S000445 or PTSI_SMP-2026"
-                  className="w-full px-3 py-2 rounded-md border border-[#d8dde6] text-slate-900 font-mono text-xs font-semibold focus:outline-none focus:border-[#0176d3] focus:ring-1 focus:ring-[#0176d3]"
+                  className="w-full px-3 py-2 rounded-md border border-[#d8dde6] text-slate-900 font-mono text-xs font-semibold focus:outline-none focus:border-[#0878e8] focus:ring-1 focus:ring-[#0878e8]"
                 />
                 <span className="text-[10px] text-slate-400 mt-0.5 block">
                   Displayed in the "Sample Name" column of repository manifests and testing logs.
@@ -429,7 +553,7 @@ export const SamplesListView: React.FC<SamplesListViewProps> = ({
                   <select
                     value={editForm.boxId}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, boxId: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-md border border-[#d8dde6] text-slate-900 font-mono text-xs font-semibold focus:outline-none focus:border-[#0176d3] cursor-pointer"
+                    className="w-full px-3 py-2 rounded-md border border-[#d8dde6] text-slate-900 font-mono text-xs font-semibold focus:outline-none focus:border-[#0878e8] cursor-pointer"
                   >
                     <option value="BX000026">BX000026 (Primary Reception · +4°C)</option>
                     <option value="BX000025">BX000025 (Clinical Serum Archive B · -20°C)</option>
@@ -449,7 +573,7 @@ export const SamplesListView: React.FC<SamplesListViewProps> = ({
                         ...prev,
                         boxPosition: findNextAvailableWell(editForm.boxId, samples, '96_WELL', editingSample?.id)
                       }))}
-                      className="text-[10px] text-[#0176d3] hover:underline font-semibold cursor-pointer"
+                      className="text-[10px] text-[#0878e8] hover:underline font-semibold cursor-pointer"
                     >
                       Auto-Next
                     </button>
@@ -463,7 +587,7 @@ export const SamplesListView: React.FC<SamplesListViewProps> = ({
                     className={`w-full px-3 py-2 rounded-md border font-mono text-xs font-bold uppercase focus:outline-none ${
                       isWellOccupiedInBox(editForm.boxId, editForm.boxPosition, samples, editingSample?.id).isOccupied
                         ? 'border-amber-400 text-amber-900 bg-amber-50/30'
-                        : 'border-[#d8dde6] text-slate-900 focus:border-[#0176d3]'
+                        : 'border-[#d8dde6] text-slate-900 focus:border-[#0878e8]'
                     }`}
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">SBS 96-well grid position</span>
@@ -508,7 +632,7 @@ export const SamplesListView: React.FC<SamplesListViewProps> = ({
                     value={editForm.unit}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, unit: e.target.value }))}
                     placeholder="E.G. Main Freezer"
-                    className="w-full px-3 py-2 rounded-md border border-[#d8dde6] text-slate-900 text-xs font-medium focus:outline-none focus:border-[#0176d3]"
+                    className="w-full px-3 py-2 rounded-md border border-[#d8dde6] text-slate-900 text-xs font-medium focus:outline-none focus:border-[#0878e8]"
                   />
                 </div>
 
@@ -519,7 +643,7 @@ export const SamplesListView: React.FC<SamplesListViewProps> = ({
                   <select
                     value={editForm.temp}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, temp: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-md border border-[#d8dde6] text-slate-900 text-xs font-medium focus:outline-none focus:border-[#0176d3] cursor-pointer"
+                    className="w-full px-3 py-2 rounded-md border border-[#d8dde6] text-slate-900 text-xs font-medium focus:outline-none focus:border-[#0878e8] cursor-pointer"
                   >
                     <option value="+4°C">+4°C Cold Storage</option>
                     <option value="-20°C">-20°C Standard Freezer</option>
@@ -539,7 +663,7 @@ export const SamplesListView: React.FC<SamplesListViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="flex items-center gap-1.5 px-5 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white rounded-md text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-5 py-2 bg-[#0878e8] hover:bg-[#0669c9] text-white rounded-md text-xs font-bold shadow-sm transition-colors cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
                   <span>Save Location</span>

@@ -31,9 +31,9 @@ export const InventoryTableView: React.FC<InventoryTableViewProps> = ({
       />
 
       {/* 2. Header Card */}
-      <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="lims-card p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3] shadow-xs">
+          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs">
             <PackageSearch className="w-6 h-6" />
           </div>
           <div>
@@ -89,7 +89,7 @@ export const InventoryTableView: React.FC<InventoryTableViewProps> = ({
                   disabled={r.isLocked}
                   className="w-full py-1.5 bg-slate-50 hover:bg-slate-100 border border-[#d8dde6] rounded text-xs font-semibold text-slate-700 flex items-center justify-center gap-1.5"
                 >
-                  <Droplets className="w-3 h-3 text-[#0176d3]" />
+                  <Droplets className="w-3 h-3 text-[#0878e8]" />
                   Simulate 50mL Run Depletion
                 </button>
               </div>

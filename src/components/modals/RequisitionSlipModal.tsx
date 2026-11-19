@@ -23,6 +23,7 @@ import {
   Edit
 } from 'lucide-react';
 import { LabTestRequisition } from '../../types/lims';
+import { PTSI_LAB_MOBILE_LABEL } from '../../data/labContact';
 import { 
   EXAMINATION_CATALOG, 
   formatCurrency, 
@@ -208,6 +209,7 @@ export const RequisitionSlipModal: React.FC<RequisitionSlipModalProps> = ({
                   <p className="text-[11px] print:text-[8.5px] font-medium text-slate-600">
                     Quezon Institute Compound, E Rodriguez Sr. Ave, Quezon City, Metro Manila
                   </p>
+                  <p className="text-[10px] print:text-[8px] font-medium text-slate-600">{PTSI_LAB_MOBILE_LABEL}</p>
                   <div className="text-[9.5px] print:text-[7.5px] text-slate-500 font-medium pt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     <span>Clinical &amp; Diagnostic Laboratory Services</span>
                     <span>•</span>

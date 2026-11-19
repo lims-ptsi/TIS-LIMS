@@ -44,9 +44,9 @@ export const ProtocolsView: React.FC<ProtocolsViewProps> = ({
       />
 
       {/* 2. Header Card */}
-      <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="lims-card p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3] shadow-xs">
+          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs">
             <FileText className="w-6 h-6" />
           </div>
           <div>
@@ -123,7 +123,7 @@ export const ProtocolsView: React.FC<ProtocolsViewProps> = ({
         {/* Right: Formula Sandbox */}
         <div className="lg:col-span-4 lims-card p-5 space-y-4">
           <h3 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-            <Calculator className="w-4 h-4 text-[#0176d3]" />
+            <Calculator className="w-4 h-4 text-[#0878e8]" />
             <span>Formula Calculator Sandbox</span>
           </h3>
 
@@ -163,7 +163,7 @@ export const ProtocolsView: React.FC<ProtocolsViewProps> = ({
 
             <button
               onClick={handleTestSandbox}
-              className="w-full flex items-center justify-center gap-1.5 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white rounded text-xs font-bold shadow-xs transition-colors"
+              className="w-full flex items-center justify-center gap-1.5 py-2 bg-[#0878e8] hover:bg-[#0669c9] text-white rounded text-xs font-bold shadow-xs transition-colors"
             >
               <Play className="w-3.5 h-3.5" />
               Evaluate Dynamic Equation

@@ -368,7 +368,18 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
       }
 
       updatedGroup.parameters = updatedParams;
-      return { ...prev, [currentExamKey]: updatedGroup };
+      const next: Record<string, ExamResultGroup> = { ...prev, [currentExamKey]: updatedGroup };
+      if ((NTP_FIELD_KEYS as readonly string[]).includes(paramId)) {
+        Object.entries(prev).forEach(([examKey, group]) => {
+          if (examKey === currentExamKey || !group) return;
+          const entryForm = resolveEntryForm(group.examName, group.examCode, requisition.patientGender);
+          if (entryForm?.layoutStyle !== 'ntp-request') return;
+          const params = { ...group.parameters };
+          params[paramId] = updatedParams[paramId];
+          next[examKey] = { ...group, parameters: params };
+        });
+      }
+      return next;
     });
   };
 
@@ -646,17 +657,32 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                 };
 
                 if (isNtpRequest) {
+                  const readNtpParam = (key: string) => {
+                    for (const keyName of examKeys) {
+                      const val = examResults[keyName]?.parameters?.[key]?.value;
+                      if (val != null && String(val).trim() !== '') return String(val);
+                    }
+                    return currentGroup.parameters[key]?.value || '';
+                  };
+                  const ntpPanelMembers = examKeys
+                    .map((examKey) => {
+                      const g = examResults[examKey];
+                      if (!g) return null;
+                      const form = resolveEntryForm(g.examName, g.examCode, requisition.patientGender);
+                      if (form?.layoutStyle !== 'ntp-request') return null;
+                      return { examCode: g.examCode, examName: g.examName };
+                    })
+                    .filter((m): m is { examCode: string; examName: string } => Boolean(m));
                   const ntpValues = mergeNtpFormDefaults(
-                    Object.fromEntries(
-                      NTP_FIELD_KEYS.map((key) => [key, currentGroup.parameters[key]?.value || ''])
-                    ),
+                    Object.fromEntries(NTP_FIELD_KEYS.map((key) => [key, readNtpParam(key)])),
                     requisition,
-                    null
+                    null,
+                    ntpPanelMembers
                   );
                   return (
                     <NtpLabRequestForm
                       layout="workflow"
-                      assignedExaminations={[currentGroup.examName].filter(Boolean)}
+                      assignedExaminations={ntpPanelMembers.map((m) => m.examName)}
                       values={ntpValues}
                       onChange={handleParamChange}
                     />

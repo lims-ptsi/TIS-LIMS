@@ -2,15 +2,26 @@
 
 @layer base {
   :root {
-    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --lims-navy: #0a2240;
+    --lims-primary: #0878e8;
+    --lims-primary-hover: #0668c9;
+    --lims-secondary: #205493;
+    --lims-bg: #f4f7fb;
+    --lims-card: #ffffff;
+    --lims-border: #dfe7f1;
+    --lims-success: #16a36a;
+    --lims-warning: #f59e0b;
+    --lims-danger: #dc2626;
+    --font-sans: 'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+      Roboto, sans-serif;
     --font-mono: 'JetBrains Mono', Consolas, monospace;
-    --font-heading: 'Plus Jakarta Sans', sans-serif;
+    --font-heading: 'Inter', 'Plus Jakarta Sans', sans-serif;
   }
 
   body {
     font-family: var(--font-sans);
-    background-color: #f3f5f8;
-    color: #181b20;
+    background-color: var(--lims-bg);
+    color: #0f172a;
     overflow-x: hidden;
   }
 
@@ -18,14 +29,70 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    background-color: #f3f5f8;
+    background-color: var(--lims-bg);
+  }
+}
+
+@layer components {
+  .lims-card {
+    @apply bg-white border rounded-xl shadow-sm;
+    border-color: var(--lims-border);
+  }
+
+  .lims-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 font-semibold text-white rounded-lg transition-colors cursor-pointer;
+    background-color: var(--lims-primary);
+  }
+
+  .lims-btn-primary:hover {
+    background-color: var(--lims-primary-hover);
   }
 }
 
 @layer components {
   /* Full-width, compact vertical rhythm — desk / list views */
+  .lims-view-frame {
+    @apply w-full max-w-[1600px] mx-auto min-h-full;
+  }
+
   .lims-page-shell {
-    @apply w-full pb-6 font-sans space-y-2 text-[13px] leading-snug;
+    @apply relative isolate w-full pb-6 font-sans space-y-3 text-[13px] leading-snug;
+  }
+
+  /* Legacy Salesforce-style panels → Lab-TIS cards inside main */
+  .lims-main-canvas .lims-page-shell .bg-white.border.rounded-md.shadow-sm,
+  .lims-main-canvas .lims-page-shell > .bg-white.border.border-\[\#d8dde6\] {
+    border-radius: 0.75rem;
+    border-color: var(--lims-border);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  }
+
+  .lims-input {
+    @apply w-full rounded-lg border bg-white text-slate-800 placeholder-slate-400 text-sm transition-colors focus:outline-none;
+    border-color: var(--lims-border);
+  }
+
+  .lims-input:focus {
+    border-color: var(--lims-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--lims-primary) 18%, transparent);
+  }
+
+  .lims-table thead tr {
+    @apply bg-[#f8fafc] text-[11px] font-semibold uppercase tracking-wide text-slate-500 border-b;
+    border-color: var(--lims-border);
+  }
+
+  .lims-table tbody tr {
+    @apply border-b transition-colors;
+    border-color: var(--lims-border);
+  }
+
+  .lims-table tbody tr:hover {
+    @apply bg-[#f8fafc];
+  }
+
+  .lims-main-canvas {
+    background-color: transparent;
   }
 
   .lims-page-shell table th {
@@ -53,12 +120,170 @@
     border: none !important;
   }
 
+  /* Official TEST/RESULT tables — compact values for all examination forms */
+  .lims-result-form-table .lims-rf-grid-head,
+  .lims-result-form-table .lims-rf-section-label {
+    font-size: 10px !important;
+    line-height: 1.25;
+  }
+
+  .lims-result-form-table .lims-rf-grid-row > * {
+    font-size: 10px !important;
+    line-height: 1.3;
+    padding-top: 0.2rem !important;
+    padding-bottom: 0.2rem !important;
+  }
+
+  .lims-result-form-table .lims-rf-grid-row.grid-cols-2 > *:last-child,
+  .lims-result-form-table .lims-rf-grid-row.grid-cols-12 > *:nth-child(2) {
+    font-size: 9px !important;
+    font-weight: 600;
+  }
+
+  .coa-result-sheet .lims-result-form-table table {
+    font-size: 10px !important;
+  }
+
+  .coa-result-sheet .lims-result-form-table table tbody td:last-child {
+    font-size: 9px !important;
+    font-weight: 600;
+  }
+
   /* Patient header on result forms — labels + values, no field underlines */
   .lims-result-form-patient input,
   .lims-result-form-patient select,
   .lims-result-form-patient textarea {
     border: none !important;
     box-shadow: none !important;
+  }
+
+  /* NTP molecular / smear — keep critical (red) values red when selected or focused */
+  .lims-result-form-table select.lims-ntp-result-select--alert,
+  .lims-result-form-table select.lims-ntp-result-select--alert:focus,
+  .lims-result-form-table select.lims-ntp-result-select--alert:active {
+    color: #dc2626 !important;
+    -webkit-text-fill-color: #dc2626;
+  }
+
+  .lims-result-form-table select.lims-ntp-result-select--alert option.lims-ntp-result-option--alert {
+    color: #dc2626;
+    font-weight: 600;
+    background-color: #fff;
+  }
+
+  .lims-result-form-table select.lims-ntp-result-select--alert option.lims-ntp-result-option--alert:checked,
+  .lims-result-form-table select.lims-ntp-result-select--alert option.lims-ntp-result-option--alert:hover {
+    color: #dc2626 !important;
+    background-color: #fef2f2 !important;
+  }
+
+  /* NTP workflow (SaaS) — same critical-value styling on sample detail / result entry */
+  .ntp-form-root--saas select.lims-ntp-result-select--alert,
+  .ntp-form-root--saas select.lims-ntp-result-select--alert:focus,
+  .ntp-form-root--saas select.lims-ntp-result-select--alert:active {
+    color: #dc2626 !important;
+    -webkit-text-fill-color: #dc2626;
+    border-color: #fecaca !important;
+  }
+
+  /* Form 2a paper — Request section alignment (official print / CoA) */
+  .ntp-request-paper .ntp-paper-field {
+    break-inside: avoid;
+  }
+
+  .ntp-request-paper label.inline-flex {
+    align-items: center;
+    white-space: nowrap;
+  }
+
+  .ntp-request-paper-row {
+    border-bottom: 1px solid #0f172a;
+    padding: 4px 2px;
+    break-inside: avoid;
+  }
+
+  .ntp-request-paper > .ntp-request-paper-row:last-of-type {
+    border-bottom: none;
+  }
+
+  .ntp-request-paper-patient-row {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 0;
+    padding: 0;
+    align-items: stretch;
+    min-height: 2.1rem;
+  }
+
+  .ntp-request-paper-patient-row:last-child {
+    border-bottom: none;
+  }
+
+  .ntp-request-paper-patient-cell {
+    padding: 3px 5px;
+    min-width: 0;
+    border-right: 1px solid #0f172a;
+  }
+
+  .ntp-request-paper-patient-cell:last-child {
+    border-right: none;
+  }
+
+  .ntp-request-paper-patient .ntp-request-paper-patient-row + .ntp-request-paper-patient-row {
+    border-top: none;
+  }
+
+  .ntp-request-paper-patient-cell--narrow span.block.border-b,
+  .ntp-request-paper-patient-cell--narrow input {
+    text-align: center;
+    padding-left: 0.15rem;
+    padding-right: 0.15rem;
+  }
+
+  .ntp-request-paper-patient-cell--date span.block.border-b,
+  .ntp-request-paper-patient-cell--date input {
+    font-size: 10px;
+  }
+
+  .ntp-request-paper-patient-cell span.block.border-b {
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+
+  .ntp-request-paper-patient-cell input {
+    font-weight: 700;
+    font-size: 11px;
+  }
+
+  /* Form 2a official — plain values (screen + print), keep section/table borders */
+  .ntp-official-result-form .ntp-form-plain-value,
+  .ntp-official-result-form .ntp-results-diagnostic-table td .border-b,
+  .ntp-official-result-form .ntp-results-diagnostic-table td span,
+  .ntp-official-result-form .ntp-request-specimen-table td .border-b,
+  .ntp-official-result-form .ntp-request-specimen-table td span,
+  .ntp-official-result-form .ntp-request-paper-patient .border-b,
+  .ntp-official-result-form .ntp-request-paper-patient-cell span,
+  .ntp-official-result-form span.border-b,
+  .coa-result-sheet.ntp-official-result-form .border-b,
+  .coa-result-sheet.ntp-official-result-form .ntp-form-plain-value {
+    border-bottom-width: 0 !important;
+    border-bottom-style: none !important;
+    text-decoration: none !important;
+  }
+
+  .ntp-official-result-form .ntp-request-paper-row.border-b {
+    border-bottom-width: 1px !important;
+    border-bottom-style: solid !important;
+  }
+
+  .ntp-official-result-form .ntp-paper-signature-footer .border-b,
+  .ntp-official-result-form .ntp-paper-signature-footer span.border-b {
+    border-bottom-width: 1px !important;
+    border-bottom-style: solid !important;
+  }
+
+  .lims-sample-hero-banner {
+    background: linear-gradient(125deg, #c5daf8 0%, #dbeafe 38%, #eef4ff 72%, #f8fafc 100%);
   }
 
   .lims-verify-qr--compact .lims-verify-qr__img,
@@ -481,19 +706,25 @@
     background: #ffffff !important;
   }
 
-  /* Official CoA: signatures + end line pinned to bottom of printed page */
+  /* Official CoA: short forms pin signatures to page bottom without a mid-page gap */
+  .coa-result-sheet {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 100vh !important;
+    box-sizing: border-box !important;
+  }
+
   .coa-result-sheet-body {
-    padding-bottom: 42mm !important;
+    flex: 0 1 auto !important;
+    min-height: 0 !important;
+    padding-bottom: 0 !important;
   }
 
   .coa-result-sheet-footer {
-    position: fixed !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
+    position: static !important;
+    margin-top: auto !important;
     width: 100% !important;
-    margin: 0 !important;
-    padding: 4mm 10mm 6mm 10mm !important;
+    padding: 5mm 0 0 0 !important;
     background: #ffffff !important;
     border-top: 1px solid #cbd5e1 !important;
     break-inside: avoid !important;
@@ -548,5 +779,105 @@
     page-break-before: always !important;
     break-before: page !important;
   }
+
+  /* Form 2a — match modal preview typography; avoid global 10.5px shrink */
+  .print-coa-forms .ntp-official-result-form,
+  .print-coa-forms .ntp-official-result-form .coa-result-sheet-body {
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+  }
+
+  .print-coa-forms .ntp-official-result-form .ntp-results-diagnostic-table td .border-b,
+  .print-coa-forms .ntp-official-result-form .ntp-request-specimen-table td .border-b,
+  .print-coa-forms .ntp-official-result-form .ntp-request-paper-patient .border-b,
+  .print-coa-forms .ntp-official-result-form span.border-b {
+    border-bottom-width: 0 !important;
+    border-bottom-style: none !important;
+  }
+
+  .print-coa-forms .ntp-official-result-form .ntp-paper-signature-footer .border-b,
+  .print-coa-forms .ntp-official-result-form .ntp-paper-signature-footer span.border-b {
+    border-bottom-width: 1px !important;
+    border-bottom-style: solid !important;
+  }
+
+  /* Short Form 2a — single page when content fits; avoid forced 100vh stretch */
+  .coa-result-sheet.ntp-official-result-form {
+    min-height: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Form 2a print job — match drawer preview typography (not global 10.5px body) */
+  body.lims-print-ntp-official,
+  body.lims-print-ntp-official .print-modal-backdrop,
+  body.lims-print-ntp-official .print-coa-forms {
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+  }
+
+  body.lims-print-ntp-official .print-coa-forms .ntp-official-result-form .ntp-results-diagnostic-table td .border-b,
+  body.lims-print-ntp-official .print-coa-forms .ntp-official-result-form .ntp-request-specimen-table td .border-b,
+  body.lims-print-ntp-official .print-coa-forms .ntp-official-result-form .ntp-request-paper-patient .border-b,
+  body.lims-print-ntp-official .print-coa-forms .ntp-official-result-form span.border-b {
+    border-bottom-width: 0 !important;
+    border-bottom-style: none !important;
+  }
+
+  body.lims-print-ntp-official .print-coa-forms .ntp-official-result-form .ntp-paper-signature-footer .border-b,
+  body.lims-print-ntp-official .print-coa-forms .ntp-official-result-form .ntp-paper-signature-footer span.border-b {
+    border-bottom-width: 1px !important;
+    border-bottom-style: solid !important;
+  }
+}
+
+/* html2canvas PDF export — same CoA layout as @media print */
+body.pdf-exporting .print-coa-forms {
+  display: block !important;
+  visibility: visible !important;
+  overflow: visible !important;
+  max-height: none !important;
+}
+
+body.pdf-exporting .print-modal-backdrop,
+body.pdf-exporting .patient-drawer-panel-in,
+body.pdf-exporting .patient-drawer-panel-out {
+  transform: none !important;
+}
+
+body.pdf-exporting #lims-pdf-capture-root .coa-official-sheet--inactive {
+  display: block !important;
+  visibility: visible !important;
+}
+
+body.pdf-exporting .coa-result-sheet {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 738px !important;
+  min-height: 277mm !important;
+  padding: 0 !important;
+  margin: 0 0 12px 0 !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-sizing: border-box !important;
+}
+
+body.pdf-exporting .coa-result-sheet.ntp-official-result-form {
+  min-height: 0 !important;
+}
+
+body.pdf-exporting .coa-result-sheet-body {
+  flex: 0 1 auto !important;
+  padding-bottom: 0 !important;
+}
+
+body.pdf-exporting .coa-result-sheet-footer {
+  margin-top: auto !important;
+  padding-top: 6mm !important;
+  border-top: 1px solid #cbd5e1 !important;
+}
+
+body.pdf-exporting .print\:hidden {
+  display: none !important;
 }
 

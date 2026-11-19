@@ -248,7 +248,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
       <div className="bg-white border border-[#d8dde6] rounded-lg p-5 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-12 h-12 rounded-lg bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3] shadow-xs flex-shrink-0">
+            <div className="w-12 h-12 rounded-lg bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs flex-shrink-0">
               <ShieldCheck className="w-7 h-7" />
             </div>
             <div>
@@ -274,7 +274,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
           <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={handleStartVerification}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white text-xs font-semibold rounded-md shadow-xs transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0878e8] hover:bg-[#0669c9] text-white text-xs font-semibold rounded-md shadow-xs transition-all active:scale-95"
             >
               <Key className="w-4 h-4" />
               Verify SHA-256 Hash Chain
@@ -359,7 +359,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
               placeholder="Search by operator, record ID, module, reason, or hash prefix..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-8 py-2 text-xs rounded-md border border-[#d8dde6] text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0176d3] focus:border-[#0176d3]"
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-md border border-[#d8dde6] text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0878e8] focus:border-[#0878e8]"
             />
             {searchQuery && (
               <button
@@ -433,7 +433,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
                 onClick={() => setSelectedAction(action)}
                 className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${
                   isActive
-                    ? 'bg-[#0176d3] text-white shadow-xs'
+                    ? 'bg-[#0878e8] text-white shadow-xs'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
               >
@@ -501,7 +501,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
                         setDateFilter('ALL');
                         setOnlySignOffs(false);
                       }}
-                      className="mt-3 px-3 py-1.5 text-xs font-semibold text-[#0176d3] hover:underline"
+                      className="mt-3 px-3 py-1.5 text-xs font-semibold text-[#0878e8] hover:underline"
                     >
                       Reset All Filters
                     </button>
@@ -524,7 +524,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
 
                       {/* Operator & Role */}
                       <td className="py-2.5 px-3.5">
-                        <div className="font-bold text-slate-900 group-hover:text-[#0176d3] transition-colors">
+                        <div className="font-bold text-slate-900 group-hover:text-[#0878e8] transition-colors">
                           {log.user}
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
@@ -619,7 +619,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
                             e.stopPropagation();
                             setSelectedLog(log);
                           }}
-                          className="px-2 py-1 text-xs font-semibold text-[#0176d3] hover:bg-blue-50 rounded transition-colors inline-flex items-center gap-1"
+                          className="px-2 py-1 text-xs font-semibold text-[#0878e8] hover:bg-blue-50 rounded transition-colors inline-flex items-center gap-1"
                           title="Inspect full audit block"
                         >
                           <Eye className="w-3.5 h-3.5" />
@@ -681,7 +681,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
                   <div 
-                    className="bg-gradient-to-r from-[#0176d3] to-emerald-500 h-2.5 rounded-full transition-all duration-300" 
+                    className="bg-gradient-to-r from-[#0878e8] to-emerald-500 h-2.5 rounded-full transition-all duration-300" 
                     style={{ width: `${verificationProgress}%` }}
                   ></div>
                 </div>
@@ -690,7 +690,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
               {/* Scanning status */}
               {isVerifying ? (
                 <div className="p-4 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center gap-3 animate-pulse">
-                  <RefreshCw className="w-5 h-5 text-[#0176d3] animate-spin" />
+                  <RefreshCw className="w-5 h-5 text-[#0878e8] animate-spin" />
                   <div>
                     <div className="font-bold">Verifying Merkle Tree & Parent Hashes...</div>
                     <div className="text-[11px] text-blue-700">Checking mathematical chain consistency across {auditLogs.length} audit blocks.</div>
@@ -793,7 +793,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsVerifyModalOpen(false)}
-                className="px-4 py-1.5 text-xs font-semibold text-white bg-[#0176d3] hover:bg-[#0060b2] rounded-md transition-colors shadow-xs"
+                className="px-4 py-1.5 text-xs font-semibold text-white bg-[#0878e8] hover:bg-[#0669c9] rounded-md transition-colors shadow-xs"
               >
                 Close Certificate
               </button>
@@ -811,7 +811,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
             {/* Header */}
             <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-[#0176d3]/30 border border-[#0176d3]/60 flex items-center justify-center text-blue-300">
+                <div className="w-9 h-9 rounded-lg bg-[#0878e8]/30 border border-[#0878e8]/60 flex items-center justify-center text-blue-300">
                   <FileText className="w-5 h-5" />
                 </div>
                 <div>
@@ -852,7 +852,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
               {/* Operator Identity & Signature */}
               <div className="p-4 bg-blue-50/50 rounded-lg border border-blue-200 space-y-2">
                 <div className="flex items-center gap-2 text-xs font-bold text-blue-950 uppercase tracking-wider">
-                  <User className="w-4 h-4 text-[#0176d3]" />
+                  <User className="w-4 h-4 text-[#0878e8]" />
                   21 CFR Part 11 Electronic Operator Authentication
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
@@ -887,7 +887,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
                 <div className="space-y-2">
                   <div className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                     <Activity className="w-4 h-4 text-slate-500" />
-                    Field Modification Snapshot: <span className="font-mono text-[#0176d3]">{selectedLog.fieldName || 'data'}</span>
+                    Field Modification Snapshot: <span className="font-mono text-[#0878e8]">{selectedLog.fieldName || 'data'}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-xs font-mono">
                     <div className="p-3 bg-rose-50 rounded-lg border border-rose-200">
@@ -963,7 +963,7 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedLog(null)}
-                className="px-4 py-1.5 text-xs font-semibold text-white bg-[#0176d3] hover:bg-[#0060b2] rounded-md transition-colors shadow-xs"
+                className="px-4 py-1.5 text-xs font-semibold text-white bg-[#0878e8] hover:bg-[#0669c9] rounded-md transition-colors shadow-xs"
               >
                 Done
               </button>

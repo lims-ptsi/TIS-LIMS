@@ -10,6 +10,10 @@ export interface DocumentSideDrawerProps {
   panelClassName?: string;
   /** Slightly tighter header for narrow panels (e.g. label preview). */
   compactHeader?: boolean;
+  /** Extra actions shown beside the default Print / close controls. */
+  headerActions?: React.ReactNode;
+  /** Optional class on the fixed overlay root (e.g. print-modal-backdrop). */
+  rootClassName?: string;
   children: React.ReactNode;
 }
 
@@ -20,6 +24,8 @@ export function DocumentSideDrawer({
   onPrint,
   panelClassName = 'sm:w-[min(62vw,1200px)]',
   compactHeader = false,
+  headerActions,
+  rootClassName,
   children,
 }: DocumentSideDrawerProps) {
   const [closing, setClosing] = useState(false);
@@ -68,7 +74,7 @@ export function DocumentSideDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex justify-end"
+      className={`fixed inset-0 z-[60] flex justify-end print:static print:inset-auto print:block print:w-full print:p-0 print:bg-white print:min-h-0 print:h-auto ${rootClassName || ''}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="document-side-drawer-title"
@@ -82,7 +88,7 @@ export function DocumentSideDrawer({
         onClick={requestClose}
       />
       <div
-        className={`relative w-full ${panelClassName} h-full bg-white shadow-2xl flex flex-col border-l border-[#d8dde6] will-change-transform ${
+        className={`relative w-full ${panelClassName} h-full bg-white shadow-2xl flex flex-col border-l border-[#d8dde6] will-change-transform print:relative print:w-full print:max-w-none print:h-auto print:min-h-0 print:shadow-none print:border-0 print:transform-none ${
           closing ? 'patient-drawer-panel-out' : 'patient-drawer-panel-in'
         }`}
       >
@@ -102,7 +108,8 @@ export function DocumentSideDrawer({
               <p className={`text-slate-600 mt-0.5 truncate ${compactHeader ? 'text-xs' : 'text-sm'}`}>{subtitle}</p>
             ) : null}
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            {headerActions}
             {onPrint ? (
               <button
                 type="button"
@@ -125,7 +132,9 @@ export function DocumentSideDrawer({
             </button>
           </div>
         </div>
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col print:overflow-visible print:min-h-0 print:h-auto print:flex-none">
+          {children}
+        </div>
       </div>
     </div>
   );

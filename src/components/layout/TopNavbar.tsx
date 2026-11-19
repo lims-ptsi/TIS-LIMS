@@ -17,6 +17,9 @@ import { LimsNotification, InstrumentDevice, Sample } from '../../types/lims';
 interface TopNavbarProps {
   currentTab: string;
   tabs: { id: string; label: string }[];
+  /** When true, horizontal tab strip is hidden (sidebar owns navigation). */
+  sidebarNav?: boolean;
+  onOpenMobileNav?: () => void;
   showCreate?: boolean;
   showAdminTools?: boolean;
   onSelectTab: (tab: string) => void;
@@ -39,6 +42,8 @@ interface TopNavbarProps {
 export const TopNavbar: React.FC<TopNavbarProps> = ({
   currentTab,
   tabs,
+  sidebarNav = false,
+  onOpenMobileNav,
   showCreate = false,
   showAdminTools = false,
   onSelectTab,
@@ -61,27 +66,35 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   const navItems = tabs;
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-white border-b border-[#d8dde6] shadow-sm print:hidden">
+    <header className="sticky top-0 z-40 w-full shrink-0 bg-white border-b border-[#d8dde6] shadow-sm print:hidden">
       {/* Top Global Utility Row */}
-      <div className="flex items-center justify-between px-4 py-1.5 border-b border-[#e5e7eb] bg-white">
-        {/* Left: 9-Dot Launcher & App Name */}
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setShowAppLauncher(!showAppLauncher)}
+      <div className="flex items-center justify-between px-4 py-2 bg-white">
+        {/* Left: mobile menu / brand when no sidebar */}
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={() => (sidebarNav ? onOpenMobileNav?.() : setShowAppLauncher(!showAppLauncher))}
             className="lg:hidden p-1.5 rounded hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
-            title="App Launcher"
+            title="Menu"
           >
             <Grid className="w-5 h-5 text-slate-700" />
           </button>
 
-          <button
-            type="button"
-            className="flex items-center cursor-pointer"
-            onClick={() => onSelectTab(tabs[0]?.id || 'home')}
-            title="LAB-TIS"
-          >
-            <LabTisBrand markClassName="h-11 w-auto" showName={false} />
-          </button>
+          {!sidebarNav ? (
+            <button
+              type="button"
+              className="flex items-center cursor-pointer"
+              onClick={() => onSelectTab(tabs[0]?.id || 'home')}
+              title="LAB-TIS"
+            >
+              <LabTisBrand markClassName="h-11 w-auto" showName={false} />
+            </button>
+          ) : (
+            <span className="hidden sm:block text-sm font-semibold text-slate-800 truncate">
+              {currentTab === 'sample-detail'
+                ? 'Patient & specimen'
+                : navItems.find((t) => t.id === currentTab)?.label || 'Lab-TIS'}
+            </span>
+          )}
         </div>
 
         {/* Center: Global Search */}
@@ -93,7 +106,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               placeholder="Search patients, case numbers, barcodes, tests..."
               value={globalSearch}
               onChange={(e) => onGlobalSearchChange(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 text-xs rounded-md bg-white border border-[#d8dde6] text-slate-800 placeholder-slate-400 focus:border-[#0176d3] focus:ring-1 focus:ring-[#0176d3] focus:outline-none transition-all shadow-inner"
+              className="w-full pl-9 pr-4 py-2 text-sm rounded-full bg-white border border-[var(--lims-border)] text-slate-800 placeholder-slate-400 focus:border-[#0878e8] focus:ring-2 focus:ring-[#0878e8]/20 focus:outline-none transition-all"
             />
           </div>
         </div>
@@ -142,36 +155,54 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         </div>
       </div>
 
-      {/* Main Tab Bar Row */}
-      <div className="flex items-center justify-between px-4 bg-white overflow-x-auto text-xs font-medium">
-        <div className="flex items-center">
-          {navItems.map((item) => {
-            const isActive = currentTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => onSelectTab(item.id)}
-                className={`flex items-center gap-1 px-3.5 py-2.5 whitespace-nowrap transition-colors border-b-2 ${
-                  isActive
-                    ? 'text-[#0176d3] border-[#0176d3] font-semibold bg-blue-50/40'
-                    : 'text-slate-700 border-transparent hover:text-[#0176d3] hover:bg-slate-50'
-                }`}
-              >
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Right side edit pencil icon */}
-        {showAdminTools && (
-          <div className="pl-3">
-            <button className="p-1 text-slate-400 hover:text-slate-700" title="Customize Tabs">
-              <Edit3 className="w-3.5 h-3.5" />
-            </button>
+      {!sidebarNav ? (
+        <div className="flex items-center justify-between px-4 bg-white overflow-x-auto text-xs font-medium border-t border-slate-100">
+          <div className="flex items-center">
+            {navItems.map((item) => {
+              const isActive = currentTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onSelectTab(item.id)}
+                  className={`flex items-center gap-1 px-3.5 py-2.5 whitespace-nowrap transition-colors border-b-2 ${
+                    isActive
+                      ? 'text-[#0176d3] border-[#0176d3] font-semibold bg-blue-50/40'
+                      : 'text-slate-700 border-transparent hover:text-[#0176d3] hover:bg-slate-50'
+                  }`}
+                >
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
           </div>
-        )}
-      </div>
+
+          {showAdminTools ? (
+            <div className="pl-3">
+              <button className="p-1 text-slate-400 hover:text-slate-700" title="Customize Tabs">
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!sidebarNav && showAppLauncher ? (
+        <div className="lg:hidden border-t border-slate-200 bg-white px-2 py-2 flex flex-wrap gap-1">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                onSelectTab(item.id);
+                setShowAppLauncher(false);
+              }}
+              className="px-2.5 py-1.5 text-xs rounded-md border border-slate-200 text-slate-700"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </header>
   );
 };

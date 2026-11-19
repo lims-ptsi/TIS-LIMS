@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import {
+  ArrowRight,
   BarChart3,
-  ClipboardList,
   FileDown,
   Filter,
   Layers,
@@ -11,9 +11,12 @@ import {
   TrendingUp,
   Wallet,
   X,
+  type LucideIcon,
 } from 'lucide-react';
 import { LabTestRequisition, Sample } from '../../types/lims';
 import { formatCurrency } from '../../data/examinationCatalog';
+import { LimsWorkspace } from '../common/LimsWorkspace';
+import { DashboardHeroArtwork } from '../common/LimsDashboardArtwork';
 import {
   computeLabAnalytics,
   computeRevenueAnalytics,
@@ -69,36 +72,102 @@ function MiniTable({ rows, emptyLabel }: { rows: CountRow[]; emptyLabel: string 
   return (
     <div className="space-y-2.5">
       {rows.map((row) => (
-        <HorizontalBar key={row.key} label={row.label} count={row.count} max={max} tone="bg-[#0176d3]" />
+        <HorizontalBar key={row.key} label={row.label} count={row.count} max={max} tone="bg-[#0878e8]" />
       ))}
     </div>
   );
 }
 
-function KpiCard({
-  title,
+/** Same metric tile pattern as Home dashboard figures. */
+function HomeMetricCard({
+  label,
   value,
   hint,
-  icon,
-  accent,
+  icon: Icon,
+  iconWrap,
+  iconColor,
+  valueClass = 'text-[var(--lims-navy)]',
 }: {
-  title: string;
+  label: string;
   value: string | number;
-  hint?: string;
-  icon: React.ReactNode;
-  accent: string;
+  hint: string;
+  icon: LucideIcon;
+  iconWrap: string;
+  iconColor: string;
+  valueClass?: string;
 }) {
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-slate-500">{title}</p>
-          <p className="text-2xl font-semibold text-slate-900 tabular-nums mt-0.5">{value}</p>
-          {hint ? <p className="text-[11px] text-slate-500 mt-1">{hint}</p> : null}
+    <article className="lims-card h-full p-4 sm:px-5 sm:py-4 shadow-sm transition-all hover:shadow-md hover:border-[#0878e8]/35">
+      <div className="flex items-center gap-3 sm:gap-4 w-full min-h-[4.5rem]">
+        <span className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${iconWrap}`}>
+          <Icon className={`w-6 h-6 ${iconColor}`} strokeWidth={1.75} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1 pr-2">
+          <p className="text-[11px] sm:text-xs font-bold uppercase tracking-wide text-[var(--lims-navy)] leading-snug">
+            {label}
+          </p>
+          <p className="text-[10px] sm:text-[11px] text-slate-500 mt-1 leading-snug line-clamp-2">{hint}</p>
         </div>
-        <div className={`p-2 rounded-lg ${accent}`}>{icon}</div>
+        <span className={`text-2xl sm:text-[1.75rem] font-bold tabular-nums leading-none shrink-0 ${valueClass}`}>
+          {value}
+        </span>
       </div>
     </article>
+  );
+}
+
+function HomeSectionCard({
+  title,
+  description,
+  children,
+  toolbar,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+  toolbar?: React.ReactNode;
+}) {
+  return (
+    <section className="lims-card overflow-hidden shadow-sm h-full flex flex-col">
+      <div className="px-5 py-4 border-b border-[var(--lims-border)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-[var(--lims-navy)]">{title}</h2>
+          {description ? <p className="text-xs text-slate-500 mt-1">{description}</p> : null}
+        </div>
+        {toolbar ? <div className="shrink-0">{toolbar}</div> : null}
+      </div>
+      <div className="p-5 flex-1 min-h-0">{children}</div>
+    </section>
+  );
+}
+
+function PipelineStageStrip({
+  rows,
+  max,
+}: {
+  rows: { key: string; label: string; count: number; tone: string }[];
+  max: number;
+}) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
+      {rows.map((row) => (
+        <div
+          key={row.key}
+          className="rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-2 text-center"
+        >
+          <p className="text-lg font-bold tabular-nums text-slate-900">{row.count}</p>
+          <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500 mt-0.5 leading-tight">
+            {PIPELINE_SHORT_LABELS[row.key] ?? row.label}
+          </p>
+          <div className="mt-1.5 h-1 rounded-full bg-slate-200 overflow-hidden">
+            <div
+              className={`h-full rounded-full ${row.tone}`}
+              style={{ width: `${max > 0 ? Math.max(6, (row.count / max) * 100) : 0}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -108,6 +177,14 @@ const MAIN_TABS: { id: AnalyticsMainTab; label: string }[] = [
   { id: 'operations', label: 'Operations' },
   { id: 'revenue', label: 'Revenue' },
 ];
+
+const PIPELINE_SHORT_LABELS: Record<string, string> = {
+  info: 'Info desk',
+  cashier: 'Cashier',
+  ready: 'Ready',
+  testing: 'Testing',
+  done: 'Completed',
+};
 
 const REVENUE_PERIODS: { id: RevenueGranularity; label: string }[] = [
   { id: 'daily', label: 'Daily' },
@@ -184,73 +261,90 @@ export const AdvancedAnalyticsView: React.FC<AdvancedAnalyticsViewProps> = ({
 
   const handlePrint = () => window.print();
 
+  const pipelineStrip = pipelineRows.map((row, index) => {
+    const tones = ['bg-amber-400', 'bg-orange-400', 'bg-sky-500', 'bg-[#0878e8]', 'bg-emerald-500'];
+    return { ...row, tone: tones[index] || 'bg-slate-400' };
+  });
+
   return (
     <div className="lims-page-shell space-y-4 analytics-print-root">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between print:hidden">
-        <div>
-          <div className="flex items-center gap-2 text-[#0176d3]">
-            <BarChart3 className="w-5 h-5" />
-            <h1 className="text-lg font-semibold text-slate-900">Advanced analytics &amp; reports</h1>
+      <section className="lims-card relative overflow-hidden border-[var(--lims-border)] bg-gradient-to-br from-white via-white to-sky-50/30 print:hidden">
+        <DashboardHeroArtwork />
+        <div className="relative z-[1] px-5 py-5 sm:px-6 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-[#0878e8] text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-200/50">
+            <BarChart3 className="w-7 h-7" strokeWidth={1.75} aria-hidden />
           </div>
-          <p className="text-sm text-slate-600 mt-1 max-w-2xl">
-            Operational KPIs, request pipeline, examination mix, and volume trends from live desk data.
-            Updated {generatedLabel}.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            Print report pack
-          </button>
-          {onNavigate ? (
-            <button
-              type="button"
-              onClick={() => onNavigate('all-requests')}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#0176d3] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#014486]"
-            >
-              <ClipboardList className="w-3.5 h-3.5" />
-              Open all requests
-            </button>
-          ) : null}
-        </div>
-      </header>
-
-      <div className="print:hidden space-y-3">
-        <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-0.5">
-          {MAIN_TABS.map((tab) => {
-            const active = mainTab === tab.id;
-            return (
+          <div className="min-w-0 flex-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#0878e8] bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
+              Laboratory reporting
+            </span>
+            <h1 className="text-xl sm:text-2xl font-bold text-[var(--lims-navy)] mt-2 tracking-tight">
+              Advanced analytics &amp; reports
+            </h1>
+            <p className="text-sm text-slate-600 mt-1 max-w-2xl">
+              Operational KPIs, pipeline, examination mix, and volume trends from live desk data.
+            </p>
+          </div>
+          <div className="sm:text-right shrink-0 sm:pl-6 border-l border-[var(--lims-border)]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Last updated</p>
+            <p className="text-sm font-semibold text-[var(--lims-navy)] mt-1">{generatedLabel}</p>
+            {onNavigate ? (
               <button
-                key={tab.id}
                 type="button"
-                onClick={() => setMainTab(tab.id)}
-                className={`px-3 py-2 text-xs font-semibold rounded-t-md border-b-2 -mb-px transition-colors cursor-pointer ${
-                  active
-                    ? 'border-[#0176d3] text-[#0176d3] bg-white'
-                    : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
+                onClick={() => onNavigate('all-requests')}
+                className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#0878e8] hover:underline cursor-pointer"
               >
-                {tab.label}
+                Open all requests
+                <ArrowRight className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
-            );
-          })}
+            ) : null}
+          </div>
         </div>
+      </section>
 
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="print:hidden">
+        <LimsWorkspace className="overflow-visible">
+          <div className="px-5 py-4 border-b border-[var(--lims-border)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-[var(--lims-navy)]">Report scope</h2>
+              <p className="text-xs text-slate-500 mt-1">
+                {filteredRequisitions.length} of {requisitions.length} requests match filters
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1 p-1 rounded-lg bg-[#f4f7fb] border border-[var(--lims-border)]">
+                {MAIN_TABS.map((tab) => {
+                  const active = mainTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setMainTab(tab.id)}
+                      className={`px-3 py-1.5 text-xs rounded-md font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                        active
+                          ? 'bg-[#0878e8] text-white shadow-sm'
+                          : 'bg-transparent text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+        <div className="lims-card border-0 shadow-none rounded-none overflow-hidden border-t-0">
           <button
             type="button"
             onClick={() => setFiltersOpen((o) => !o)}
             className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left hover:bg-slate-50 cursor-pointer"
           >
             <span className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <Filter className="w-4 h-4 text-[#0176d3]" />
+              <Filter className="w-4 h-4 text-[#0878e8]" />
               Advanced filters
               {activeFilterCount > 0 ? (
-                <span className="text-[10px] font-bold uppercase tracking-wide bg-[#0176d3] text-white px-1.5 py-0.5 rounded">
+                <span className="text-[10px] font-bold uppercase tracking-wide bg-[#0878e8] text-white px-1.5 py-0.5 rounded">
                   {activeFilterCount} active
                 </span>
               ) : null}
@@ -358,73 +452,98 @@ export const AdvancedAnalyticsView: React.FC<AdvancedAnalyticsViewProps> = ({
             </div>
           ) : null}
         </div>
+        </LimsWorkspace>
       </div>
+
+      <button
+        type="button"
+        onClick={handlePrint}
+        className="relative overflow-hidden w-full text-left rounded-xl bg-gradient-to-r from-[var(--lims-navy)] via-[#0c2d55] to-[#0a2240] hover:from-[#0c2d55] hover:to-[#081a33] text-white shadow-md px-5 py-4 flex items-center justify-between gap-4 cursor-pointer border border-[#0a2240] print:hidden"
+      >
+        <span className="relative z-[1] flex items-center gap-3 min-w-0">
+          <span className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+            <Printer className="w-5 h-5 text-sky-200" strokeWidth={1.75} />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-base font-semibold">Print report pack</span>
+            <span className="block text-sm text-slate-300 mt-0.5">
+              Management summary of KPIs, pipeline, and examination mix for the current filter.
+            </span>
+          </span>
+        </span>
+        <span className="relative z-[1] inline-flex items-center gap-2 text-sm font-semibold bg-white text-[var(--lims-navy)] px-4 py-2 rounded-lg shrink-0 shadow-sm">
+          Print
+          <ArrowRight className="w-4 h-4" />
+        </span>
+      </button>
 
       {revenueSnapshot ? (
         <section className="space-y-3">
-          <div className="flex flex-wrap gap-1 print:hidden">
-            {REVENUE_PERIODS.map((p) => {
-              const active = revenuePeriod === p.id;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setRevenuePeriod(p.id)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-md cursor-pointer ${
-                    active
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
-            <KpiCard
-              title="Gross revenue (filtered)"
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <HomeMetricCard
+              label="Gross revenue"
               value={formatCurrency(revenueSnapshot.totalAmount)}
               hint={`${revenueSnapshot.totalRequests} billable request(s) in range`}
-              icon={<Wallet className="w-4 h-4 text-emerald-700" />}
-              accent="bg-emerald-50"
+              icon={Wallet}
+              iconWrap="bg-emerald-50"
+              iconColor="text-emerald-600"
+              valueClass="text-emerald-700"
             />
-            <KpiCard
-              title="Avg revenue / request"
+            <HomeMetricCard
+              label="Avg revenue / request"
               value={
                 revenueSnapshot.totalRequests > 0
                   ? formatCurrency(revenueSnapshot.totalAmount / revenueSnapshot.totalRequests)
                   : formatCurrency(0)
               }
               hint="Examination tariff by patient category"
-              icon={<TrendingUp className="w-4 h-4 text-[#0176d3]" />}
-              accent="bg-sky-50"
+              icon={TrendingUp}
+              iconWrap="bg-sky-50"
+              iconColor="text-[#0878e8]"
             />
-            <KpiCard
-              title="Requests in filter"
+            <HomeMetricCard
+              label="Requests in filter"
               value={filteredRequisitions.length}
               hint={`Of ${requisitions.length} total in system`}
-              icon={<Layers className="w-4 h-4 text-slate-700" />}
-              accent="bg-slate-100"
+              icon={Layers}
+              iconWrap="bg-slate-100"
+              iconColor="text-slate-700"
             />
           </div>
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-emerald-600" />
-              {revenuePeriod === 'daily'
-                ? `Daily revenue (last ${REVENUE_DAILY_DEFAULT_DAYS} days in filter)`
+          <HomeSectionCard
+            title={
+              revenuePeriod === 'daily'
+                ? `Daily revenue (last ${REVENUE_DAILY_DEFAULT_DAYS} days)`
                 : revenuePeriod === 'weekly'
-                  ? 'Weekly revenue (Mon–Sun)'
+                  ? 'Weekly revenue'
                   : revenuePeriod === 'monthly'
                     ? 'Monthly revenue'
-                    : 'Annual revenue'}
-            </h2>
-            <p className="text-[11px] text-slate-500 mt-1 mb-1">
-              {filters.dateFrom} → {filters.dateTo}. Sum of catalog examination fees by request date. Corporate
-              uses HIS tariff; OPD uses standard price
-              {filters.opdWithOrOnly ? ' (paid OPD only).' : '.'}
-            </p>
-            <p className="text-[11px] text-emerald-800 font-medium mb-4 tabular-nums">
+                    : 'Annual revenue'
+            }
+            description={`${filters.dateFrom} → ${filters.dateTo}. Catalog fees by request date.`}
+            toolbar={
+              <div className="flex items-center gap-1 p-1 rounded-lg bg-[#f4f7fb] border border-[var(--lims-border)]">
+                {REVENUE_PERIODS.map((p) => {
+                  const active = revenuePeriod === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setRevenuePeriod(p.id)}
+                      className={`px-3 py-1.5 text-xs rounded-md font-semibold transition-all cursor-pointer ${
+                        active
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'bg-transparent text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            }
+          >
+            <p className="text-[11px] text-emerald-800 font-medium mb-4 tabular-nums -mt-1">
               {revenuePeriod === 'daily' ? (
                 <>
                   Last {REVENUE_DAILY_DEFAULT_DAYS} days in chart:{' '}
@@ -490,121 +609,112 @@ export const AdvancedAnalyticsView: React.FC<AdvancedAnalyticsViewProps> = ({
                 </div>
               </>
             )}
-          </article>
+          </HomeSectionCard>
         </section>
       ) : null}
 
       {mainTab === 'operations' ? (
       <>
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-        <KpiCard
-          title="Total requests"
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <HomeMetricCard
+          label="Total requests"
           value={snapshot.totals.all}
           hint={`${snapshot.thisWeek} this week · ${snapshot.thisMonth} this month`}
-          icon={<Layers className="w-4 h-4 text-slate-700" />}
-          accent="bg-slate-100"
+          icon={Layers}
+          iconWrap="bg-slate-100"
+          iconColor="text-slate-700"
         />
-        <KpiCard
-          title="Completion rate"
+        <HomeMetricCard
+          label="Completion rate"
           value={`${snapshot.completionRatePct}%`}
           hint={`${snapshot.totals.completed} completed of ${snapshot.totals.all}`}
-          icon={<TrendingUp className="w-4 h-4 text-emerald-700" />}
-          accent="bg-emerald-50"
+          icon={TrendingUp}
+          iconWrap="bg-emerald-50"
+          iconColor="text-emerald-600"
+          valueClass="text-emerald-600"
         />
-        <KpiCard
-          title="Avg exams / request"
+        <HomeMetricCard
+          label="Avg exams / request"
           value={snapshot.avgExamsPerRequest}
           hint="Selected examinations per case"
-          icon={<PieChart className="w-4 h-4 text-violet-700" />}
-          accent="bg-violet-50"
+          icon={PieChart}
+          iconWrap="bg-violet-50"
+          iconColor="text-violet-600"
         />
-        <KpiCard
-          title="Specimens on file"
+        <HomeMetricCard
+          label="Specimens on file"
           value={snapshot.specimens.total}
           hint={`${snapshot.specimens.accessioned} accessioned · ${snapshot.specimens.inTestingStatus} active`}
-          icon={<TestTubes className="w-4 h-4 text-sky-700" />}
-          accent="bg-sky-50"
+          icon={TestTubes}
+          iconWrap="bg-sky-50"
+          iconColor="text-sky-600"
         />
       </section>
 
-      <section className="grid lg:grid-cols-2 gap-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-[#0176d3]" />
-            Request pipeline
-          </h2>
-          <p className="text-[11px] text-slate-500 mt-1 mb-3">
-            Where open work sits from intake through completion (includes completed for context).
-          </p>
-          <div className="space-y-2.5">
-            {pipelineRows.map((row, index) => {
-              const tones = [
-                'bg-amber-400',
-                'bg-orange-400',
-                'bg-sky-500',
-                'bg-[#0176d3]',
-                'bg-emerald-500',
-              ];
-              return (
+      <section className="grid xl:grid-cols-12 gap-3 items-stretch">
+        <div className="xl:col-span-7">
+          <HomeSectionCard title="Request pipeline" description="Open work from intake through completion.">
+            <PipelineStageStrip rows={pipelineStrip} max={pipelineMax} />
+            <div className="space-y-2.5">
+              {pipelineRows.map((row, index) => (
                 <HorizontalBar
                   key={row.key}
                   label={row.label}
                   count={row.count}
                   max={pipelineMax}
-                  tone={tones[index] || 'bg-slate-400'}
+                  tone={pipelineStrip[index]?.tone || 'bg-slate-400'}
                 />
-              );
-            })}
-          </div>
-          {snapshot.pipeline.other > 0 ? (
-            <p className="text-[11px] text-slate-500 mt-3">
-              Other / uncategorized: {snapshot.pipeline.other}
-            </p>
-          ) : null}
-        </article>
-
-        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-[#0176d3]" />
-            Daily request volume (14 days)
-          </h2>
-          <p className="text-[11px] text-slate-500 mt-1 mb-3">New lab test requests by request date.</p>
-          <div className="flex items-end gap-1 h-36 pt-2">
-            {snapshot.dailyVolume.map((day) => {
-              const h = day.count > 0 ? Math.max(8, (day.count / volumeMax) * 100) : 4;
-              return (
-                <div key={day.day} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-                  <span className="text-[9px] tabular-nums text-slate-500">{day.count || ''}</span>
-                  <div
-                    className={`w-full rounded-t ${day.count ? 'bg-[#0176d3]' : 'bg-slate-200'}`}
-                    style={{ height: `${h}%` }}
-                    title={`${day.label}: ${day.count}`}
-                  />
-                  <span className="text-[8px] text-slate-400 truncate w-full text-center">{day.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </article>
+              ))}
+            </div>
+            {snapshot.pipeline.other > 0 ? (
+              <p className="text-[11px] text-slate-500 mt-3">Other / uncategorized: {snapshot.pipeline.other}</p>
+            ) : null}
+          </HomeSectionCard>
+        </div>
+        <div className="xl:col-span-5">
+          <HomeSectionCard title="Daily request volume" description="New requests by date — last 14 days.">
+            <div className="overflow-x-auto -mx-1 px-1">
+              <div className="flex items-end gap-1.5 h-40 pt-2 min-w-[360px]">
+                {snapshot.dailyVolume.map((day) => {
+                  const h = day.count > 0 ? Math.max(10, (day.count / volumeMax) * 100) : 6;
+                  return (
+                    <div key={day.day} className="flex flex-col items-center gap-1 w-9 shrink-0">
+                      <span className="text-[9px] tabular-nums font-medium text-slate-600 min-h-[12px]">
+                        {day.count || ''}
+                      </span>
+                      <div className="w-full h-28 flex items-end">
+                        <div
+                          className={`w-full rounded-t-md ${day.count ? 'bg-[#0878e8]' : 'bg-slate-200'}`}
+                          style={{ height: `${h}%` }}
+                          title={`${day.label}: ${day.count}`}
+                        />
+                      </div>
+                      <span
+                        className="text-[8px] font-medium text-slate-500 text-center leading-tight w-full"
+                        title={day.label}
+                      >
+                        {day.label.replace(/^\d{4}-/, '')}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </HomeSectionCard>
+        </div>
       </section>
 
-      <section className="grid lg:grid-cols-3 gap-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">By patient category</h2>
-          <p className="text-[11px] text-slate-500 mt-1 mb-3">Share of all requests.</p>
+      <section className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+        <HomeSectionCard title="By patient category" description="Share of filtered requests.">
           <MiniTable rows={snapshot.byCategory} emptyLabel="No requests yet." />
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">By priority</h2>
-          <p className="text-[11px] text-slate-500 mt-1 mb-3">Routine vs stat workload.</p>
+        </HomeSectionCard>
+        <HomeSectionCard title="By priority" description="Routine vs stat workload.">
           <MiniTable rows={snapshot.byPriority} emptyLabel="No priority data." />
-        </article>
-        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-            <Wallet className="w-4 h-4 text-amber-600" />
-            OPD payment desk
-          </h2>
-          <p className="text-[11px] text-slate-500 mt-1 mb-3">Official receipt coverage for OPD cases.</p>
+        </HomeSectionCard>
+        <HomeSectionCard
+          title="OPD payment desk"
+          description="Official receipt coverage for OPD cases."
+        >
           <ul className="space-y-2 text-[11px]">
             <li className="flex justify-between border-b border-slate-100 pb-2">
               <span className="uppercase text-slate-600">OPD requests</span>
@@ -621,21 +731,20 @@ export const AdvancedAnalyticsView: React.FC<AdvancedAnalyticsViewProps> = ({
               <span className="font-semibold tabular-nums text-amber-700">{snapshot.opd.awaitingOr}</span>
             </li>
           </ul>
-        </article>
+        </HomeSectionCard>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">Top examinations ordered</h2>
-        <p className="text-[11px] text-slate-500 mt-1 mb-3">
-          Most frequently selected tests across all requests (line items, not unique patients).
-        </p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[11px]">
+      <HomeSectionCard
+        title="Top examinations ordered"
+        description="Most frequently selected tests (line items, not unique patients)."
+      >
+        <div className="overflow-x-auto -mx-1">
+          <table className="w-full min-w-[28rem] text-left text-[11px]">
             <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wide text-slate-500 border-b border-slate-200">
-                <th className="py-2 pr-4 font-normal">Examination</th>
-                <th className="py-2 pr-4 font-normal w-24">Count</th>
-                <th className="py-2 font-normal">Share</th>
+              <tr className="bg-[#f8fafc] text-[11px] font-semibold uppercase tracking-wide text-slate-500 border-b border-[var(--lims-border)]">
+                <th className="px-3 py-3 font-semibold">Examination</th>
+                <th className="px-3 py-3 font-semibold w-24">Count</th>
+                <th className="px-3 py-3 font-semibold">Share</th>
               </tr>
             </thead>
             <tbody>
@@ -670,15 +779,15 @@ export const AdvancedAnalyticsView: React.FC<AdvancedAnalyticsViewProps> = ({
             </tbody>
           </table>
         </div>
-      </section>
+      </HomeSectionCard>
 
       <section className="grid lg:grid-cols-2 gap-3 print:break-inside-avoid">
-        <article className="rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
-          <div className="flex items-center gap-2 text-slate-800">
-            <FileDown className="w-4 h-4" />
-            <h2 className="text-sm font-semibold">Operational summary report</h2>
+        <article className="lims-card border-dashed border-[var(--lims-border)] bg-gradient-to-br from-slate-50 to-white overflow-hidden">
+          <div className="px-5 py-4 border-b border-[var(--lims-border)] bg-white/80">
+            <h2 className="text-base font-semibold text-[var(--lims-navy)]">Operational summary</h2>
           </div>
-          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+          <div className="p-5">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
             <div>
               <dt className="uppercase text-slate-500">Active pipeline</dt>
               <dd className="font-semibold text-slate-900">
@@ -706,11 +815,11 @@ export const AdvancedAnalyticsView: React.FC<AdvancedAnalyticsViewProps> = ({
             <li>Use Payments when OPD awaiting cashier exceeds daily target.</li>
             <li>Testing queue depth should align with in-testing pipeline count.</li>
           </ul>
+          </div>
         </article>
 
-        <article className="rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4">
-          <h2 className="text-sm font-semibold text-slate-800">Status distribution</h2>
-          <div className="mt-3 space-y-2">
+        <HomeSectionCard title="Status distribution" description="Submitted through completed.">
+          <div className="space-y-2 -mt-1">
             {statusRows.map((row) => (
               <HorizontalBar
                 key={row.key}
@@ -723,13 +832,13 @@ export const AdvancedAnalyticsView: React.FC<AdvancedAnalyticsViewProps> = ({
                     : row.key === 'CANCELLED'
                       ? 'bg-slate-400'
                       : row.key === 'IN_TESTING'
-                        ? 'bg-[#0176d3]'
+                        ? 'bg-[#0878e8]'
                         : 'bg-amber-400'
                 }
               />
             ))}
           </div>
-        </article>
+        </HomeSectionCard>
       </section>
       </>
       ) : null}

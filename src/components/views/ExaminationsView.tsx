@@ -473,15 +473,15 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
     <div className="lims-page-shell text-slate-900">
       
       {/* 1. Header Row */}
-      <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="lims-card p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3] shadow-xs">
+          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs">
             <FlaskConical className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500 font-medium">Laboratory Master Setup</span>
-              <span className="text-[10px] bg-blue-50 text-[#0176d3] px-2 py-0.5 rounded font-mono font-bold border border-blue-200">
+              <span className="text-[10px] bg-blue-50 text-[#0878e8] px-2 py-0.5 rounded font-mono font-bold border border-blue-200">
                 MASTER CATALOG &amp; CORPORATE TARIFFS
               </span>
             </div>
@@ -531,7 +531,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
           <button
             type="button"
             onClick={handleOpenAdd}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0176d3] hover:bg-[#0060b2] text-white text-xs font-bold rounded shadow-xs transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0878e8] hover:bg-[#0669c9] text-white text-xs font-bold rounded shadow-xs transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Add Examination</span>
@@ -541,10 +541,10 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
 
       {/* 2. Compact Metrics Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white border border-[#d8dde6] rounded-md p-2.5 shadow-2xs">
+        <div className="lims-card p-2.5 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-[11px] font-semibold uppercase">Total Catalog</span>
-            <FlaskConical className="w-3.5 h-3.5 text-[#0176d3]" />
+            <FlaskConical className="w-3.5 h-3.5 text-[#0878e8]" />
           </div>
           <div className="text-lg font-bold text-slate-900 mt-0.5 font-mono">
             {metrics.total} Tests
@@ -558,7 +558,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
           </div>
         </div>
 
-        <div className="bg-white border border-[#d8dde6] rounded-md p-2.5 shadow-2xs">
+        <div className="lims-card p-2.5 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-[11px] font-semibold uppercase">Form Assignment</span>
             <FileText className="w-3.5 h-3.5 text-purple-600" />
@@ -573,7 +573,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
           </div>
         </div>
 
-        <div className="bg-white border border-[#d8dde6] rounded-md p-2.5 shadow-2xs">
+        <div className="lims-card p-2.5 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-[11px] font-semibold uppercase">TRF Active Status</span>
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -586,7 +586,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
           </div>
         </div>
 
-        <div className="bg-white border border-[#d8dde6] rounded-md p-2.5 shadow-2xs">
+        <div className="lims-card p-2.5 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-[11px] font-semibold uppercase">Corporate Tier</span>
             <Tag className="w-3.5 h-3.5 text-amber-600" />
@@ -601,7 +601,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
       </div>
 
       {/* 3. Filter Controls & Search */}
-      <div className="bg-white border border-[#d8dde6] rounded-md p-3 shadow-sm space-y-2.5">
+      <div className="lims-card p-3 shadow-sm space-y-2.5">
         {/* Row 1: Search & Filter Controls */}
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
           {/* Search Input */}
@@ -612,7 +612,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
               placeholder="Search by code, test name, form, specimen..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-8 py-1.5 text-xs rounded border border-[#d8dde6] bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#0176d3] focus:ring-1 focus:ring-[#0176d3]"
+              className="w-full pl-9 pr-8 py-1.5 text-xs rounded border border-[#d8dde6] bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#0878e8] focus:ring-1 focus:ring-[#0878e8]"
             />
             {searchQuery && (
               <button
@@ -632,7 +632,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
               <select
                 value={formFilter}
                 onChange={(e) => setFormFilter(e.target.value)}
-                className="px-2.5 py-1.5 text-xs rounded border border-[#d8dde6] bg-white text-slate-700 focus:outline-none focus:border-[#0176d3] font-medium cursor-pointer"
+                className="px-2.5 py-1.5 text-xs rounded border border-[#d8dde6] bg-white text-slate-700 focus:outline-none focus:border-[#0878e8] font-medium cursor-pointer"
               >
                 <option value="ALL">All Forms &amp; Send Out ({schemePool.length})</option>
                 <optgroup label="10 Standard In-House Forms">
@@ -732,7 +732,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="px-2.5 py-1.5 text-xs rounded border border-[#d8dde6] bg-white text-slate-700 focus:outline-none focus:border-[#0176d3] font-medium cursor-pointer"
+                className="px-2.5 py-1.5 text-xs rounded border border-[#d8dde6] bg-white text-slate-700 focus:outline-none focus:border-[#0878e8] font-medium cursor-pointer"
               >
                 <option value="CODE">Sort by: Code</option>
                 <option value="NAME">Sort by: Name (A-Z)</option>
@@ -753,7 +753,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
             onClick={() => setActiveCategory('ALL')}
             className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
               activeCategory === 'ALL'
-                ? 'bg-[#0176d3] text-white shadow-xs'
+                ? 'bg-[#0878e8] text-white shadow-xs'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
@@ -777,7 +777,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                 onClick={() => setActiveCategory(cat)}
                 className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
                   isSelected
-                    ? 'bg-[#0176d3] text-white shadow-xs'
+                    ? 'bg-[#0878e8] text-white shadow-xs'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
@@ -794,7 +794,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
       </div>
 
       {/* 4. Main Examination Catalog Table */}
-      <div className="bg-white border border-[#d8dde6] rounded-md shadow-sm overflow-hidden">
+      <div className="lims-card shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
@@ -834,7 +834,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                     {/* 1. Code & Corporate Code */}
                     <td className="py-2 px-3 whitespace-nowrap">
                       <div className="flex flex-col gap-0.5">
-                        <span className="font-mono font-extrabold text-xs text-[#0176d3] bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200 self-start">
+                        <span className="font-mono font-extrabold text-xs text-[#0878e8] bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200 self-start">
                           {priceSchemeFilter === 'CORPORATE' && exam.corporateCode
                             ? exam.corporateCode
                             : exam.code}
@@ -892,7 +892,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                         <select
                           value={currentForm}
                           onChange={(e) => handleAssignForm(exam, e.target.value as AssignedFormType)}
-                          className={`text-[11px] font-semibold py-1 px-2 rounded border cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#0176d3] transition-colors ${
+                          className={`text-[11px] font-semibold py-1 px-2 rounded border cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#0878e8] transition-colors ${
                             isSendOut
                               ? 'bg-amber-50 text-amber-900 border-amber-300 font-bold'
                               : 'bg-white text-slate-800 border-slate-300 hover:border-slate-400'
@@ -1011,14 +1011,14 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                             className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors cursor-pointer"
                             title="Configure Result Template & Parameters"
                           >
-                            <Sliders className="w-3.5 h-3.5 text-[#0176d3]" />
+                            <Sliders className="w-3.5 h-3.5 text-[#0878e8]" />
                           </button>
                         )}
 
                         <button
                           type="button"
                           onClick={() => handleOpenEdit(exam)}
-                          className="p-1 text-slate-600 hover:text-[#0176d3] hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                          className="p-1 text-slate-600 hover:text-[#0878e8] hover:bg-blue-50 rounded transition-colors cursor-pointer"
                           title="Edit Full Examination Details"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
@@ -1057,7 +1057,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                 setStatusFilter('ALL');
                 setPriceSchemeFilter('ALL');
               }}
-              className="mt-2 px-3 py-1.5 bg-blue-50 text-[#0176d3] hover:bg-blue-100 rounded text-xs font-semibold cursor-pointer"
+              className="mt-2 px-3 py-1.5 bg-blue-50 text-[#0878e8] hover:bg-blue-100 rounded text-xs font-semibold cursor-pointer"
             >
               Reset Filters
             </button>
@@ -1090,12 +1090,12 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
       {/* ======================================================== */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-hidden animate-fadeIn">
-          <div className="bg-white border border-[#d8dde6] rounded-xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-slate-900">
+          <div className="lims-card rounded-xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-slate-900">
             
             {/* Modal Header */}
             <div className="px-5 py-3.5 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3] shadow-xs shrink-0">
+                <div className="w-8 h-8 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs shrink-0">
                   <Edit3 className="w-4 h-4" />
                 </div>
                 <div>
@@ -1103,7 +1103,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                     EDIT EXAMINATION DETAILS &amp; PRICING
                   </h2>
                   <p className="text-[11px] text-slate-500 leading-tight">
-                    Code: <strong className="font-mono text-[#0176d3]">{originalCodeForEdit}</strong> · {selectedExamForEdit?.name}
+                    Code: <strong className="font-mono text-[#0878e8]">{originalCodeForEdit}</strong> · {selectedExamForEdit?.name}
                   </p>
                 </div>
               </div>
@@ -1137,7 +1137,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                     required
                     value={formCode}
                     onChange={(e) => setFormCode(e.target.value.toUpperCase())}
-                    className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono font-bold text-xs uppercase focus:outline-none focus:border-[#0176d3]"
+                    className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono font-bold text-xs uppercase focus:outline-none focus:border-[#0878e8]"
                   />
                 </div>
 
@@ -1164,7 +1164,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value as ExaminationCategory)}
-                    className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-semibold text-xs bg-white focus:outline-none focus:border-[#0176d3] cursor-pointer"
+                    className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-semibold text-xs bg-white focus:outline-none focus:border-[#0878e8] cursor-pointer"
                   >
                     {EXAMINATION_CATEGORIES.map((cat) => (
                       <option key={cat} value={cat}>
@@ -1186,7 +1186,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                   value={formName}
                   onChange={(e) => setFormName(e.target.value.toUpperCase())}
                   placeholder="E.G. COMPLETE BLOOD COUNT WITH PLATELET"
-                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-bold text-xs uppercase focus:outline-none focus:border-[#0176d3]"
+                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-bold text-xs uppercase focus:outline-none focus:border-[#0878e8]"
                 />
               </div>
 
@@ -1218,7 +1218,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                           setFormSendOutPlatform('Hi-Precision Diagnostics');
                         }
                       }}
-                      className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-bold text-xs bg-white focus:outline-none focus:border-[#0176d3] cursor-pointer"
+                      className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-bold text-xs bg-white focus:outline-none focus:border-[#0878e8] cursor-pointer"
                     >
                       <optgroup label="10 Standard In-House Result Forms">
                         {ASSIGNED_FORM_OPTIONS.filter((f) => !f.isSendOut).map((opt) => (
@@ -1292,7 +1292,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                       required
                       value={formPrice}
                       onChange={(e) => setFormPrice(parseFloat(e.target.value) || 0)}
-                      className="w-full pl-7 pr-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono font-bold text-xs focus:outline-none focus:border-[#0176d3]"
+                      className="w-full pl-7 pr-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono font-bold text-xs focus:outline-none focus:border-[#0878e8]"
                     />
                   </div>
                   <span className="text-[10px] text-slate-500 font-mono mt-0.5 block">
@@ -1355,7 +1355,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                     required
                     value={formTatHours}
                     onChange={(e) => setFormTatHours(parseInt(e.target.value, 10) || 4)}
-                    className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono text-xs focus:outline-none focus:border-[#0176d3]"
+                    className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono text-xs focus:outline-none focus:border-[#0878e8]"
                   />
                   <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
                     e.g. 4 for 4h, 24 for 1 day
@@ -1374,7 +1374,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                   value={formSpecimenType}
                   onChange={(e) => setFormSpecimenType(e.target.value)}
                   placeholder="e.g. Whole Blood (K2-EDTA), Clean-Catch Urine, Serum (SST)"
-                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 text-xs focus:outline-none focus:border-[#0176d3]"
+                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 text-xs focus:outline-none focus:border-[#0878e8]"
                 />
               </div>
 
@@ -1388,7 +1388,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                   value={formMethodology}
                   onChange={(e) => setFormMethodology(e.target.value)}
                   placeholder="e.g. Automated 5-Part Cell Counter / Flow Cytometry"
-                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 text-xs focus:outline-none focus:border-[#0176d3]"
+                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 text-xs focus:outline-none focus:border-[#0878e8]"
                 />
               </div>
 
@@ -1402,7 +1402,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                   value={formNotes}
                   onChange={(e) => setFormNotes(e.target.value)}
                   placeholder="Additional parameters reported, special handling, or collection instructions..."
-                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 text-xs focus:outline-none focus:border-[#0176d3]"
+                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 text-xs focus:outline-none focus:border-[#0878e8]"
                 />
               </div>
 
@@ -1421,7 +1421,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                     onChange={(e) => setFormIsActive(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0176d3]"></div>
+                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0878e8]"></div>
                 </label>
               </div>
 
@@ -1440,7 +1440,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
               <button
                 type="submit"
                 form="edit-exam-form"
-                className="flex items-center gap-1.5 px-5 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white rounded-md text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-5 py-2 bg-[#0878e8] hover:bg-[#0669c9] text-white rounded-md text-xs font-bold shadow-sm transition-colors cursor-pointer"
               >
                 <Check className="w-4 h-4" />
                 <span>SAVE CHANGES</span>
@@ -1456,12 +1456,12 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
       {/* ======================================================== */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-hidden animate-fadeIn">
-          <div className="bg-white border border-[#d8dde6] rounded-xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-slate-900">
+          <div className="lims-card rounded-xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-slate-900">
             
             {/* Modal Header */}
             <div className="px-5 py-3.5 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3] shadow-xs shrink-0">
+                <div className="w-8 h-8 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs shrink-0">
                   <Plus className="w-4 h-4" />
                 </div>
                 <div>
@@ -1504,7 +1504,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                     value={formCode}
                     onChange={(e) => setFormCode(e.target.value.toUpperCase())}
                     placeholder="E.G. 1200"
-                    className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono font-bold text-xs uppercase focus:outline-none focus:border-[#0176d3]"
+                    className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono font-bold text-xs uppercase focus:outline-none focus:border-[#0878e8]"
                   />
                 </div>
 
@@ -1530,7 +1530,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value as ExaminationCategory)}
-                    className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-semibold text-xs bg-white focus:outline-none focus:border-[#0176d3] cursor-pointer"
+                    className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-semibold text-xs bg-white focus:outline-none focus:border-[#0878e8] cursor-pointer"
                   >
                     {EXAMINATION_CATEGORIES.map((cat) => (
                       <option key={cat} value={cat}>
@@ -1552,7 +1552,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                   value={formName}
                   onChange={(e) => setFormName(e.target.value.toUpperCase())}
                   placeholder="E.G. VITAMIN D (25-HYDROXY)"
-                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-bold text-xs uppercase focus:outline-none focus:border-[#0176d3]"
+                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-bold text-xs uppercase focus:outline-none focus:border-[#0878e8]"
                 />
               </div>
 
@@ -1584,7 +1584,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                           setFormSendOutPlatform('Hi-Precision Diagnostics');
                         }
                       }}
-                      className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-bold text-xs bg-white focus:outline-none focus:border-[#0176d3] cursor-pointer"
+                      className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-bold text-xs bg-white focus:outline-none focus:border-[#0878e8] cursor-pointer"
                     >
                       <optgroup label="10 Standard In-House Result Forms">
                         {ASSIGNED_FORM_OPTIONS.filter((f) => !f.isSendOut).map((opt) => (
@@ -1658,7 +1658,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                       required
                       value={formPrice}
                       onChange={(e) => setFormPrice(parseFloat(e.target.value) || 0)}
-                      className="w-full pl-7 pr-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono font-bold text-xs focus:outline-none focus:border-[#0176d3]"
+                      className="w-full pl-7 pr-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono font-bold text-xs focus:outline-none focus:border-[#0878e8]"
                     />
                   </div>
                   <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
@@ -1721,7 +1721,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                     required
                     value={formTatHours}
                     onChange={(e) => setFormTatHours(parseInt(e.target.value, 10) || 4)}
-                    className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono text-xs focus:outline-none focus:border-[#0176d3]"
+                    className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 font-mono text-xs focus:outline-none focus:border-[#0878e8]"
                   />
                   <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
                     e.g. 4 for 4h, 24 for 1 day
@@ -1740,7 +1740,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                   value={formSpecimenType}
                   onChange={(e) => setFormSpecimenType(e.target.value)}
                   placeholder="e.g. Whole Blood (K2-EDTA), Clean-Catch Urine, Serum (SST)"
-                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 text-xs focus:outline-none focus:border-[#0176d3]"
+                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 text-xs focus:outline-none focus:border-[#0878e8]"
                 />
               </div>
 
@@ -1754,7 +1754,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                   value={formMethodology}
                   onChange={(e) => setFormMethodology(e.target.value)}
                   placeholder="e.g. Chemiluminescent Immunoassay (CMIA)"
-                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 text-xs focus:outline-none focus:border-[#0176d3]"
+                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 text-xs focus:outline-none focus:border-[#0878e8]"
                 />
               </div>
 
@@ -1768,7 +1768,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                   value={formNotes}
                   onChange={(e) => setFormNotes(e.target.value)}
                   placeholder="Additional parameters reported, special handling, or collection instructions..."
-                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 text-xs focus:outline-none focus:border-[#0176d3]"
+                  className="w-full px-3 py-1.5 rounded border border-[#d8dde6] text-slate-900 text-xs focus:outline-none focus:border-[#0878e8]"
                 />
               </div>
 
@@ -1787,7 +1787,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                     onChange={(e) => setFormIsActive(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0176d3]"></div>
+                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0878e8]"></div>
                 </label>
               </div>
 
@@ -1806,7 +1806,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
               <button
                 type="submit"
                 form="add-exam-form"
-                className="flex items-center gap-1.5 px-5 py-2 bg-[#0176d3] hover:bg-[#0060b2] text-white rounded-md text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-5 py-2 bg-[#0878e8] hover:bg-[#0669c9] text-white rounded-md text-xs font-bold shadow-sm transition-colors cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>ADD TO CATALOG</span>
@@ -1822,7 +1822,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
       {/* ======================================================== */}
       {platformEditExam && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className="bg-white border border-[#d8dde6] rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4 text-slate-900">
+          <div className="lims-card rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4 text-slate-900">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-md bg-amber-100 flex items-center justify-center text-amber-800 shrink-0">
@@ -1913,7 +1913,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
       {/* ======================================================== */}
       {deleteConfirmCode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className="bg-white border border-[#d8dde6] rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4">
+          <div className="lims-card rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4">
             <div className="flex items-center gap-3 text-rose-600">
               <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
                 <Trash2 className="w-5 h-5 text-rose-600" />
@@ -1958,7 +1958,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
       {/* ======================================================== */}
       {isResetConfirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className="bg-white border border-[#d8dde6] rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4">
+          <div className="lims-card rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4">
             <div className="flex items-center gap-3 text-amber-600">
               <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
                 <RotateCcw className="w-5 h-5 text-amber-700" />
@@ -1985,7 +1985,7 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
                   onResetToDefault();
                   setIsResetConfirmOpen(false);
                 }}
-                className="px-4 py-1.5 rounded bg-[#0176d3] hover:bg-[#0060b2] text-white text-xs font-bold shadow-xs cursor-pointer"
+                className="px-4 py-1.5 rounded bg-[#0878e8] hover:bg-[#0669c9] text-white text-xs font-bold shadow-xs cursor-pointer"
               >
                 Reset Catalog
               </button>

@@ -6,6 +6,7 @@ interface PatientNotifyPayload {
   to: string;
   subject?: string;
   body: string;
+  bodyHtml?: string;
   requisitionId?: string;
   requisitionNumber?: string;
   caseNo?: string;
@@ -60,6 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       to: payload.to.trim(),
       subject: payload.subject?.trim() || 'Laboratory results ready for pickup',
       text: payload.body,
+      html: payload.bodyHtml?.trim() || undefined,
     });
     return res.status(200).json({ ok: true });
   } catch (err) {

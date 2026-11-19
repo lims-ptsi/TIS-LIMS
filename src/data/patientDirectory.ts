@@ -123,6 +123,26 @@ export function patientNameKey(req: LabTestRequisition): string {
   return `pat:${name}|${dob}`;
 }
 
+export function findRequisitionForSample(
+  sample: Sample,
+  requisitions: LabTestRequisition[]
+): LabTestRequisition | undefined {
+  const sExt = (sample.externalId || '').trim().toLowerCase();
+  const sPatient = (sample.patientOrSourceName || '').trim().toLowerCase();
+  return requisitions.find((r) => {
+    const rCase = (r.caseNo || r.externalRef || '').trim().toLowerCase();
+    const rNum = (r.requisitionNumber || '').trim().toLowerCase();
+    const rPatient = (r.patientOrSubjectName || '').trim().toLowerCase();
+    return (
+      (rCase && sExt === rCase) ||
+      (rNum && sExt === rNum) ||
+      (rPatient &&
+        sPatient &&
+        (sPatient.includes(rPatient) || rPatient.includes(sPatient)))
+    );
+  });
+}
+
 export function findSampleForRequisition(
   req: LabTestRequisition,
   samples: Sample[]

@@ -19,6 +19,8 @@ const SCREEN_HELP: Record<string, string> = {
   'lab-requests':
     'Information desk intake (select examinations), OPD waiting at cashier, and ready to receive. Receive and accession happen here.',
   'testing-queue': 'Specimens already received — enter and finalize analytical results.',
+  'pickup-management':
+    'Completed results only. Notify the patient, print official reports, and record pickup without opening each case from the testing queue.',
   submissions: 'Same as Request queue (legacy link).',
   payments: 'Only OPD requests are listed. Assign the official receipt after the patient pays. Other categories go to the laboratory and do not appear here.',
   samples: 'Print the specimen QR label for a received request.',

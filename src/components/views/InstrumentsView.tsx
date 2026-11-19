@@ -62,9 +62,9 @@ export const InstrumentsView: React.FC<InstrumentsViewProps> = ({
       />
 
       {/* 2. Header Card */}
-      <div className="bg-white border border-[#d8dde6] rounded-md p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="lims-card p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0176d3] shadow-xs">
+          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs">
             <Cpu className="w-6 h-6" />
           </div>
           <div>
@@ -76,7 +76,7 @@ export const InstrumentsView: React.FC<InstrumentsViewProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={handleSimulateTransmission}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0176d3] hover:bg-[#0060b2] text-white text-xs font-semibold rounded shadow-sm"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0878e8] hover:bg-[#0669c9] text-white text-xs font-semibold rounded shadow-sm"
           >
             <Zap className="w-3.5 h-3.5" />
             Transmit Simulated ASTM Frame
@@ -99,7 +99,7 @@ export const InstrumentsView: React.FC<InstrumentsViewProps> = ({
                   onClick={() => setSelectedInst(inst)}
                   className={`p-3 rounded border cursor-pointer transition-colors text-xs space-y-1 ${
                     isSelected
-                      ? 'border-[#0176d3] bg-blue-50/50 shadow-xs'
+                      ? 'border-[#0878e8] bg-blue-50/50 shadow-xs'
                       : 'border-[#d8dde6] bg-white hover:bg-slate-50'
                   }`}
                 >
@@ -127,7 +127,7 @@ export const InstrumentsView: React.FC<InstrumentsViewProps> = ({
         <div className="lg:col-span-7 lims-card p-5 space-y-3">
           <div className="flex justify-between items-center border-b border-slate-100 pb-2">
             <h3 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-              <Terminal className="w-4 h-4 text-[#0176d3]" />
+              <Terminal className="w-4 h-4 text-[#0878e8]" />
               <span>Live Socket Raw Stream ({selectedInst.protocol})</span>
             </h3>
             <span className="text-[10px] font-mono text-emerald-700 font-bold flex items-center gap-1">
@@ -163,7 +163,7 @@ export const InstrumentsView: React.FC<InstrumentsViewProps> = ({
               />
               <button
                 onClick={handleSimulateTransmission}
-                className="px-3 py-1.5 bg-[#0176d3] hover:bg-[#0060b2] text-white rounded text-xs font-semibold"
+                className="px-3 py-1.5 bg-[#0878e8] hover:bg-[#0669c9] text-white rounded text-xs font-semibold"
               >
                 Push
               </button>

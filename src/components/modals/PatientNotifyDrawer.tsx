@@ -14,6 +14,7 @@ import {
   buildResultsReadyEmail,
   buildResultsReadySmsBody,
   isPatientNotifyWebhookConfigured,
+  isPatientSmsConfigured,
   readPatientNotificationLog,
 } from '../../services/patientNotificationService';
 import { isValidPatientEmail, normalizePatientPhone } from '../../utils/patientContact';
@@ -70,7 +71,10 @@ export function PatientNotifyDrawer({
   const smsBody = buildResultsReadySmsBody(requisition);
   const emailPreview = buildResultsReadyEmail(requisition);
   const webhookLive = isPatientNotifyWebhookConfigured();
+  const smsEnabled = isPatientSmsConfigured();
   const resultsReady = isResultsReleasedForPickup(requisition, samples);
+  const willSendEmail = emailOk;
+  const willSendSms = smsEnabled && Boolean(phoneNorm);
 
   const exams =
     (requisition.kindOfExamination?.length
@@ -83,8 +87,7 @@ export function PatientNotifyDrawer({
     [requisition.id, requisition.resultsReadySmsSentAt, requisition.resultsReadyEmailSentAt]
   );
 
-  const canDispatch =
-    canSend && resultsReady && (phoneNorm || emailOk) && !sending;
+  const canDispatch = canSend && resultsReady && (willSendEmail || willSendSms) && !sending;
 
   const requestClose = () => {
     if (sending || closing) return;
@@ -159,7 +162,9 @@ export function PatientNotifyDrawer({
               Notify patient — results ready
             </h2>
             <p className="text-xs text-slate-600 mt-1">
-              SMS and/or email when the laboratory report is completed and released for pickup.
+              {smsEnabled
+                ? 'SMS and/or email when the laboratory report is completed and released for pickup.'
+                : 'Email pickup alert when results are released. SMS is optional and not set up at the lab yet.'}
             </p>
           </div>
           <button
@@ -218,17 +223,25 @@ export function PatientNotifyDrawer({
                     : 'Complete and validate results before notifying the patient.'
                 }
               />
-              <CheckRow
-                ok={Boolean(phoneNorm)}
-                label="Mobile number (SMS)"
-                detail={
-                  phoneRaw
-                    ? phoneNorm
-                      ? `Will send to ${phoneNorm}`
-                      : 'Number on file is too short — use at least 10 digits (PH mobile).'
-                    : 'No mobile on this request. Add it when creating the lab test request.'
-                }
-              />
+              {!smsEnabled ? (
+                <CheckRow
+                  ok
+                  label="SMS (optional)"
+                  detail="Not configured for this laboratory. Patients are notified by email when an address is on file."
+                />
+              ) : (
+                <CheckRow
+                  ok={Boolean(phoneNorm)}
+                  label="Mobile number (SMS)"
+                  detail={
+                    phoneRaw
+                      ? phoneNorm
+                        ? `Will send to ${phoneNorm}`
+                        : 'Number on file is too short — use at least 10 digits (PH mobile).'
+                      : 'No mobile on this request — email will still be sent if available.'
+                  }
+                />
+              )}
               <CheckRow
                 ok={emailOk}
                 label="Email address"
@@ -261,30 +274,40 @@ export function PatientNotifyDrawer({
             </div>
             {webhookLive ? (
               <p className="text-sm text-slate-700">
-                Production webhook (<code className="text-xs bg-slate-100 px-1 rounded">VITE_PATIENT_NOTIFY_WEBHOOK_URL</code>
-                ) will receive JSON for each channel (SMS / email) for your Twilio, SendGrid, or hospital gateway.
+                Email is sent through the server webhook (
+                <code className="text-xs bg-slate-100 px-1 rounded">/api/patient-notify</code>
+                ) when <code className="text-xs bg-slate-100 px-1 rounded">GMAIL_USER</code> is configured.
+                {!smsEnabled ? ' SMS is not enabled in this build.' : ' SMS uses the same webhook when enabled.'}
               </p>
             ) : (
               <p className="text-sm text-slate-700">
-                <span className="font-medium text-amber-900">Demo / local mode:</span> messages are logged to this browser
-                (and the developer console). Set <code className="text-xs bg-slate-100 px-1 rounded">VITE_PATIENT_NOTIFY_WEBHOOK_URL</code> in{' '}
-                <code className="text-xs bg-slate-100 px-1 rounded">.env</code> to deliver through your SMS/email provider.
+                <span className="font-medium text-amber-900">Demo / local mode:</span> email is logged in this browser
+                and the developer console — no real SMTP until the webhook and Gmail secrets are set on the server.
+                {!smsEnabled ? ' SMS is not set up.' : null}
               </p>
             )}
+            {canDispatch && willSendEmail ? (
+              <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-md px-2.5 py-2">
+                This send will deliver: <strong>email</strong> to {emailRaw}
+                {willSendSms ? ` and SMS to ${phoneNorm}` : ''}.
+              </p>
+            ) : null}
           </section>
 
-          <section className="rounded-lg border border-sky-200 bg-sky-50/40 p-4 space-y-2">
-            <div className="flex items-center gap-2 text-sky-900">
-              <MessageSquare className="w-4 h-4" />
-              <h3 className="text-xs font-bold uppercase tracking-wide">SMS preview</h3>
-            </div>
-            <p className="text-[11px] text-slate-600">
-              To: {phoneNorm || '(no valid mobile)'}
-            </p>
-            <pre className="text-xs text-slate-800 whitespace-pre-wrap font-sans leading-relaxed bg-white/80 border border-sky-100 rounded-md p-3 max-h-40 overflow-y-auto">
-              {smsBody}
-            </pre>
-          </section>
+          {smsEnabled ? (
+            <section className="rounded-lg border border-sky-200 bg-sky-50/40 p-4 space-y-2">
+              <div className="flex items-center gap-2 text-sky-900">
+                <MessageSquare className="w-4 h-4" />
+                <h3 className="text-xs font-bold uppercase tracking-wide">SMS preview</h3>
+              </div>
+              <p className="text-[11px] text-slate-600">
+                To: {phoneNorm || '(no valid mobile — skipped)'}
+              </p>
+              <pre className="text-xs text-slate-800 whitespace-pre-wrap font-sans leading-relaxed bg-white/80 border border-sky-100 rounded-md p-3 max-h-40 overflow-y-auto">
+                {smsBody}
+              </pre>
+            </section>
+          ) : null}
 
           <section className="rounded-lg border border-violet-200 bg-violet-50/30 p-4 space-y-2">
             <div className="flex items-center gap-2 text-violet-900">
@@ -295,9 +318,22 @@ export function PatientNotifyDrawer({
               To: {emailOk ? emailRaw : '(no valid email)'}
             </p>
             <p className="text-xs font-semibold text-slate-800">Subject: {emailPreview.subject}</p>
-            <pre className="text-xs text-slate-800 whitespace-pre-wrap font-sans leading-relaxed bg-white/80 border border-violet-100 rounded-md p-3 max-h-48 overflow-y-auto">
-              {emailPreview.body}
-            </pre>
+            <div className="rounded-md border border-violet-200 overflow-hidden bg-slate-100 max-h-[min(420px,55vh)]">
+              <iframe
+                title="Email preview"
+                className="w-full h-[min(400px,52vh)] bg-white border-0"
+                srcDoc={emailPreview.bodyHtml}
+                sandbox=""
+              />
+            </div>
+            <details className="text-xs text-slate-600">
+              <summary className="cursor-pointer font-medium text-slate-700 hover:text-slate-900">
+                Plain-text version (for older mail apps)
+              </summary>
+              <pre className="mt-2 text-xs text-slate-800 whitespace-pre-wrap font-sans leading-relaxed bg-white/80 border border-violet-100 rounded-md p-3 max-h-40 overflow-y-auto">
+                {emailPreview.body}
+              </pre>
+            </details>
           </section>
 
           <section className="rounded-lg border border-slate-200 p-4 space-y-2">
@@ -355,7 +391,7 @@ export function PatientNotifyDrawer({
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md bg-[#0176d3] hover:bg-[#0060b2] text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="w-4 h-4" />
-            {sending ? 'Sending…' : 'Send pickup alert'}
+            {sending ? 'Sending…' : willSendEmail ? 'Send email alert' : 'Send pickup alert'}
           </button>
         </div>
       </div>

@@ -72,6 +72,23 @@ export async function buildOfficialResultVerifyToken(input: {
   return digest.slice(0, 20).toUpperCase();
 }
 
+const PUBLIC_VERIFY_ORIGIN = 'https://lab-tis.vercel.app';
+
+/** Printed QR must open the public site, not the machine that happened to print it. */
+export function resolvePublicVerifyOrigin(fallbackOrigin: string): string {
+  const configured = (import.meta.env.VITE_PUBLIC_VERIFY_ORIGIN as string | undefined)?.trim();
+  if (configured) return configured.replace(/\/$/, '');
+  try {
+    const host = new URL(fallbackOrigin).hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') {
+      return PUBLIC_VERIFY_ORIGIN;
+    }
+  } catch {
+    return PUBLIC_VERIFY_ORIGIN;
+  }
+  return fallbackOrigin.replace(/\/$/, '');
+}
+
 export async function buildOfficialResultVerifyUrl(input: {
   origin: string;
   requisition: LabTestRequisition;
@@ -91,8 +108,7 @@ export async function buildOfficialResultVerifyUrl(input: {
     resultFingerprint: fp,
   });
 
-  const base =
-    (import.meta.env.VITE_PUBLIC_VERIFY_ORIGIN as string | undefined)?.trim() || input.origin;
+  const base = resolvePublicVerifyOrigin(input.origin);
   const url = new URL(base);
   url.search = '';
   url.hash = '';
