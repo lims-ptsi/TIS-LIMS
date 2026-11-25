@@ -15,6 +15,7 @@ const PERMISSION_LABELS: Record<PermissionKey, string> = {
   canManageInstruments: 'instrument management',
   canReviewAuditLogs: 'the audit trail',
   canSignOffCriticals: 'critical value sign-off',
+  canManageAccounts: 'account management',
 };
 
 export function hasPermission(user: AuthUser | null | undefined, key: PermissionKey): boolean {

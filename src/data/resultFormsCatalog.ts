@@ -133,7 +133,7 @@ export interface ResultFormDefinition {
    * - blood-typing: centered ABO + Rh dropdowns (Form 5)
    * - pregnancy: centered urine hCG result (Form 7)
    */
-  layoutStyle?: 'default' | 'blood-typing' | 'pregnancy' | 'ntp-request';
+  layoutStyle?: 'default' | 'blood-typing' | 'pregnancy' | 'qualitative' | 'ntp-request';
   /**
    * Section table column layout:
    * - test-result (Forms 3–4)
@@ -189,21 +189,32 @@ export const RESULT_FORM_1: ResultFormDefinition = {
     showQr: true,
   },
   headerFields: PTSI_PATIENT_HEADER_FIELDS,
+  panelTitle: 'HEMOGLUCOTEST',
+  panelTitlePlacement: 'above-table',
+  testColumnLabel: 'Examination',
+  resultColumnLabel: 'Result',
   tableColumns: 'test-result-unit',
   analytes: [
     {
       id: 'p_hgt',
-      label: 'HGT @',
+      label: 'HGT',
       examCode: '1043',
       unit: 'mg/dL',
       resultType: 'numeric',
       hasAtTime: true,
-      placeholder: 'Enter result',
+      placeholder: 'Enter glucose result',
     },
   ],
   signatures: [
-    { id: 'medTech', label: 'Medical Technologist', showDate: true },
-    { id: 'pathologist', label: 'Pathologist', showDate: true, showLicense: true, showSignatureLine: true },
+    { id: 'medTech1', label: 'Performed by', showDate: true, showLicense: true, showSignatureLine: true },
+    { id: 'medTech2', label: 'Verified by', showDate: true, showLicense: true, showSignatureLine: true },
+    {
+      id: 'pathologist',
+      label: 'Pathologist',
+      showDate: true,
+      showLicense: true,
+      showSignatureLine: true,
+    },
   ],
 };
 
@@ -221,6 +232,9 @@ export const RESULT_FORM_2: ResultFormDefinition = {
     showQr: true,
   },
   headerFields: PTSI_PATIENT_HEADER_FIELDS,
+  panelTitle: 'KOH (POTASSIUM HYDROXIDE MOUNT)',
+  panelTitlePlacement: 'above-table',
+  layoutStyle: 'qualitative',
   specimenFields: [
     {
       id: 'labNumber',

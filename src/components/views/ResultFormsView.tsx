@@ -40,6 +40,7 @@ import {
   isResultFormRowExamined,
   isResultFormSectionApplicable,
 } from '../../utils/resultDisplay';
+import { isLegalResultFormId } from '../../constants/officialCoaPaper';
 
 const OFFICIAL_SIGNATURE_DESIGNATIONS = [
   ROLE_DEFAULT_DESIGNATION.performed,
@@ -247,7 +248,7 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
   const [values, setValues] = useState<FormValues>(() =>
     blankValues(getResultFormById(initialList[0]?.id || 'RF-01') || RESULT_FORMS[0])
   );
-  const [examinedResultsOnly, setExaminedResultsOnly] = useState(true);
+  const [examinedResultsOnly, setExaminedResultsOnly] = useState(false);
 
   const referenceGender = patientGender || values.gender || '';
 
@@ -331,6 +332,39 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
     window.print();
   };
 
+  const isLegalPaper =
+    activeForm.layoutStyle === 'ntp-request' || isLegalResultFormId(activeForm.id);
+
+  useEffect(() => {
+    const PRINT_PAGE_STYLE_ID = 'lims-result-forms-print-page';
+    const LEGAL_PAGE_CSS = `@media print { @page { size: legal portrait; margin: 8mm 10mm; } }`;
+    const A4_PAGE_CSS = `@media print { @page { size: A4 portrait; margin: 8mm 10mm; } }`;
+
+    const syncPrintJob = () => {
+      document.body.classList.toggle('lims-print-ntp-official', isLegalPaper);
+      let el = document.getElementById(PRINT_PAGE_STYLE_ID) as HTMLStyleElement | null;
+      if (!el) {
+        el = document.createElement('style');
+        el.id = PRINT_PAGE_STYLE_ID;
+        document.head.appendChild(el);
+      }
+      el.textContent = isLegalPaper ? LEGAL_PAGE_CSS : A4_PAGE_CSS;
+    };
+
+    const clearPrintJob = () => {
+      document.body.classList.remove('lims-print-ntp-official');
+      document.getElementById(PRINT_PAGE_STYLE_ID)?.remove();
+    };
+
+    window.addEventListener('beforeprint', syncPrintJob);
+    window.addEventListener('afterprint', clearPrintJob);
+    return () => {
+      window.removeEventListener('beforeprint', syncPrintJob);
+      window.removeEventListener('afterprint', clearPrintJob);
+      clearPrintJob();
+    };
+  }, [isLegalPaper]);
+
   const verificationQr = useMemo(() => {
     if (!activeForm || !resultFormShowsVerifyQr(activeForm)) return null;
     const req = requisitionStubFromFormValues(values);
@@ -381,7 +415,11 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
               Result Forms
             </h1>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Fillable printable laboratory result sheets (patient header, examination, signatures).
+              Fillable printable laboratory result sheets (patient header, examination, signatures).{' '}
+              <span className="font-semibold text-slate-600">
+                {isLegalPaper ? 'Legal · Form 2a' : 'A4'} preview
+              </span>
+              .
               {normalizeResultFormGender(referenceGender) && activeForm?.genderVariant ? (
                 <span className="ml-1 text-[#014486] font-semibold">
                   Reference ranges:{' '}
@@ -490,7 +528,13 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
 
         {/* Printable form sheet */}
         <div className="lg:col-span-9">
-          <div className="lims-card shadow-sm p-5 sm:p-7 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 print:max-w-none">
+          <div
+            className={`lims-card shadow-sm mx-auto print:border-none print:shadow-none print:p-0 print:max-w-none ${
+              isLegalPaper
+                ? 'lims-result-form-paper lims-result-form-paper--legal p-4 sm:p-5'
+                : 'lims-result-form-paper lims-result-form-paper--a4 p-5 sm:p-7'
+            }`}
+          >
             {activeForm.layoutStyle === 'ntp-request' ? (
               <NtpLabRequestForm
                 values={values}
@@ -500,7 +544,8 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
                 verificationQr={verificationQr}
               />
             ) : (
-            <>
+            <div className="lims-result-form-sheet">
+            <div className="lims-result-form-sheet-body">
             <ResultFormOrgBanner
               shortName={activeForm.shortName}
               panelTitle={
@@ -770,6 +815,53 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
               </section>
             )}
 
+            {/* Qualitative exams (KOH, etc.) — large centered result */}
+            {activeForm.layoutStyle === 'qualitative' && flatAnalytes.length > 0 && (
+              <section className="mb-8 flex-1 flex flex-col min-h-[10rem]">
+                {activeForm.panelTitle && activeForm.panelTitlePlacement !== 'below-org' ? (
+                  <h3 className="text-center text-base sm:text-lg font-bold uppercase text-slate-900 tracking-wide border-b border-slate-300 pb-2 mb-6">
+                    {activeForm.panelTitle}
+                  </h3>
+                ) : null}
+                <div className="flex-1 flex flex-col items-center justify-center text-center py-8 sm:py-12">
+                  {(() => {
+                    const row = flatAnalytes[0];
+                    const valKey = `${row.id}_result`;
+                    return (
+                      <>
+                        <p className="text-sm sm:text-base font-semibold uppercase tracking-[0.2em] text-slate-500">
+                          {row.label}
+                        </p>
+                        <div className="mt-6 w-full max-w-lg px-2">
+                          {row.resultType === 'select' ? (
+                            <select
+                              value={values[valKey] || ''}
+                              onChange={(e) => setField(valKey, e.target.value)}
+                              className="w-full border-0 border-b-2 border-slate-700 bg-transparent px-2 py-2 text-center text-lg sm:text-xl font-bold tracking-wide text-slate-900 focus:outline-none focus:border-[#0878e8] print:border-slate-900 print:text-[17px]"
+                              aria-label={row.label}
+                            >
+                              <option value="">—</option>
+                              {(row.options || []).map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <AnalyteResultInput
+                              analyte={row}
+                              value={values[valKey] || ''}
+                              onChange={(v) => setField(valKey, v)}
+                            />
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </section>
+            )}
+
             {/* Pregnancy Test — centered RESULT (URINE) (Form 7) */}
             {activeForm.layoutStyle === 'pregnancy' && flatAnalytes.length > 0 && (
               <section className="mb-16 py-10 sm:py-16 text-center">
@@ -802,72 +894,108 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
               </section>
             )}
 
-            {/* Flat analytes (Forms 1–2) */}
+            {/* Flat analytes (Forms 1–2 — Examination | Result | Unit) */}
             {!isSectioned &&
               activeForm.layoutStyle !== 'blood-typing' &&
               activeForm.layoutStyle !== 'pregnancy' &&
+              activeForm.layoutStyle !== 'qualitative' &&
               flatAnalytes.length > 0 && (
-              <section className="lims-result-form-table mb-8 overflow-hidden">
-                <div className="bg-slate-100 px-3 py-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wide text-slate-700">
-                    Examination
-                  </span>
-                </div>
-                <div>
+              <section className="mb-8">
+                {activeForm.panelTitle && activeForm.panelTitlePlacement !== 'below-org' ? (
+                  <h3 className="text-center text-sm print:text-xs font-bold uppercase text-slate-900 tracking-wide border-b border-slate-300 pb-1 mb-2">
+                    {activeForm.panelTitle}
+                  </h3>
+                ) : null}
+                <div className="lims-result-form-table overflow-hidden">
+                  {activeForm.tableColumns === 'test-result-unit-ref' ? (
+                    <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                      <div className="col-span-4 px-3 py-1.5">
+                        {activeForm.testColumnLabel || 'Test'}
+                      </div>
+                      <div className="col-span-3 px-3 py-1.5">
+                        {activeForm.resultColumnLabel || 'Result'}
+                      </div>
+                      <div className="col-span-2 px-3 py-1.5">Unit</div>
+                      <div className="col-span-3 px-3 py-1.5">Ref. Range</div>
+                    </div>
+                  ) : activeForm.tableColumns === 'test-result-unit' ? (
+                    <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                      <div className="col-span-5 px-3 py-1.5">
+                        {activeForm.testColumnLabel || 'Examination'}
+                      </div>
+                      <div className="col-span-4 px-3 py-1.5">
+                        {activeForm.resultColumnLabel || 'Result'}
+                      </div>
+                      <div className="col-span-3 px-3 py-1.5">Unit</div>
+                    </div>
+                  ) : (
+                    <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                      <div className="px-3 py-1.5">
+                        {activeForm.testColumnLabel || 'Test'}
+                      </div>
+                      <div className="px-3 py-1.5">
+                        {activeForm.resultColumnLabel || 'Result'}
+                      </div>
+                    </div>
+                  )}
                   {flatAnalytes.map((analyte) => {
-                    if (
-                      examinedResultsOnly &&
-                      !hasEnteredResult(values[`${analyte.id}_result`])
-                    ) {
-                      return null;
-                    }
+                    const resultVal = values[`${analyte.id}_result`] || '';
+                    if (examinedResultsOnly && !hasEnteredResult(resultVal)) return null;
+                    const atKey = `${analyte.id}_at`;
                     const showUnit = !analyte.hideUnit && Boolean(analyte.unit);
-                    return (
-                      <div key={analyte.id} className="p-3 sm:p-4 space-y-3">
-                        <div className="flex flex-wrap items-end gap-2">
-                          <span className="text-sm font-bold text-slate-900">
-                            {analyte.label}
-                          </span>
-                          {analyte.hasAtTime && (
-                            <>
-                              <span className="text-sm font-bold text-slate-900">@</span>
-                              <input
-                                type="time"
-                                value={values[`${analyte.id}_at`] || ''}
-                                onChange={(e) =>
-                                  setField(`${analyte.id}_at`, e.target.value)
-                                }
-                                className="border-0 border-b border-slate-400 bg-transparent px-1 py-0.5 text-sm text-slate-900 focus:outline-none focus:border-[#0878e8] w-28 print:border-slate-800"
-                              />
-                            </>
-                          )}
-                        </div>
-                        <div
-                          className={`grid grid-cols-1 gap-3 items-end ${
-                            showUnit ? 'sm:grid-cols-12' : ''
-                          }`}
-                        >
-                          <div className={showUnit ? 'sm:col-span-8' : ''}>
-                            <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">
-                              Result
-                            </label>
-                            <AnalyteResultInput
-                              analyte={analyte}
-                              value={values[`${analyte.id}_result`] || ''}
-                              onChange={(v) => setField(`${analyte.id}_result`, v)}
+                    const examinationCell = (
+                      <div className="flex flex-wrap items-center gap-1.5 text-sm text-slate-800">
+                        <span className="font-semibold">{analyte.label}</span>
+                        {analyte.hasAtTime ? (
+                          <>
+                            <span className="font-semibold">@</span>
+                            <input
+                              type="time"
+                              value={values[atKey] || ''}
+                              onChange={(e) => setField(atKey, e.target.value)}
+                              className="border-0 border-b border-slate-400 bg-transparent px-1 py-0.5 text-sm text-slate-900 focus:outline-none focus:border-[#0878e8] w-[6.5rem] print:border-slate-800"
+                              aria-label={`${analyte.label} time`}
                             />
+                          </>
+                        ) : null}
+                      </div>
+                    );
+                    const resultCell = (
+                      <AnalyteResultInput
+                        analyte={analyte}
+                        value={resultVal}
+                        onChange={(v) => setField(`${analyte.id}_result`, v)}
+                      />
+                    );
+                    if (activeForm.tableColumns === 'test-result-unit-ref') {
+                      return (
+                        <div key={analyte.id} className="lims-rf-grid-row grid grid-cols-12">
+                          <div className="col-span-4 px-3 py-1.5">{examinationCell}</div>
+                          <div className="col-span-3 px-2 py-1">{resultCell}</div>
+                          <div className="col-span-2 px-3 py-1.5 text-xs font-mono text-slate-700">
+                            {showUnit ? analyte.unit : '—'}
                           </div>
-                          {showUnit && (
-                            <div className="sm:col-span-4 flex flex-col gap-0.5">
-                              <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wide">
-                                Unit
-                              </label>
-                              <div className="border-0 border-b border-slate-400 px-0.5 py-1.5 text-sm font-mono text-slate-800 print:border-slate-800">
-                                {analyte.unit}
-                              </div>
-                            </div>
-                          )}
+                          <div className="col-span-3 px-3 py-1.5 text-xs font-mono text-slate-700">
+                            {analyte.refRange || '—'}
+                          </div>
                         </div>
+                      );
+                    }
+                    if (activeForm.tableColumns === 'test-result-unit') {
+                      return (
+                        <div key={analyte.id} className="lims-rf-grid-row grid grid-cols-12">
+                          <div className="col-span-5 px-3 py-1.5">{examinationCell}</div>
+                          <div className="col-span-4 px-2 py-1">{resultCell}</div>
+                          <div className="col-span-3 px-3 py-1.5 text-sm font-mono text-slate-800">
+                            {showUnit ? analyte.unit : '—'}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={analyte.id} className="lims-rf-grid-row grid grid-cols-2">
+                        <div className="px-3 py-1.5">{examinationCell}</div>
+                        <div className="px-2 py-1">{resultCell}</div>
                       </div>
                     );
                   })}
@@ -896,66 +1024,76 @@ export const ResultFormsView: React.FC<ResultFormsViewProps> = ({
               </div>
             )}
 
-            {/* Signatures — RF-05 blood typing footer on all forms */}
-            <section className="grid grid-cols-3 gap-6 mt-6 pt-10 print:pt-8">
-              {signatureSlots.map((sig, slotIndex) => (
-                <div key={sig.id} className="text-center space-y-1">
-                  <div className="text-[10px] print:text-[8px] font-semibold text-slate-500 uppercase tracking-wide">
-                    {sig.label}
-                  </div>
-                  <div className="border-b border-slate-700 min-h-[2rem] flex items-end justify-center pb-0.5 px-1">
-                    <input
-                      type="text"
-                      value={values[`${sig.id}_name`] || ''}
-                      onChange={(e) => setField(`${sig.id}_name`, e.target.value)}
-                      placeholder={
-                        sig.id.startsWith('medTech') && currentUserName
-                          ? currentUserName
-                          : 'Signatory name'
-                      }
-                      className="w-full font-serif italic text-sm print:text-xs text-center text-slate-900 bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-slate-400 placeholder:not-italic"
-                    />
-                  </div>
-                  <div className="text-[11px] print:text-[9px] font-bold text-slate-800">
-                    {values[`${sig.id}_designation`] ||
-                      OFFICIAL_SIGNATURE_DESIGNATIONS[slotIndex] ||
-                      '—'}
-                  </div>
-                  {sig.showLicense !== false ? (
-                    <div className="text-[10px] print:text-[8px] text-slate-600">
-                      <span className="sr-only">License No.</span>
-                      Lic. No.{' '}
+            </div>
+
+            <footer className="lims-result-form-sheet-footer print:mt-0">
+              <section
+                className="grid grid-cols-3 gap-4 sm:gap-6 pt-2 print:pt-0"
+                aria-label="Laboratory signatories"
+              >
+                {signatureSlots.map((sig, slotIndex) => (
+                  <div key={sig.id} className="text-center space-y-1">
+                    <div className="text-[10px] print:text-[8px] font-semibold text-slate-500 uppercase tracking-wide">
+                      {sig.label}
+                    </div>
+                    <div className="border-b border-slate-700 min-h-[2rem] flex items-end justify-center pb-0.5 px-1">
                       <input
                         type="text"
-                        value={values[`${sig.id}_license`] || ''}
-                        onChange={(e) => setField(`${sig.id}_license`, e.target.value)}
-                        placeholder="____________"
-                        className="inline-block w-[5.5rem] max-w-full text-center font-mono bg-transparent border-0 border-b border-slate-400 focus:outline-none focus:border-[#0878e8] print:border-slate-600"
+                        value={values[`${sig.id}_name`] || ''}
+                        onChange={(e) => setField(`${sig.id}_name`, e.target.value)}
+                        placeholder={
+                          sig.id.startsWith('medTech') && currentUserName
+                            ? currentUserName
+                            : 'Signatory name'
+                        }
+                        className="w-full font-serif italic text-sm print:text-xs text-center text-slate-900 bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-slate-400 placeholder:not-italic"
                       />
                     </div>
-                  ) : null}
-                  {sig.showDate ? (
-                    <input
-                      type="date"
-                      value={values[`${sig.id}_date`] || ''}
-                      onChange={(e) => setField(`${sig.id}_date`, e.target.value)}
-                      className="mx-auto w-full max-w-[9rem] border-0 border-b border-slate-400 bg-transparent px-0.5 py-0.5 text-[10px] text-slate-700 focus:outline-none focus:border-[#0878e8] print:border-slate-800"
-                    />
-                  ) : null}
-                </div>
-              ))}
-            </section>
+                    <div className="text-[11px] print:text-[9px] font-bold text-slate-800">
+                      {values[`${sig.id}_designation`] ||
+                        OFFICIAL_SIGNATURE_DESIGNATIONS[slotIndex] ||
+                        '—'}
+                    </div>
+                    {sig.showLicense !== false ? (
+                      <div className="text-[10px] print:text-[8px] text-slate-600">
+                        <label className="inline-flex items-baseline justify-center gap-1">
+                          <span>Lic. No.</span>
+                          <input
+                            type="text"
+                            value={values[`${sig.id}_license`] || ''}
+                            onChange={(e) => setField(`${sig.id}_license`, e.target.value)}
+                            placeholder="____________"
+                            aria-label={`${sig.label} license number`}
+                            className="inline-block w-[5.5rem] max-w-full text-center font-mono bg-transparent border-0 border-b border-slate-400 focus:outline-none focus:border-[#0878e8] print:border-slate-600"
+                          />
+                        </label>
+                      </div>
+                    ) : null}
+                    {sig.showDate ? (
+                      <input
+                        type="date"
+                        value={values[`${sig.id}_date`] || ''}
+                        onChange={(e) => setField(`${sig.id}_date`, e.target.value)}
+                        aria-label={`${sig.label} date`}
+                        className="mx-auto w-full max-w-[9rem] border-0 border-b border-slate-400 bg-transparent px-0.5 py-0.5 text-[10px] text-slate-700 focus:outline-none focus:border-[#0878e8] print:border-slate-800"
+                      />
+                    ) : null}
+                  </div>
+                ))}
+              </section>
 
-            {activeForm.footerNote ? (
-              <p className="mt-6 pt-3 border-t border-slate-200 text-[9px] text-slate-500 text-center leading-relaxed">
-                {activeForm.footerNote}
-              </p>
-            ) : (
-              <div className="mt-8 pt-3 border-t border-dashed border-slate-300 text-[9px] text-slate-400 text-center print:mt-6">
-                This form is an official laboratory result document. Verify printed values against instrument records before release.
-              </div>
-            )}
-            </>
+              {activeForm.footerNote ? (
+                <p className="mt-4 pt-3 border-t border-dashed border-slate-200 text-[9px] text-slate-500 text-center leading-relaxed print:mt-3">
+                  {activeForm.footerNote}
+                </p>
+              ) : (
+                <p className="mt-4 pt-3 border-t border-dashed border-slate-200 text-[9px] text-slate-400 text-center leading-relaxed print:mt-3">
+                  This form is an official laboratory result document. Verify printed values against
+                  instrument records before release.
+                </p>
+              )}
+            </footer>
+            </div>
             )}
           </div>
         </div>

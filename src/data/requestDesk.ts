@@ -130,7 +130,7 @@ export function requestTrackingLabel(
   const phase = requestTrackingPhase(req);
   switch (phase) {
     case 'NEEDS_EXAMS':
-      return 'Info desk intake';
+      return 'Select examinations';
     case 'AT_CASHIER':
       return 'At cashier';
     case 'READY_RECEIVE':

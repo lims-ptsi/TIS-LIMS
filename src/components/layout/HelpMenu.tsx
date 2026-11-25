@@ -17,11 +17,11 @@ const SCREEN_HELP: Record<string, string> = {
   'analytics-reports':
     'KPIs, pipeline breakdown, OPD payment coverage, examination mix, and 14-day volume. Use Print report pack for management summaries.',
   'lab-requests':
-    'Information desk intake (select examinations), OPD waiting at cashier, and ready to receive. Receive and accession happen here.',
-  'testing-queue': 'Specimens already received — enter and finalize analytical results.',
+    'Lab intake for laboratory staff: select examinations, OPD waiting at the cashier, and specimens ready to receive.',
+  'testing-queue': 'Enter and finalize results for specimens already in the laboratory.',
   'pickup-management':
-    'Completed results only. Notify the patient, print official reports, and record pickup without opening each case from the testing queue.',
-  submissions: 'Same as Request queue (legacy link).',
+    'Results the patient can collect. Print the official report, then record pickup.',
+  submissions: 'Same as Lab intake (legacy link).',
   payments: 'Only OPD requests are listed. Assign the official receipt after the patient pays. Other categories go to the laboratory and do not appear here.',
   samples: 'Print the specimen QR label for a received request.',
   'patient-records': 'Search every patient and open their full lab visit history, specimens, and results.',
@@ -30,6 +30,8 @@ const SCREEN_HELP: Record<string, string> = {
   examinations: 'The examination catalog, form assignment, and prices.',
   'result-templates': 'The fields used when a result is entered.',
   'audit-trail': 'Who changed a request or a result.',
+  'account-management':
+    'Add, edit, or remove sign-in accounts for Staff, Cashier, Laboratory, and Admin desks on this workstation.',
   'sample-detail': 'The record for one specimen. Labels, custody, and the result are on this screen.',
   instruments: 'Analyzer connection and calibration dates. An overdue date is also listed under the triangle in the top bar.',
 };
@@ -39,7 +41,8 @@ const DESK_HELP: Record<string, string> = {
   CASHIER: 'The cashier assigns the official receipt for OPD only. Other categories go to the laboratory. This desk does not create a request, receive a specimen, or enter a result.',
   LAB_STAFF:
     'The laboratory creates Corporate requests only (sending facility + HIS tariff), receives the specimen, enters results, and prints labels and reports. It does not assign the official receipt.',
-  ADMIN: 'Administration can open every screen, including the catalog, result templates, and the audit trail.',
+  ADMIN:
+    'Administration can open every screen, including account management, the catalog, result templates, and the audit trail.',
 };
 
 export const HelpMenu: React.FC<HelpMenuProps> = ({

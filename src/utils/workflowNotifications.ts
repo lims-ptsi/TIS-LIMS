@@ -64,7 +64,7 @@ export function buildPipelineNotification(
   let message = `${patient} (${caseLabel})`;
 
   if (workflowKey.endsWith(':NEEDS_EXAMS')) {
-    title = 'Info desk intake — select examinations';
+    title = 'Lab intake — select examinations';
     message = `${patient} · ${caseLabel} · ${category} — filed by Information Staff. Laboratory must order examinations.`;
   } else if (workflowKey.endsWith(':AT_CASHIER')) {
     title = 'OPD waiting at cashier';
@@ -74,7 +74,7 @@ export function buildPipelineNotification(
     message = `${patient} · ${caseLabel} — O.R. recorded. Laboratory can receive and accession.`;
   } else if (workflowKey.endsWith(':IN_TESTING')) {
     title = 'Specimen in testing';
-    message = `${patient} · ${caseLabel} — received in laboratory. Enter or finalize results on Testing queue.`;
+    message = `${patient} · ${caseLabel} — received in the laboratory. Enter or finalize results under Enter results.`;
   } else if (workflowKey.endsWith(':COMPLETED')) {
     title = 'Results completed';
     message = `${patient} · ${caseLabel} — analytical results released. Report available for print/pickup.`;

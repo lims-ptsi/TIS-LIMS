@@ -163,11 +163,11 @@ const SingleExamFormSheet: React.FC<{
 
   return (
     <div
-      className={`coa-result-sheet p-4 sm:p-6 text-slate-900 bg-white print:p-0 flex flex-col print:min-h-[100vh] ${
+      className={`coa-result-sheet coa-result-sheet--a4 p-4 sm:p-6 text-slate-900 bg-white print:p-0 flex flex-col min-h-[297mm] print:min-h-[100vh] ${
         pageBreakAfter ? 'print-form-page' : 'print-form-page-last'
       }`}
     >
-      <div className="coa-result-sheet-body space-y-2 print:space-y-1.5 flex-1 min-h-0 print:flex-none">
+      <div className="coa-result-sheet-body space-y-2 print:space-y-1.5 flex-1 min-h-0">
       {!hideFormIndexHint ? (
         <div className="print:hidden text-[10px] font-mono text-slate-500 flex justify-between gap-2">
           <span>
@@ -219,7 +219,11 @@ const SingleExamFormSheet: React.FC<{
 
       {/* Single examination — PTSI forms: TEST | RESULT only (or blood typing centered) */}
       <div className="space-y-2 print:space-y-1">
-        {rf?.layoutStyle !== 'blood-typing' && rf?.layoutStyle !== 'pregnancy' ? (
+        {rf?.layoutStyle === 'qualitative' && (rf?.panelTitle || tmpl.examName) ? (
+          <h3 className="text-center text-base sm:text-lg print:text-sm font-bold uppercase text-slate-900 tracking-wide border-b border-slate-300 pb-2 mt-1">
+            {rf?.panelTitle || tmpl.examName}
+          </h3>
+        ) : rf?.layoutStyle !== 'blood-typing' && rf?.layoutStyle !== 'pregnancy' ? (
           <h3 className="text-center text-sm print:text-xs font-bold uppercase text-slate-900 tracking-wide border-b border-slate-300 pb-1 mt-1">
             {sheet.formLabel.startsWith('RF-')
               ? (rf?.panelTitle || tmpl.examName)
@@ -275,6 +279,25 @@ const SingleExamFormSheet: React.FC<{
                 <div className="mt-8 text-2xl print:text-xl font-bold tracking-widest text-slate-900">
                   {result || '—'}
                 </div>
+              </div>
+            );
+          }
+
+          if (rf?.layoutStyle === 'qualitative' && rf.analytes?.length) {
+            const row = rf.analytes[0];
+            const val =
+              resultGroup?.parameters?.[row.id]?.value ||
+              (row.id === 'p_koh_res' ? resultGroup?.parameters?.koh?.value : '') ||
+              '';
+            if (!hasEnteredResult(val)) return null;
+            return (
+              <div className="py-10 sm:py-14 print:py-12 text-center flex flex-col items-center justify-center flex-1 min-h-[8rem]">
+                <p className="text-sm sm:text-base print:text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  {row.label}
+                </p>
+                <p className="mt-6 text-xl sm:text-2xl print:text-[17px] font-bold text-slate-900 leading-snug max-w-[92%] uppercase tracking-wide">
+                  {val}
+                </p>
               </div>
             );
           }
@@ -354,6 +377,7 @@ const SingleExamFormSheet: React.FC<{
                 })}
                 {(sheet.memberNames || []).map((memberName) => {
                   const memberTemplate = getTemplateForExamination(memberName);
+                  if (!memberTemplate) return null;
                   const covered = new Set(
                     (sections || []).flatMap((section) => section.rows.map((row) => row.id))
                   );
@@ -416,27 +440,96 @@ const SingleExamFormSheet: React.FC<{
           }
 
           const flatAnalytes =
-            rf?.analytes && rf.analytes.length > 0 && !(sections && sections.length > 0);
+            rf?.analytes &&
+            rf.analytes.length > 0 &&
+            !(sections && sections.length > 0) &&
+            rf.layoutStyle !== 'qualitative';
 
           if (flatAnalytes && rf?.analytes) {
+            const threeColUnit = rf.tableColumns === 'test-result-unit';
+            const fourCol = rf.tableColumns === 'test-result-unit-ref';
+            const formatAtTime = (raw?: string) => {
+              const t = (raw || '').trim();
+              if (!t) return '';
+              const match = /^(\d{1,2}):(\d{2})/.exec(t);
+              if (!match) return t;
+              const hour = Number(match[1]);
+              const minute = match[2];
+              const suffix = hour >= 12 ? 'PM' : 'AM';
+              const h12 = hour % 12 === 0 ? 12 : hour % 12;
+              return `${h12}:${minute} ${suffix}`;
+            };
             return (
               <div className="lims-result-form-table overflow-hidden">
-                <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-[11px] print:text-[9px] font-bold uppercase tracking-wide text-slate-700">
-                  <div className="px-3 py-1.5">{rf.testColumnLabel || 'Test'}</div>
-                  <div className="px-3 py-1.5">{rf.resultColumnLabel || 'Result'}</div>
-                </div>
+                {fourCol ? (
+                  <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-[11px] print:text-[9px] font-bold uppercase tracking-wide text-slate-700">
+                    <div className="col-span-4 px-3 py-1.5">{rf.testColumnLabel || 'Test'}</div>
+                    <div className="col-span-3 px-3 py-1.5">{rf.resultColumnLabel || 'Result'}</div>
+                    <div className="col-span-2 px-3 py-1.5">Unit</div>
+                    <div className="col-span-3 px-3 py-1.5">Ref. Range</div>
+                  </div>
+                ) : threeColUnit ? (
+                  <div className="lims-rf-grid-head grid grid-cols-12 bg-slate-100 text-[11px] print:text-[9px] font-bold uppercase tracking-wide text-slate-700">
+                    <div className="col-span-5 px-3 py-1.5">
+                      {rf.testColumnLabel || 'Examination'}
+                    </div>
+                    <div className="col-span-4 px-3 py-1.5">{rf.resultColumnLabel || 'Result'}</div>
+                    <div className="col-span-3 px-3 py-1.5">Unit</div>
+                  </div>
+                ) : (
+                  <div className="lims-rf-grid-head grid grid-cols-2 bg-slate-100 text-[11px] print:text-[9px] font-bold uppercase tracking-wide text-slate-700">
+                    <div className="px-3 py-1.5">{rf.testColumnLabel || 'Test'}</div>
+                    <div className="px-3 py-1.5">{rf.resultColumnLabel || 'Result'}</div>
+                  </div>
+                )}
                 {rf.analytes.map((row) => {
                   const val =
                     resultGroup?.parameters?.[row.id]?.value ||
                     (row.id === 'p_koh_res' ? resultGroup?.parameters?.koh?.value : '') ||
                     '';
                   if (!hasEnteredResult(val)) return null;
+                  const atRaw = resultGroup?.parameters?.[`${row.id}_at`]?.value || '';
+                  const atSuffix = row.hasAtTime && atRaw ? ` @ ${formatAtTime(atRaw)}` : '';
+                  const examLabel = `${row.label}${atSuffix}`;
+                  if (fourCol) {
+                    return (
+                      <div key={row.id} className="lims-rf-grid-row grid grid-cols-12">
+                        <div className="col-span-4 px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-800">
+                          {examLabel}
+                        </div>
+                        <div className="col-span-3 px-3 py-1.5 print:py-1 text-xs print:text-[9px] font-semibold text-slate-900 font-mono">
+                          {val || '—'}
+                        </div>
+                        <div className="col-span-2 px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-700 font-mono">
+                          {row.hideUnit ? '—' : row.unit || '—'}
+                        </div>
+                        <div className="col-span-3 px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-700 font-mono">
+                          {row.refRange || '—'}
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (threeColUnit) {
+                    return (
+                      <div key={row.id} className="lims-rf-grid-row grid grid-cols-12">
+                        <div className="col-span-5 px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-800">
+                          {examLabel}
+                        </div>
+                        <div className="col-span-4 px-3 py-1.5 print:py-1 text-xs print:text-[9px] font-semibold text-slate-900 font-mono">
+                          {val || '—'}
+                        </div>
+                        <div className="col-span-3 px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-700 font-mono">
+                          {row.hideUnit ? '—' : row.unit || '—'}
+                        </div>
+                      </div>
+                    );
+                  }
                   return (
                     <div key={row.id} className="lims-rf-grid-row grid grid-cols-2">
-                      <div className="px-3 py-1.5 print:py-1 text-xs print:text-[9px] text-slate-800">
-                        {row.label}
+                      <div className="px-3 py-2 print:py-1.5 text-sm print:text-[11px] text-slate-800 font-medium">
+                        {examLabel}
                       </div>
-                      <div className="px-3 py-1.5 print:py-1 text-xs print:text-[9px] font-semibold text-slate-900">
+                      <div className="px-3 py-2 print:py-1.5 text-sm print:text-[12px] font-bold text-slate-900">
                         {val || '—'}
                       </div>
                     </div>
@@ -481,7 +574,7 @@ const SingleExamFormSheet: React.FC<{
       </div>
       </div>
 
-      <footer className="coa-result-sheet-footer mt-6 sm:mt-8 print:mt-0 shrink-0 pt-4 print:pt-4 border-t border-slate-200 print:border-slate-300 space-y-2 print:space-y-1.5">
+      <footer className="coa-result-sheet-footer mt-auto shrink-0 pt-4 print:pt-4 border-t border-slate-200 print:border-slate-300 space-y-2 print:space-y-1.5">
         <OfficialResultSignatureFooter examiners={examiners} />
         <p className="text-[9px] text-slate-400 text-center font-mono print:pb-1">
           - End of Report — {tmpl.examName} -
@@ -585,7 +678,22 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
     [sheets, requisition]
   );
 
-  const layoutHint = allForm2aLegal ? 'Legal paper · Form 2a' : 'matches print layout';
+  const activeSheetIsLegal = useMemo(() => {
+    const sheet = sheets[activeIndex];
+    if (!sheet) return false;
+    const rf =
+      (sheet.resolvedFormId && getResultFormById(sheet.resolvedFormId)) ||
+      (requisition
+        ? getResultFormForExam(sheet.template.examCode, requisition.patientGender)
+        : undefined);
+    return rf?.layoutStyle === 'ntp-request' || rf?.id === 'RF-10';
+  }, [sheets, activeIndex, requisition]);
+
+  const layoutHint = activeSheetIsLegal
+    ? 'Legal paper · Form 2a'
+    : allForm2aLegal
+      ? 'Legal paper · Form 2a'
+      : 'A4 paper';
 
   useEffect(() => {
     setActiveIndex(0);
@@ -599,10 +707,12 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
     const LEGAL_PAGE_CSS = `@media print { @page { size: legal portrait; margin: 8mm 10mm; } }`;
 
     const syncPrintJob = () => {
-      const hasNtp = Boolean(printFormsRef.current?.querySelector('.ntp-official-result-form'));
-      document.body.classList.toggle('lims-print-ntp-official', hasNtp);
+      const hasLegal = Boolean(
+        printFormsRef.current?.querySelector('.coa-result-sheet--legal')
+      );
+      document.body.classList.toggle('lims-print-ntp-official', hasLegal);
       let el = document.getElementById(PRINT_PAGE_STYLE_ID) as HTMLStyleElement | null;
-      if (hasNtp) {
+      if (hasLegal) {
         if (!el) {
           el = document.createElement('style');
           el.id = PRINT_PAGE_STYLE_ID;
@@ -821,7 +931,13 @@ export const CoAReportModal: React.FC<CoAReportModalProps> = ({
             </p>
           )}
           {formTotal > 0 && (
-            <div className="coa-official-paper-frame bg-white shadow-md ring-1 ring-slate-300/80 rounded-sm overflow-visible print:shadow-none print:ring-0 print:rounded-none print:w-full print:max-w-none print:mx-0">
+            <div
+              className={`coa-official-paper-frame ${
+                activeSheetIsLegal
+                  ? 'coa-official-paper-frame--legal'
+                  : 'coa-official-paper-frame--a4'
+              } bg-white shadow-md ring-1 ring-slate-300/80 rounded-sm overflow-visible print:shadow-none print:ring-0 print:rounded-none print:w-full print:max-w-none print:mx-0`}
+            >
               {printFormSheets}
             </div>
           )}

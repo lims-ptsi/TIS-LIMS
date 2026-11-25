@@ -14,6 +14,8 @@ export interface DocumentSideDrawerProps {
   headerActions?: React.ReactNode;
   /** Optional class on the fixed overlay root (e.g. print-modal-backdrop). */
   rootClassName?: string;
+  /** Stacking class when this drawer must sit above another panel. */
+  layerClassName?: string;
   children: React.ReactNode;
 }
 
@@ -26,6 +28,7 @@ export function DocumentSideDrawer({
   compactHeader = false,
   headerActions,
   rootClassName,
+  layerClassName = 'z-[60]',
   children,
 }: DocumentSideDrawerProps) {
   const [closing, setClosing] = useState(false);
@@ -74,7 +77,7 @@ export function DocumentSideDrawer({
 
   return (
     <div
-      className={`fixed inset-0 z-[60] flex justify-end print:static print:inset-auto print:block print:w-full print:p-0 print:bg-white print:min-h-0 print:h-auto ${rootClassName || ''}`}
+      className={`fixed inset-0 ${layerClassName} flex justify-end print:static print:inset-auto print:block print:w-full print:p-0 print:bg-white print:min-h-0 print:h-auto ${rootClassName || ''}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="document-side-drawer-title"

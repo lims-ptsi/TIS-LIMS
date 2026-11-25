@@ -49,6 +49,7 @@ export interface AuthUser {
     canManageInstruments: boolean;
     canReviewAuditLogs: boolean;
     canSignOffCriticals: boolean;
+    canManageAccounts?: boolean;
   };
 }
 

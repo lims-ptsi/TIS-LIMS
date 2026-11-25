@@ -272,7 +272,7 @@ export const OrderOfPaymentModal: React.FC<OrderOfPaymentModalProps> = ({
               {/* Right: Payment Slip Badge & Barcode */}
               <div className="flex flex-row sm:flex-col items-end justify-between sm:justify-start gap-1 bg-slate-50/80 sm:bg-transparent p-2 sm:p-0 rounded-lg border sm:border-none border-slate-200 shrink-0">
                 <span className="inline-block px-2 py-0.5 bg-slate-900 text-white rounded text-[8.5px] print:text-[7.5px] font-bold tracking-wider uppercase mb-0.5">
-                  ORDER OF PAYMENT (OPD)
+                  {isPaid ? 'OFFICIAL RECEIPT' : 'ORDER OF PAYMENT (OPD)'}
                 </span>
                 <PaymentBarcode code={requisition.chargeSlipNumber || requisition.requisitionNumber} />
               </div>

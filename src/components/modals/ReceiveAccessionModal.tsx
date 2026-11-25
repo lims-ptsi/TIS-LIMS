@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   CheckCircle2,
@@ -13,6 +14,8 @@ import {
 import { LabTestRequisition, PatientCategory, PriorityLevel, Sample } from '../../types/lims';
 import { hasOfficialReceipt, readyForLaboratory, requiresCashier } from '../../data/requestDesk';
 import { buildAccessionSpecimenPlan } from '../../utils/accessionSpecimen';
+import { DocumentSideDrawer } from './DocumentSideDrawer';
+import { OrderOfPaymentModal } from './OrderOfPaymentModal';
 
 interface ReceiveAccessionModalProps {
   isOpen: boolean;
@@ -69,12 +72,38 @@ function ModalSection({
   );
 }
 
-function MetaBadge({ label, value }: { label: string; value: string }) {
+function HeaderFact({
+  label,
+  value,
+  onClick,
+  tone = 'default',
+}: {
+  label: string;
+  value: string;
+  onClick?: () => void;
+  tone?: 'default' | 'receipt';
+}) {
+  const className =
+    tone === 'receipt'
+      ? 'rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-left cursor-pointer hover:bg-emerald-100 min-w-0'
+      : 'rounded-md border border-slate-200 bg-white px-2 py-1 text-left min-w-0';
+  const body = (
+    <>
+      <span className={`block text-[9px] font-medium uppercase tracking-wide leading-none ${tone === 'receipt' ? 'text-emerald-700' : 'text-slate-500'}`}>
+        {label}
+      </span>
+      <span className={`mt-0.5 block text-[11px] font-semibold tabular-nums truncate leading-tight ${tone === 'receipt' ? 'text-emerald-950' : 'text-slate-900'}`}>
+        {value}
+      </span>
+    </>
+  );
+  if (!onClick) {
+    return <div className={className}>{body}</div>;
+  }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] shadow-2xs">
-      <span className="font-medium text-slate-500">{label}</span>
-      <span className="font-semibold text-slate-800 tabular-nums">{value}</span>
-    </span>
+    <button type="button" onClick={onClick} title="View official receipt" className={className}>
+      {body}
+    </button>
   );
 }
 
@@ -97,8 +126,16 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formError, setFormError] = useState<string>('');
+  const [closing, setClosing] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const closeTimerRef = useRef<number | null>(null);
 
   const specimenPlan = requisition ? buildAccessionSpecimenPlan(requisition) : null;
+
+  const requestClose = () => {
+    if (closing) return;
+    setClosing(true);
+  };
 
   useEffect(() => {
     if (!requisition) return;
@@ -112,7 +149,47 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
     setOrNumber(requisition.orNumber && requisition.orNumber !== 'N/A' ? requisition.orNumber : '');
     setSelectedCategory(requisition.patientCategory || 'OPD');
     setFormError('');
+    setReceiptOpen(false);
   }, [requisition]);
+
+  useEffect(() => {
+    if (isOpen) setClosing(false);
+  }, [isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current != null) window.clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!closing) return;
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      onClose();
+    }, 280);
+    return () => {
+      if (closeTimerRef.current != null) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+    };
+  }, [closing, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || receiptOpen) return;
+      requestClose();
+    };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen, closing, receiptOpen]);
 
   if (!isOpen || !requisition) return null;
 
@@ -128,6 +205,7 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
     : requisition.selectedTestNames || [];
   const receiptDraft = orNumber.trim() || (requisition.orNumber || '').trim();
   const orVerified = requiresCashier(billingCategory) && hasOfficialReceipt(receiptDraft);
+  const receiptLabel = hasOfficialReceipt(receiptDraft) ? receiptDraft.toUpperCase() : '—';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,28 +238,50 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
     });
 
     setIsSubmitting(false);
-    onClose();
+    requestClose();
   };
 
-  return (
+  const canViewReceipt = hasOfficialReceipt(receiptDraft);
+  const openReceipt = () => {
+    if (canViewReceipt) setReceiptOpen(true);
+  };
+  const receiptRequisition: LabTestRequisition = {
+    ...requisition,
+    orNumber: canViewReceipt ? receiptDraft.toUpperCase() : requisition.orNumber,
+  };
+
+  return createPortal(
+    <>
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-[3px] p-4 overflow-hidden animate-fadeIn"
+      className="fixed inset-0 z-[60] flex justify-end print:hidden"
       role="dialog"
       aria-modal="true"
       aria-labelledby="receive-accession-title"
     >
-      <div className="bg-white border border-[#d8dde6] rounded-2xl max-w-[640px] w-full max-h-[min(90vh,820px)] flex flex-col shadow-[0_24px_48px_-12px_rgba(15,23,42,0.25)] overflow-hidden text-slate-900">
-        <div className="shrink-0 border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-slate-50">
+      <button
+        type="button"
+        className={`absolute inset-0 bg-slate-900/45 backdrop-blur-[2px] cursor-pointer ${
+          closing ? 'patient-drawer-backdrop-out' : 'patient-drawer-backdrop-in'
+        }`}
+        aria-label="Close receive panel"
+        onClick={requestClose}
+      />
+      <div
+        className={`relative h-full w-full sm:w-[min(860px,94vw)] bg-white shadow-2xl flex flex-col border-l border-[#d8dde6] overflow-hidden text-slate-900 will-change-transform ${
+          closing ? 'patient-drawer-panel-out' : 'patient-drawer-panel-in'
+        }`}
+      >
+        <div className="shrink-0 border-b border-slate-200 bg-white">
           <div className="px-6 pt-5 pb-4 flex items-start justify-between gap-4">
             <div className="flex items-start gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-[#eaf5ea] border border-[#b8ddb9] flex items-center justify-center text-[#2e844a] shrink-0 shadow-2xs">
+              <div className="w-10 h-10 rounded-xl bg-[#eaf5ea] border border-[#b8ddb9] flex items-center justify-center text-[#2e844a] shrink-0">
                 <Barcode className="w-[18px] h-[18px]" strokeWidth={2.25} />
               </div>
               <div className="min-w-0 pt-0.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-[#0176d3] mb-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[#0176d3]">
                   Laboratory intake
                 </p>
-                <h2 id="receive-accession-title" className="text-lg font-semibold text-slate-900 leading-snug tracking-tight">
+                <h2 id="receive-accession-title" className="text-lg font-semibold text-slate-900 leading-snug tracking-tight mt-0.5">
                   {editingCategoryOnly ? 'Update patient category' : 'Receive & accession specimen'}
                 </h2>
                 {!editingCategoryOnly ? (
@@ -193,27 +293,38 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
             </div>
             <button
               type="button"
-              onClick={onClose}
-              className="p-2 -mr-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100/80 cursor-pointer shrink-0 transition-colors"
+              onClick={requestClose}
+              className="p-2 -mr-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 cursor-pointer shrink-0 transition-colors"
               aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <div className="px-6 pb-4 flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <div className="w-8 h-8 rounded-full bg-[#eef4ff] border border-[#c5d9f7] flex items-center justify-center text-[#0176d3] shrink-0">
+          <div className="mx-6 mb-5 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-full bg-white border border-[#c5d9f7] flex items-center justify-center text-[#0176d3] shrink-0">
                 <UserRound className="w-4 h-4" />
               </div>
-              <p className="text-sm font-semibold text-slate-900 truncate" title={requisition.patientOrSubjectName}>
-                {requisition.patientOrSubjectName}
-              </p>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900 truncate" title={requisition.patientOrSubjectName}>
+                  {requisition.patientOrSubjectName}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5 truncate">
+                  {requisition.patientAge} yrs · {requisition.patientGender}
+                  {requisition.orderingPhysicianOrPI ? ` · ${requisition.orderingPhysicianOrPI}` : ''}
+                </p>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              <MetaBadge label="Case" value={requisition.caseNo || requisition.externalRef || '—'} />
-              <MetaBadge label="Request" value={requisition.requisitionNumber} />
-              <MetaBadge label="Priority" value={requisition.priority || 'ROUTINE'} />
+            <div className="mt-2.5 grid grid-cols-3 gap-1.5">
+              <HeaderFact label="Case" value={requisition.caseNo || requisition.externalRef || '—'} />
+              <HeaderFact
+                label="Receipt"
+                value={receiptLabel}
+                tone={canViewReceipt ? 'receipt' : 'default'}
+                onClick={canViewReceipt ? openReceipt : undefined}
+              />
+              <HeaderFact label="Request" value={requisition.requisitionNumber} />
             </div>
           </div>
         </div>
@@ -238,9 +349,19 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
                 </dd>
               </div>
               <div>
-                <dt className="text-[11px] font-medium text-slate-500">Charge slip</dt>
-                <dd className="mt-0.5 font-medium text-slate-900 tabular-nums">
-                  {requisition.chargeSlipNumber || '—'}
+                <dt className="text-[11px] font-medium text-slate-500">Official receipt</dt>
+                <dd className="mt-0.5">
+                  {canViewReceipt ? (
+                    <button
+                      type="button"
+                      onClick={openReceipt}
+                      className="font-semibold text-[#0176d3] tabular-nums underline-offset-2 hover:underline cursor-pointer"
+                    >
+                      {receiptLabel}
+                    </button>
+                  ) : (
+                    <span className="font-semibold text-slate-900 tabular-nums">{receiptLabel}</span>
+                  )}
                 </dd>
               </div>
             </dl>
@@ -266,7 +387,7 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <p>
                 Payment is pending at the cashier. Once the OR is recorded, this request will show as{' '}
-                <span className="font-semibold">Ready to receive</span> on Request queue.
+                <span className="font-semibold">Ready to receive</span> on Lab intake.
               </p>
             </div>
           ) : null}
@@ -276,6 +397,65 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{formError}</span>
             </div>
+          ) : null}
+
+          {requiresCashier(billingCategory) ? (
+            <ModalSection
+              title="Official receipt"
+              description={
+                canViewReceipt
+                  ? 'Click the receipt number to open the cashier receipt.'
+                  : 'Match this number with the printed receipt from the cashier.'
+              }
+            >
+              <div className="space-y-3">
+                <div>
+                  {canViewReceipt ? (
+                    <button
+                      type="button"
+                      onClick={openReceipt}
+                      className="w-full rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-left cursor-pointer hover:bg-emerald-100"
+                    >
+                      <p className="text-[11px] font-medium text-emerald-800">Official receipt</p>
+                      <p className="mt-0.5 text-sm font-semibold text-emerald-950 tabular-nums">{receiptLabel}</p>
+                      <p className="mt-1 text-[11px] font-medium text-emerald-700">View receipt</p>
+                    </button>
+                  ) : (
+                    <div className="w-full rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <p className="text-[11px] font-medium text-emerald-800">Official receipt</p>
+                      <p className="mt-0.5 text-sm font-semibold text-emerald-950 tabular-nums">{receiptLabel}</p>
+                    </div>
+                  )}
+                </div>
+                {orVerified ? (
+                  <div className="flex items-center gap-2 rounded-md bg-emerald-50 border border-emerald-200/80 px-3 py-2 text-xs text-emerald-900">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      OR <span className="font-semibold tabular-nums">{receiptLabel}</span> is on file.
+                      Confirm it matches the printed receipt.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200/80 px-3 py-2 text-xs text-amber-950">
+                    <Receipt className="w-4 h-4 text-amber-700 shrink-0" />
+                    <span>Enter or confirm the official receipt number from the cashier.</span>
+                  </div>
+                )}
+                <div>
+                  <label htmlFor="or-number" className="text-[11px] font-medium text-slate-600 block mb-1.5">
+                    Official receipt (OR) number
+                  </label>
+                  <input
+                    id="or-number"
+                    type="text"
+                    placeholder="e.g. OR-57772"
+                    value={orNumber}
+                    onChange={(e) => setOrNumber(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2.5 rounded-lg bg-white border border-[#d8dde6] text-[13px] text-slate-900 tabular-nums placeholder:text-slate-400 focus:outline-none focus:border-[#0176d3] focus:ring-2 focus:ring-[#0176d3]/20"
+                  />
+                </div>
+              </div>
+            </ModalSection>
           ) : null}
 
           <ModalSection
@@ -358,43 +538,6 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
               </div>
             </div>
           </ModalSection>
-
-          {requiresCashier(billingCategory) ? (
-            <ModalSection
-              title="Payment verification"
-              description="Match the OR on the physical receipt from the cashier before collection."
-            >
-              <div className="space-y-3">
-                {orVerified ? (
-                  <div className="flex items-center gap-2 rounded-md bg-emerald-50 border border-emerald-200/80 px-3 py-2 text-xs text-emerald-900">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>
-                      OR <span className="font-semibold tabular-nums">{receiptDraft.toUpperCase()}</span> is on file.
-                      Confirm it matches the printed receipt.
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200/80 px-3 py-2 text-xs text-amber-950">
-                    <Receipt className="w-4 h-4 text-amber-700 shrink-0" />
-                    <span>Enter or confirm the official receipt number from the cashier.</span>
-                  </div>
-                )}
-                <div>
-                  <label htmlFor="or-number" className="text-[11px] font-medium text-slate-600 block mb-1.5">
-                    Official receipt (OR) number
-                  </label>
-                  <input
-                    id="or-number"
-                    type="text"
-                    placeholder="e.g. OR-57772"
-                    value={orNumber}
-                    onChange={(e) => setOrNumber(e.target.value.toUpperCase())}
-                    className="w-full px-3 py-2.5 rounded-lg bg-white border border-[#d8dde6] text-[13px] text-slate-900 tabular-nums placeholder:text-slate-400 focus:outline-none focus:border-[#0176d3] focus:ring-2 focus:ring-[#0176d3]/20"
-                  />
-                </div>
-              </div>
-            </ModalSection>
-          ) : null}
         </form>
 
         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50/90 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
@@ -406,7 +549,7 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
           <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               disabled={isSubmitting}
               className="px-4 py-2.5 border border-[#d8dde6] rounded-lg text-slate-700 hover:bg-white text-sm font-medium cursor-pointer disabled:opacity-50 transition-colors"
             >
@@ -434,5 +577,22 @@ export const ReceiveAccessionModal: React.FC<ReceiveAccessionModalProps> = ({
         </div>
       </div>
     </div>
+    {receiptOpen ? (
+      <DocumentSideDrawer
+        title="Official receipt"
+        subtitle={receiptRequisition.orNumber}
+        layerClassName="z-[80]"
+        onClose={() => setReceiptOpen(false)}
+      >
+        <OrderOfPaymentModal
+          embedded
+          isOpen
+          requisition={receiptRequisition}
+          onClose={() => setReceiptOpen(false)}
+        />
+      </DocumentSideDrawer>
+    ) : null}
+    </>,
+    document.body
   );
 };

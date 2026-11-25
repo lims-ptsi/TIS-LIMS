@@ -471,7 +471,7 @@ export const NewRequisitionModal: React.FC<NewRequisitionModalProps> = ({
 
             {/* Patient Category & Demographics Details */}
             <div className="grid grid-cols-2 sm:grid-cols-12 gap-2.5 pt-0.5">
-              <div className="col-span-2 sm:col-span-4">
+              <div className="col-span-2 sm:col-span-3">
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-slate-700 font-semibold text-[11px] flex items-center gap-1">
                     <Tag className="w-3.5 h-3.5 text-[#0176d3]" />

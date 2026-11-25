@@ -32,7 +32,7 @@ import {
   submittedNextDeskLabel,
   waitingAtCashier,
 } from '../../data/requestDesk';
-import { isAwaitingPatientPickup } from '../../utils/resultsPickup';
+import { matchesReleaseFilter } from '../../utils/resultsPickup';
 import { DashboardCtaArtwork, DashboardHeroArtwork } from '../common/LimsDashboardArtwork';
 
 interface HomeNavigateOptions {
@@ -84,7 +84,7 @@ const FIGURE_META: Record<
     iconColor: 'text-emerald-600',
     valueColor: 'text-emerald-600',
   },
-  'Request queue': {
+  'Lab intake': {
     icon: List,
     iconWrap: 'bg-violet-50',
     iconColor: 'text-violet-600',
@@ -94,7 +94,7 @@ const FIGURE_META: Record<
     iconWrap: 'bg-orange-50',
     iconColor: 'text-orange-500',
   },
-  'In testing': {
+  'Enter results': {
     icon: FlaskConical,
     iconWrap: 'bg-teal-50',
     iconColor: 'text-teal-600',
@@ -108,6 +108,11 @@ const FIGURE_META: Record<
     icon: Clock,
     iconWrap: 'bg-violet-50',
     iconColor: 'text-violet-600',
+  },
+  'Ready for pickup': {
+    icon: ClipboardList,
+    iconWrap: 'bg-indigo-50',
+    iconColor: 'text-indigo-600',
   },
 };
 
@@ -210,7 +215,7 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
     (item) => item.status === 'IN_TESTING' || item.status === 'RECEIVED'
   ).length;
   const completed = requisitions.filter((item) => item.status === 'COMPLETED').length;
-  const awaitingPickup = requisitions.filter((item) => isAwaitingPatientPickup(item)).length;
+  const awaitingPickup = requisitions.filter((item) => matchesReleaseFilter(item, 'NOT_PICKED_UP')).length;
   const unpaid = requisitions.filter((item) => waitingAtCashier(item)).length;
 
   const open = (tab: string, options?: HomeNavigateOptions) => {
@@ -244,8 +249,8 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
     },
     {
       tab: 'lab-requests',
-      title: 'Request queue',
-      detail: 'Intake, order tests, and receive specimens.',
+      title: 'Lab intake',
+      detail: 'Select examinations, cashier, and receive the specimen.',
       icon: <Stethoscope className="w-4 h-4" />,
     },
     {
@@ -332,22 +337,22 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
   }[] = [
     { label: 'Requests today', value: todayCount, hint: 'Filed with today’s date' },
     { label: 'Waiting for receipt', value: unpaid, tab: 'payments', hint: 'OPD official receipt still open' },
-    { label: 'Request queue', value: labRequestPipeline, tab: 'lab-requests', hint: 'Intake through receive' },
+    { label: 'Lab intake', value: labRequestPipeline, tab: 'lab-requests', hint: 'Select exams through receive' },
     { label: 'Ready to receive', value: readyToReceive, tab: 'lab-requests', hint: 'Paid or non-OPD — accession next' },
-    { label: 'In testing', value: inTesting, tab: 'testing-queue', hint: 'Results are being entered' },
+    { label: 'Enter results', value: inTesting, tab: 'testing-queue', hint: 'Type and finalize laboratory results' },
     {
       label: 'Ready to print',
       value: completed,
-      tab: 'pickup-management',
-      releaseFilter: 'ALL',
+      tab: 'all-requests',
+      pipelineFilter: 'COMPLETED',
       hint: 'Validated results — print and release',
     },
     {
-      label: 'Awaiting pickup',
+      label: 'Ready for pickup',
       value: awaitingPickup,
       tab: 'pickup-management',
       releaseFilter: 'NOT_PICKED_UP',
-      hint: 'Completed — patient has not collected results',
+      hint: 'Completed — notify, print, and record collection',
     },
   ].filter((figure) => !figure.tab || canOpenTab(role || undefined, figure.tab) || role === 'STAFF');
 
@@ -369,7 +374,10 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
   const figureCols =
     figureCount <= 2
       ? 'sm:grid-cols-2'
-      : 'sm:grid-cols-2 lg:grid-cols-4';
+      : figureCount === 6 || figureCount === 3
+        ? 'sm:grid-cols-2 lg:grid-cols-3'
+        : 'sm:grid-cols-2 lg:grid-cols-4';
+  const isLabStaffFigures = role === 'LAB_STAFF' && figureCount >= 6;
 
   const pagedRequests = activeRequestList.slice(
     requestPage * REQUEST_PAGE_SIZE,
@@ -559,22 +567,42 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
             'lims-card h-full p-4 sm:px-5 sm:py-4 text-left transition-all shadow-sm hover:shadow-md hover:border-[#0878e8]/35';
           const valueClass = meta.valueColor ?? 'text-[var(--lims-navy)]';
           const body = (
-            <div className="flex items-center gap-3 sm:gap-4 w-full min-h-[4.5rem]">
+            <div
+              className={`flex items-center gap-3 sm:gap-4 w-full ${
+                isLabStaffFigures ? 'min-h-[5.25rem]' : 'min-h-[4.5rem]'
+              }`}
+            >
               <span
-                className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${meta.iconWrap}`}
+                className={`rounded-2xl flex items-center justify-center shrink-0 ${meta.iconWrap} ${
+                  isLabStaffFigures ? 'w-14 h-14' : 'w-12 h-12'
+                }`}
               >
-                <Icon className={`w-6 h-6 ${meta.iconColor}`} strokeWidth={1.75} aria-hidden />
+                <Icon
+                  className={`${isLabStaffFigures ? 'w-7 h-7' : 'w-6 h-6'} ${meta.iconColor}`}
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
               </span>
               <div className="min-w-0 flex-1 pr-2">
-                <p className="text-[11px] sm:text-xs font-bold uppercase tracking-wide text-[var(--lims-navy)] leading-snug">
+                <p
+                  className={`font-bold uppercase tracking-wide text-[var(--lims-navy)] leading-snug ${
+                    isLabStaffFigures ? 'text-xs sm:text-[13px]' : 'text-[11px] sm:text-xs'
+                  }`}
+                >
                   {figure.label}
                 </p>
-                <p className="text-[10px] sm:text-[11px] text-slate-500 mt-1 leading-snug line-clamp-2">
+                <p
+                  className={`text-slate-500 mt-1 leading-snug line-clamp-2 ${
+                    isLabStaffFigures ? 'text-[11px] sm:text-xs' : 'text-[10px] sm:text-[11px]'
+                  }`}
+                >
                   {figure.hint}
                 </p>
               </div>
               <span
-                className={`text-3xl sm:text-[2rem] font-bold tabular-nums leading-none shrink-0 ${valueClass}`}
+                className={`font-bold tabular-nums leading-none shrink-0 ${valueClass} ${
+                  isLabStaffFigures ? 'text-[1.75rem] sm:text-[1.875rem]' : 'text-3xl sm:text-[2rem]'
+                }`}
               >
                 {figure.value}
               </span>
@@ -728,7 +756,7 @@ export const HomeDashboardView: React.FC<HomeDashboardViewProps> = ({
           ) : null}
         </section>
 
-        {otherDesks.length > (canCreate ? 0 : 1) && (
+        {role !== 'LAB_STAFF' && otherDesks.length > (canCreate ? 0 : 1) && (
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {otherDesks.slice(canCreate ? 0 : 1).map((action) => (
               <button

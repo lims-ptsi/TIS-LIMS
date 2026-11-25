@@ -741,6 +741,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
   /** When true, hide test rows with no entered result (show examined tests only). */
   const [examinedResultsOnly, setExaminedResultsOnly] = useState(false);
   const dirtyRef = useRef(false);
+  const finalizingRef = useRef(false);
   const hydratedFor = useRef('');
   const onSaveRef = useRef(onSaveResults);
   onSaveRef.current = onSaveResults;
@@ -951,7 +952,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
   }, [sample, requisition, storedResults, storedMedTech, currentUserName]);
 
   useEffect(() => {
-    if (!sample || !dirtyRef.current) return;
+    if (!sample || !dirtyRef.current || finalizingRef.current) return;
     if (Object.keys(localExamResults).length === 0) return;
     const effectiveReqId = requisition?.id || sample.id;
     const groups = Object.values(localExamResults);
@@ -1397,12 +1398,17 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
 
   // Save Direct On-Page Handler â€” request summary uses first exam with a pathologist name
   const handleDirectSave = (isFinalize: boolean) => {
-    const effectiveReqId = requisition?.id || sample.id;
+    const effectiveReqId = requisition?.id || requisition?.requisitionNumber || sample.id;
     const groups = Object.values(localExamResults);
     const summaryEx =
       groups.find((g) => g.examiners?.pathologistName)?.examiners ||
       groups[0]?.examiners ||
       DEFAULT_EXAMINERS(currentUserName);
+
+    if (isFinalize) {
+      finalizingRef.current = true;
+      dirtyRef.current = false;
+    }
 
     if (onSaveResults) {
       onSaveResults(effectiveReqId, localExamResults, isFinalize, {
@@ -1413,6 +1419,12 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
         pathologistLicense: summaryEx.pathologistLicense,
         remarks: '',
       });
+    }
+
+    if (isFinalize) {
+      window.setTimeout(() => {
+        finalizingRef.current = false;
+      }, 1200);
     }
 
     setSaveToast(
@@ -2087,12 +2099,14 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                 Boolean(resultForm?.resultSections && resultForm.resultSections.length > 0);
               const isBloodTyping = resultForm?.layoutStyle === 'blood-typing';
               const isPregnancy = resultForm?.layoutStyle === 'pregnancy';
+              const isQualitative = resultForm?.layoutStyle === 'qualitative';
               const isNtpRequest = resultForm?.layoutStyle === 'ntp-request';
               const useFlatAnalytes =
                 Boolean(resultForm?.analytes && resultForm.analytes.length > 0) &&
                 !useSimpleTestResult &&
                 !isBloodTyping &&
-                !isPregnancy;
+                !isPregnancy &&
+                !isQualitative;
               const panelExamCodes = panel.members.map((m) => m.examCode);
               const filterFormRow = (row: ResultFormAnalyteRow) => {
                 if (!resultFormRowAppliesToPanel(row, panelExamCodes, resultForm?.id)) return false;
@@ -2244,6 +2258,54 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                           );
                         })}
                       </div>
+                    </div>
+                  ) : isQualitative && resultForm?.analytes?.length ? (
+                    <div className="py-10 sm:py-14 px-4 text-center bg-white min-h-[12rem] flex flex-col items-center justify-center">
+                      {resultForm.specimenFields && resultForm.specimenFields.length > 0 ? (
+                        <OfficialResultSpecimenFields
+                          fields={resultForm.specimenFields}
+                          readValue={readParam}
+                          writeValue={writeParam}
+                        />
+                      ) : null}
+                      {(() => {
+                        const row = resultForm.analytes[0];
+                        const param =
+                          paramsList.find((p) => p.id === row.id) ||
+                          ({
+                            id: row.id,
+                            dataType: 'SELECT' as const,
+                            options: row.options,
+                          } as ParameterDef);
+                        const currentValue =
+                          readParam(row.id) ||
+                          (row.id === 'p_koh_res' ? readParam('koh') : '');
+                        return (
+                          <>
+                            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
+                              {row.label}
+                            </p>
+                            <div className="mt-6 w-full max-w-lg mx-auto">
+                              {row.resultType === 'select' || param.dataType === 'SELECT' ? (
+                                <select
+                                  value={currentValue || param.defaultValue || row.options?.[0] || ''}
+                                  onChange={(e) => writeParam(param.id, e.target.value)}
+                                  className="w-full border-0 border-b-2 border-slate-700 bg-transparent px-2 py-2 text-center text-lg sm:text-xl font-bold tracking-wide text-slate-900 focus:outline-none focus:border-[#0878e8]"
+                                  aria-label={row.label}
+                                >
+                                  {(row.options || param.options || []).map((opt) => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                renderResultInput(param, currentValue)
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   ) : useSimpleTestResult && resultForm?.resultSections ? (
                     /* PTSI Form 3/4: TEST|RESULT Â· Form 6: TEST|RESULT|UNIT|REF */
@@ -2533,13 +2595,29 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                           );
                         }
                         if (resultForm.tableColumns === 'test-result-unit') {
+                          const atKey = `${row.id}_at`;
+                          const atValue = readParam(atKey);
                           return (
                             <div
                               key={row.id}
                               className="lims-rf-grid-row grid grid-cols-12 hover:bg-slate-50/50"
                             >
                               <div className="col-span-5 px-4 py-2.5 text-sm text-slate-800">
-                                {row.label}
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="font-semibold">{row.label}</span>
+                                  {row.hasAtTime ? (
+                                    <>
+                                      <span className="font-semibold">@</span>
+                                      <input
+                                        type="time"
+                                        value={atValue}
+                                        onChange={(e) => writeParam(atKey, e.target.value)}
+                                        className="border-0 border-b border-slate-400 bg-transparent px-1 py-0.5 text-sm text-slate-900 focus:outline-none focus:border-[#0878e8] w-[6.5rem]"
+                                        aria-label={`${row.label} time`}
+                                      />
+                                    </>
+                                  ) : null}
+                                </div>
                               </div>
                               <div className="col-span-4 px-3 py-1.5">
                                 {renderResultInput(param, currentValue)}

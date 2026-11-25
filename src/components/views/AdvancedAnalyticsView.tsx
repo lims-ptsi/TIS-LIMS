@@ -179,7 +179,7 @@ const MAIN_TABS: { id: AnalyticsMainTab; label: string }[] = [
 ];
 
 const PIPELINE_SHORT_LABELS: Record<string, string> = {
-  info: 'Info desk',
+  info: 'Lab intake',
   cashier: 'Cashier',
   ready: 'Ready',
   testing: 'Testing',
@@ -242,7 +242,7 @@ export const AdvancedAnalyticsView: React.FC<AdvancedAnalyticsViewProps> = ({
   }, [snapshot.generatedAt]);
 
   const pipelineRows: CountRow[] = [
-    { key: 'info', label: 'Info desk — select exams', count: snapshot.pipeline.infoDeskIntake },
+    { key: 'info', label: 'Select examinations', count: snapshot.pipeline.infoDeskIntake },
     { key: 'cashier', label: 'At cashier (OPD)', count: snapshot.pipeline.atCashier },
     { key: 'ready', label: 'Ready to receive', count: snapshot.pipeline.readyToReceive },
     { key: 'testing', label: 'In testing', count: snapshot.pipeline.inTesting },
@@ -811,9 +811,9 @@ export const AdvancedAnalyticsView: React.FC<AdvancedAnalyticsViewProps> = ({
             </div>
           </dl>
           <ul className="mt-3 space-y-1 text-[11px] text-slate-600 list-disc pl-4">
-            <li>Use Request queue when info desk intake or receive is backing up.</li>
+            <li>Use Lab intake when filing or receiving is backing up.</li>
             <li>Use Payments when OPD awaiting cashier exceeds daily target.</li>
-            <li>Testing queue depth should align with in-testing pipeline count.</li>
+            <li>Enter results should match the in-testing count.</li>
           </ul>
           </div>
         </article>

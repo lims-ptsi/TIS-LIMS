@@ -150,6 +150,46 @@
   }
 
   /* Patient header on result forms — labels + values, no field underlines */
+  /* Result Forms tab — on-screen paper preview (RF-01…09 A4; RF-10 Legal) */
+  .lims-result-form-paper {
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+    background: #ffffff;
+  }
+
+  .lims-result-form-paper--a4 {
+    width: min(100%, 210mm);
+    min-height: 297mm;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .lims-result-form-paper--legal {
+    width: min(100%, 8.5in);
+    min-height: 14in;
+  }
+
+  .lims-result-form-sheet {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+  }
+
+  .lims-result-form-sheet-body {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .lims-result-form-sheet-footer {
+    margin-top: auto;
+    flex-shrink: 0;
+    padding-top: 1.25rem;
+    border-top: 1px solid #e2e8f0;
+  }
+
   .lims-result-form-patient input,
   .lims-result-form-patient select,
   .lims-result-form-patient textarea {
@@ -407,6 +447,19 @@
 
 .lims-table tr:hover td {
   background-color: #f8faff;
+}
+
+.lims-table--all-requests thead th {
+  background-color: #f8fafc;
+}
+
+.lims-table--all-requests-fixed td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lims-desk-table-scroll {
+  scrollbar-gutter: stable;
 }
 
 .link-blue {
@@ -853,8 +906,6 @@ body.pdf-exporting #lims-pdf-capture-root .coa-official-sheet--inactive {
 body.pdf-exporting .coa-result-sheet {
   display: flex !important;
   flex-direction: column !important;
-  width: 738px !important;
-  min-height: 277mm !important;
   padding: 0 !important;
   margin: 0 0 12px 0 !important;
   background: #ffffff !important;
@@ -862,8 +913,45 @@ body.pdf-exporting .coa-result-sheet {
   box-sizing: border-box !important;
 }
 
-body.pdf-exporting .coa-result-sheet.ntp-official-result-form {
+body.pdf-exporting .coa-result-sheet.coa-result-sheet--a4 {
+  width: 794px !important;
+  min-height: 1123px !important;
+}
+
+body.pdf-exporting .coa-result-sheet.coa-result-sheet--legal {
+  width: 738px !important;
   min-height: 0 !important;
+}
+
+@media print {
+  .lims-result-form-paper--a4 {
+    width: 100% !important;
+    min-height: 100vh !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .lims-result-form-paper--legal {
+    width: 100% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+
+  .lims-result-form-sheet {
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+  }
+
+  .lims-result-form-sheet-footer {
+    margin-top: auto !important;
+    padding-top: 6mm !important;
+    border-top: 1px solid #cbd5e1 !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
 }
 
 body.pdf-exporting .coa-result-sheet-body {

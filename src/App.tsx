@@ -24,6 +24,7 @@ import { QCAnalyticsView } from './components/views/QCAnalyticsView';
 import { InventoryTableView } from './components/views/InventoryTableView';
 import { CoAReportsView } from './components/views/CoAReportsView';
 import { AuditTrailTableView } from './components/views/AuditTrailTableView';
+import { AccountManagementView } from './components/views/AccountManagementView';
 import { InstrumentsView } from './components/views/InstrumentsView';
 import { SubmissionsView } from './components/views/SubmissionsView';
 import { CreateRequisitionView } from './components/views/CreateRequisitionView';
@@ -710,7 +711,7 @@ function MainLimsContent() {
           message: !hasExams
             ? `Request ${newReq.requisitionNumber} saved. Send the patient to the laboratory desk — staff will select examinations next.`
             : corporateAutoTesting
-              ? `Corporate request ${savedReq.requisitionNumber} for ${savedReq.patientOrSubjectName} is on the Testing queue — enter results when ready.`
+              ? `Corporate request ${savedReq.requisitionNumber} for ${savedReq.patientOrSubjectName} is ready under Enter results.`
               : newReq.patientCategory === 'OPD'
                 ? `Laboratory Test Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.caseNo}) is saved. Send the patient to the cashier.`
                 : `Laboratory Test Requisition ${newReq.requisitionNumber} for ${newReq.patientOrSubjectName} (${newReq.caseNo}) is saved. Send the patient to the laboratory.`,
@@ -974,7 +975,12 @@ function MainLimsContent() {
     setPatientNotifyDrawerReq(req);
   };
 
-  const handleNotifyResultsReadyForPickup = async (req: LabTestRequisition) => {
+  const handleNotifyResultsReadyForPickup = async (
+    req: LabTestRequisition,
+    options?: { fromUserAction?: boolean }
+  ): Promise<boolean> => {
+    if (!options?.fromUserAction) return false;
+
     if (!isResultsReleasedForPickup(req, samples)) {
       addToast({
         type: 'warning',
@@ -982,7 +988,7 @@ function MainLimsContent() {
         message: 'Send pickup alerts only after results are completed and released.',
         duration: 4500,
       });
-      return;
+      return false;
     }
     const canNotify =
       hasPermission(user, 'canReleaseCoA') ||
@@ -996,7 +1002,7 @@ function MainLimsContent() {
         message: 'Your role cannot send patient pickup notifications.',
         duration: 5000,
       });
-      return;
+      return false;
     }
 
     const result = await sendResultsReadyPickupNotifications(req);
@@ -1007,7 +1013,7 @@ function MainLimsContent() {
         message: result.skippedReason,
         duration: 7000,
       });
-      return;
+      return false;
     }
 
     const now = new Date().toISOString();
@@ -1052,7 +1058,7 @@ function MainLimsContent() {
         message: failed.join(' · ') || 'Could not send email.',
         duration: 7000,
       });
-      return;
+      return false;
     }
 
     addToast({
@@ -1061,6 +1067,7 @@ function MainLimsContent() {
       message: `${req.patientOrSubjectName}: ${delivered.join(' and ')} sent successfully.${failed.length ? ` ${failed.join(' · ')}` : ''}`,
       duration: 6500,
     });
+    return true;
   };
 
   // Handler: Save & Validate Test Results
@@ -1105,21 +1112,29 @@ function MainLimsContent() {
     const foundReq = requisitions.find(
       (r) => r.id === reqId || r.requisitionNumber === reqId
     );
+    const matchReq = (r: LabTestRequisition) =>
+      r.id === reqId ||
+      r.requisitionNumber === reqId ||
+      (foundReq &&
+        (r.id === foundReq.id ||
+          (foundReq.requisitionNumber && r.requisitionNumber === foundReq.requisitionNumber)));
     const newStatus: 'IN_TESTING' | 'COMPLETED' = isFinalize
       ? 'COMPLETED'
       : foundReq?.status === 'COMPLETED'
         ? 'COMPLETED'
         : 'IN_TESTING';
 
-    // Autosave writes the form values only. Status changes on Save Draft / Finalize.
-    if (!options?.silent) {
-      setRequisitions((prev) =>
-        prev.map((r) => (r.id === reqId ? { ...r, status: newStatus } : r))
-      );
-    }
-
     const numberKey = requisitionNumberKey(foundReq?.requisitionNumber);
     const savedAt = new Date().toISOString();
+
+    // Autosave keeps the status. Save Draft / Finalize also move the request, and both count as the latest update.
+    setRequisitions((prev) =>
+      prev.map((r) =>
+        matchReq(r)
+          ? { ...r, updatedAt: savedAt, ...(options?.silent ? {} : { status: newStatus }) }
+          : r
+      )
+    );
     const withWorkflowStatus = syncExamResultsWorkflowStatus(resultsData, newStatus);
     const completeResults = normalizeExamResultsForPersistence(withWorkflowStatus, foundReq ?? null);
 
@@ -1189,7 +1204,12 @@ function MainLimsContent() {
     if (foundReq) {
       setTestOrders((prev) =>
         prev.map((order) => {
-          if (order.sampleBarcode === foundReq.requisitionNumber || order.patientOrSourceName.includes(foundReq.patientOrSubjectName)) {
+          const patientName = (foundReq.patientOrSubjectName || '').trim();
+          const orderName = (order.patientOrSourceName || '').trim();
+          if (
+            order.sampleBarcode === foundReq.requisitionNumber ||
+            (patientName && orderName.includes(patientName))
+          ) {
             return {
               ...order,
               status: isFinalize ? 'APPROVED' : 'IN_PROGRESS',
@@ -1230,14 +1250,14 @@ function MainLimsContent() {
     });
 
     if (isFinalize && foundReq) {
-      notifyWorkflowMove({ ...foundReq, status: 'COMPLETED' });
+      const completedReq = { ...foundReq, status: 'COMPLETED' as const };
+      notifyWorkflowMove(completedReq);
 
-      // Open printable CoA immediately so finalize → print is one flow
-      if (foundReq) {
-        const completedReq = { ...foundReq, status: 'COMPLETED' as const };
+      // Pickup email/SMS only when staff use Notify patient — not on finalize or print.
+      // Open printable CoA on the next frame so result state settles first.
+      window.setTimeout(() => {
         setDetailCoAModalReq(completedReq);
-        void handleNotifyResultsReadyForPickup(completedReq);
-      }
+      }, 0);
     }
   };
 
@@ -1701,7 +1721,13 @@ function MainLimsContent() {
     setRequisitions((prev) =>
       prev.map((r) =>
         r.id === req.id || r.requisitionNumber === req.requisitionNumber
-          ? { ...r, status: 'IN_TESTING', patientCategory: category, orNumber: effectiveOr || r.orNumber }
+          ? {
+              ...r,
+              status: 'IN_TESTING',
+              patientCategory: category,
+              orNumber: effectiveOr || r.orNumber,
+              updatedAt: new Date().toISOString(),
+            }
           : r
       )
     );
@@ -1801,7 +1827,7 @@ function MainLimsContent() {
       addToast({
         type: res.success ? 'success' : 'warning',
         title: res.success ? 'EXAMINATIONS ORDERED' : 'SAVED LOCALLY',
-        message: `${updated.patientOrSubjectName} — moved to the Testing queue. Physical receiving can be handled separately.`,
+        message: `${updated.patientOrSubjectName} — moved to Enter results. Physical receiving can be handled separately.`,
         duration: 6500,
       });
       notifyWorkflowMove(updated);
@@ -2143,6 +2169,7 @@ function MainLimsContent() {
             onReleaseFilterApplied={() => setSubmissionsReleaseFilter(null)}
             onOpenCompletedReport={openCompletedReport}
             requisitions={requisitions}
+            samples={samples}
             onOpenNewRequisition={
               hasPermission(user, 'canCreateRequest') ? () => setCurrentTab('create-request') : undefined
             }
@@ -2275,6 +2302,7 @@ function MainLimsContent() {
             onSaveResults={handleSaveTestResults}
             storedResults={storedResults}
             storedMedTechInfo={storedMedTechInfo}
+            resultUpdatedAt={resultUpdatedAt}
             currentUserName={user.name}
             permissions={user.permissions}
             onMarkResultsPickedUp={(req, pickedUp) => {
@@ -2631,6 +2659,8 @@ function MainLimsContent() {
           />
         )}
 
+        {currentTab === 'account-management' && <AccountManagementView />}
+
         {/* Instruments & Hardware IoT View */}
         {currentTab === 'instruments' && (
           <InstrumentsView
@@ -2693,6 +2723,10 @@ function MainLimsContent() {
       />
 
       {/* 5. Official Certificate of Analysis (CoA) Report Modal (from Sample Details) */}
+      <ErrorBoundary
+        fallbackTitle="Could not open the official result form preview"
+        onReset={() => setDetailCoAModalReq(null)}
+      >
       <CoAReportModal
         isOpen={!!detailCoAModalReq}
         onClose={() => {
@@ -2748,6 +2782,7 @@ function MainLimsContent() {
             : undefined
         }
       />
+      </ErrorBoundary>
 
       {/* Official Requisition Slip Modal */}
       <RequisitionSlipModal
@@ -2782,7 +2817,8 @@ function MainLimsContent() {
               requisitions.find((r) => r.id === patientNotifyDrawerReq.id) ?? patientNotifyDrawerReq;
             setPatientNotifySending(true);
             try {
-              await handleNotifyResultsReadyForPickup(live);
+              const sent = await handleNotifyResultsReadyForPickup(live, { fromUserAction: true });
+              if (sent) setPatientNotifyDrawerReq(null);
             } finally {
               setPatientNotifySending(false);
             }

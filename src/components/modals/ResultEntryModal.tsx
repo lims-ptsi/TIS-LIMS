@@ -641,12 +641,14 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                   Boolean(resultForm?.resultSections && resultForm.resultSections.length > 0);
                 const isBloodTyping = resultForm?.layoutStyle === 'blood-typing';
                 const isPregnancy = resultForm?.layoutStyle === 'pregnancy';
+                const isQualitative = resultForm?.layoutStyle === 'qualitative';
                 const isNtpRequest = resultForm?.layoutStyle === 'ntp-request';
                 const useFlatAnalytes =
                   Boolean(resultForm?.analytes && resultForm.analytes.length > 0) &&
                   !useSimple &&
                   !isBloodTyping &&
-                  !isPregnancy;
+                  !isPregnancy &&
+                  !isQualitative;
 
                 const formatParamRef = (param: ParameterDef) => {
                   if (param.normalText) return param.normalText;
@@ -766,6 +768,45 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                           </select>
                         </div>
                       ) : null}
+                    </div>
+                  );
+                }
+
+                if (isQualitative && resultForm?.analytes?.length) {
+                  const row = resultForm.analytes[0];
+                  const param = currentTemplate.parameters.find((p) => p.id === row.id);
+                  const paramId = param?.id || row.id;
+                  const currentValue =
+                    currentGroup.parameters[paramId]?.value ||
+                    (row.id === 'p_koh_res' ? currentGroup.parameters.koh?.value : '') ||
+                    '';
+                  const options = row.options || param?.options || [];
+                  return (
+                    <div className="border border-slate-300 rounded-sm py-10 sm:py-14 px-4 text-center bg-white">
+                      {resultForm.specimenFields && resultForm.specimenFields.length > 0 ? (
+                        <OfficialResultSpecimenFields
+                          fields={resultForm.specimenFields}
+                          readValue={(id) => currentGroup.parameters[id]?.value || ''}
+                          writeValue={handleParamChange}
+                        />
+                      ) : null}
+                      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        {row.label}
+                      </p>
+                      <div className="mt-6 w-full max-w-lg mx-auto">
+                        <select
+                          value={currentValue || param?.defaultValue || options[0] || ''}
+                          onChange={(e) => handleParamChange(paramId, e.target.value)}
+                          className="w-full border-0 border-b-2 border-slate-700 bg-transparent px-2 py-2 text-center text-lg sm:text-xl font-bold tracking-wide text-slate-900 focus:outline-none focus:border-[#0176d3]"
+                          aria-label={row.label}
+                        >
+                          {options.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   );
                 }
@@ -1031,13 +1072,29 @@ export const ResultEntryModal: React.FC<ResultEntryModalProps> = ({
                           );
                         }
                         if (threeColUnit) {
+                          const atKey = `${row.id}_at`;
+                          const atValue = currentGroup.parameters[atKey]?.value || '';
                           return (
                             <div
                               key={row.id}
                               className="lims-rf-grid-row grid grid-cols-12"
                             >
                               <div className="col-span-5 px-4 py-2.5 text-sm text-slate-800">
-                                {row.label}
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="font-semibold">{row.label}</span>
+                                  {row.hasAtTime ? (
+                                    <>
+                                      <span className="font-semibold">@</span>
+                                      <input
+                                        type="time"
+                                        value={atValue}
+                                        onChange={(e) => handleParamChange(atKey, e.target.value)}
+                                        className="border-0 border-b border-slate-400 bg-transparent px-1 py-0.5 text-sm text-slate-900 focus:outline-none focus:border-[#0176d3] w-[6.5rem]"
+                                        aria-label={`${row.label} time`}
+                                      />
+                                    </>
+                                  ) : null}
+                                </div>
                               </div>
                               <div className="col-span-4 px-3 py-1.5">{resultControl}</div>
                               <div className="col-span-3 px-4 py-2.5 text-sm tabular-nums text-slate-800">

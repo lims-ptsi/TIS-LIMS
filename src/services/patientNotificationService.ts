@@ -97,7 +97,7 @@ async function dispatchChannel(payload: ResultsReadyNotificationPayload): Promis
   return { ok: true };
 }
 
-/** Send SMS and/or email when results are completed and ready for patient pickup. */
+/** Send SMS and/or email when staff explicitly trigger a pickup alert (not on result finalize). */
 export async function sendResultsReadyPickupNotifications(
   req: LabTestRequisition
 ): Promise<SendResultsReadyResult> {

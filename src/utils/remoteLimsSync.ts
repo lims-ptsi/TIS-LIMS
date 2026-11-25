@@ -97,9 +97,11 @@ export function mergeRemoteRequisitions(
     const hasRemoteOr = remoteOr.length > 0 && remoteOr.toUpperCase() !== 'N/A';
 
     const exams = pickMergedExamFields(local, remote);
+    const updatedAt = [local.updatedAt, remote.updatedAt].filter(Boolean).sort().at(-1);
     return {
       ...remote,
       ...exams,
+      updatedAt,
       patientCategory: remote.patientCategory || local.patientCategory || 'OPD',
       orNumber: hasLocalOr && !hasRemoteOr ? local.orNumber : hasRemoteOr ? remote.orNumber : local.orNumber || remote.orNumber,
       status: pickMergedStatus(local.status, remote.status),

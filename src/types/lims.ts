@@ -267,6 +267,8 @@ export interface LabTestRequisition {
   clinicalNotes: string;
   status: 'SUBMITTED' | 'RECEIVED' | 'IN_TESTING' | 'COMPLETED' | 'CANCELLED';
   tatDeadline: string;
+  /** Last time this request or its results were saved. */
+  updatedAt?: string;
   /** When the patient (or representative) collected the printed/released report */
   resultsPickedUpAt?: string | null;
   /** Staff member who recorded release to the patient */

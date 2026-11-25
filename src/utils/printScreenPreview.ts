@@ -205,5 +205,7 @@ export function printScreenPreview(source: HTMLElement, paper: PaperKind): void 
 }
 
 export function paperKindForPreview(root: HTMLElement): PaperKind {
-  return root.querySelector('.ntp-official-result-form') ? 'legal' : 'a4';
+  return root.querySelector('.coa-result-sheet--legal, .lims-result-form-paper--legal')
+    ? 'legal'
+    : 'a4';
 }

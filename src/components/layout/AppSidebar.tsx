@@ -23,6 +23,7 @@ import {
   PackageCheck,
   Cpu,
   HeartPulse,
+  UserCog,
   type LucideIcon,
 } from 'lucide-react';
 import { APP_NAME } from '../brand/LabTisBrand';
@@ -44,6 +45,7 @@ const TAB_ICONS: Record<string, LucideIcon> = {
   examinations: Microscope,
   'result-templates': LayoutTemplate,
   'audit-trail': ShieldCheck,
+  'account-management': UserCog,
   batches: Layers,
   projects: Layers,
   plates: Grid3X3,
