@@ -47,6 +47,14 @@
   .lims-btn-primary:hover {
     background-color: var(--lims-primary-hover);
   }
+
+  .lims-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg transition-colors cursor-pointer shadow-xs;
+  }
+
+  .lims-btn-secondary:hover {
+    @apply bg-slate-50 border-slate-400 text-slate-900;
+  }
 }
 
 @layer components {
@@ -68,8 +76,7 @@
   }
 
   .lims-input {
-    @apply w-full rounded-lg border bg-white text-slate-800 placeholder-slate-400 text-sm transition-colors focus:outline-none;
-    border-color: var(--lims-border);
+    @apply w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-800 placeholder-slate-400 text-sm transition-colors focus:outline-none;
   }
 
   .lims-input:focus {

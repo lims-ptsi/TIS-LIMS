@@ -772,4 +772,109 @@ export const limsService = {
       return false;
     }
   },
+
+  async createAccountInvite(input: {
+    token: string;
+    email: string;
+    name?: string;
+    role: string;
+    invitedBy?: string;
+    expiresAt: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    if (!supabase || !isSupabaseConfigured) {
+      return { success: false, error: 'Supabase is not configured. Invite links require Supabase.' };
+    }
+    try {
+      const { error } = await supabase.from('account_invites').insert([
+        {
+          token: input.token,
+          email: input.email.trim().toLowerCase(),
+          name: input.name?.trim() || null,
+          role: input.role,
+          invited_by: input.invitedBy || null,
+          expires_at: input.expiresAt,
+        },
+      ]);
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error' };
+    }
+  },
+
+  async fetchAccountInvite(token: string): Promise<{
+    id: string;
+    token: string;
+    email: string;
+    name?: string | null;
+    role: string;
+    invited_by?: string | null;
+    expires_at: string;
+    used_at?: string | null;
+  } | null> {
+    if (!supabase || !isSupabaseConfigured || !token.trim()) return null;
+    try {
+      const { data, error } = await supabase
+        .from('account_invites')
+        .select('id, token, email, name, role, invited_by, expires_at, used_at')
+        .eq('token', token.trim())
+        .maybeSingle();
+      if (error || !data) return null;
+      return data;
+    } catch {
+      return null;
+    }
+  },
+
+  async markAccountInviteUsed(token: string): Promise<boolean> {
+    if (!supabase || !isSupabaseConfigured || !token.trim()) return false;
+    try {
+      const { error } = await supabase
+        .from('account_invites')
+        .update({ used_at: new Date().toISOString() })
+        .eq('token', token.trim());
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  async fetchPendingInvites(): Promise<
+    {
+      id: string;
+      token: string;
+      email: string;
+      name?: string | null;
+      role: string;
+      invited_by?: string | null;
+      expires_at: string;
+      used_at?: string | null;
+      created_at: string;
+    }[]
+  > {
+    if (!supabase || !isSupabaseConfigured) return [];
+    try {
+      const { data, error } = await supabase
+        .from('account_invites')
+        .select('id, token, email, name, role, invited_by, expires_at, used_at, created_at')
+        .is('used_at', null)
+        .order('created_at', { ascending: false });
+      if (error || !data) return [];
+      return data;
+    } catch {
+      return [];
+    }
+  },
+
+  async revokeAccountInvite(id: string): Promise<boolean> {
+    if (!supabase || !isSupabaseConfigured) return false;
+    try {
+      const { error } = await supabase.from('account_invites').delete().eq('id', id);
+      return !error;
+    } catch {
+      return false;
+    }
+  },
 };

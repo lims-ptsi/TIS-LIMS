@@ -44,6 +44,7 @@ import { PatientNotifyDrawer } from './components/modals/PatientNotifyDrawer';
 import { ResultsPickupDrawer } from './components/modals/ResultsPickupDrawer';
 import { limsService } from './services/limsService';
 import { LoginPage } from './components/auth/LoginPage';
+import { InviteAcceptView, isInviteAcceptUrl } from './components/auth/InviteAcceptView';
 import { isPublicVerifyResultUrl, PublicVerifyResultView } from './components/views/PublicVerifyResultView';
 import { LockScreenModal } from './components/auth/LockScreenModal';
 import { ToastAlert, ToastMessage } from './components/common/ToastAlert';
@@ -666,6 +667,10 @@ function MainLimsContent() {
 
   if (isPublicVerifyResultUrl()) {
     return <PublicVerifyResultView />;
+  }
+
+  if (isInviteAcceptUrl()) {
+    return <InviteAcceptView />;
   }
 
   // If user is not authenticated, render the dedicated LoginPage

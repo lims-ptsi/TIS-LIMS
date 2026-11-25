@@ -19,7 +19,7 @@ interface AuthContextType {
   facility: LaboratoryFacility;
   setFacility: (facility: LaboratoryFacility) => void;
   login: (credentials: LoginCredentials) => Promise<{ success: boolean; error?: string }>;
-  loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: (options?: { loginHint?: string }) => Promise<{ success: boolean; error?: string }>;
   isSsoLoading: boolean;
   isSupabaseAuthAvailable: boolean;
   ssoError: string | null;
@@ -29,6 +29,15 @@ interface AuthContextType {
     username: string;
     password: string;
     role: AppRole;
+  }) => Promise<{ success: boolean; error?: string }>;
+  acceptInviteAccount: (input: {
+    token: string;
+    name: string;
+    username: string;
+    email: string;
+    password?: string;
+    role: AppRole;
+    useGoogleSso?: boolean;
   }) => Promise<{ success: boolean; error?: string }>;
   loginAs: (persona: AuthUser) => void;
   logout: () => void;
@@ -66,6 +75,7 @@ interface AuthContextType {
 const STORAGE_KEY_USER = 'aegis_lims_active_user';
 const STORAGE_KEY_LOCKED = 'aegis_lims_screen_locked';
 const STORAGE_KEY_FACILITY = 'aegis_lims_facility';
+const STORAGE_KEY_PENDING_INVITE = 'aegis_lims_pending_invite_v1';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -135,7 +145,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const resolveGoogleSession = useCallback(
-    async (email?: string | null) => {
+    async (email?: string | null, fullNameFromGoogle?: string | null) => {
       const cleanEmail = (email || '').trim().toLowerCase();
       if (!cleanEmail) {
         await supabase?.auth.signOut();
@@ -146,6 +156,87 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setIsSsoLoading(true);
       try {
+        // Check if returning from an email invite link
+        let pendingRaw: string | null = null;
+        try {
+          pendingRaw = localStorage.getItem(STORAGE_KEY_PENDING_INVITE);
+        } catch {
+          pendingRaw = null;
+        }
+
+        if (pendingRaw) {
+          let pending: { token: string; email: string; name?: string; role: AppRole } | null = null;
+          try {
+            pending = JSON.parse(pendingRaw);
+          } catch {
+            pending = null;
+          }
+          localStorage.removeItem(STORAGE_KEY_PENDING_INVITE);
+
+          if (pending && pending.email.trim().toLowerCase() !== cleanEmail) {
+            await supabase?.auth.signOut();
+            setUser(null);
+            setSsoError(
+              `This invite link is only for ${pending.email}. You signed in with ${cleanEmail}.`
+            );
+            return;
+          }
+
+          if (pending) {
+            const invite = await limsService.fetchAccountInvite(pending.token);
+            if (!invite || invite.used_at || new Date(invite.expires_at).getTime() < Date.now()) {
+              await supabase?.auth.signOut();
+              setUser(null);
+              setSsoError('This invite link is invalid, expired, or has already been used.');
+              return;
+            }
+
+            const existing = findAccountByEmail(accountsRef.current, cleanEmail);
+            if (!existing) {
+              const displayName =
+                pending.name?.trim() ||
+                fullNameFromGoogle?.trim() ||
+                cleanEmail.split('@')[0] ||
+                'Lab User';
+              const baseUsername =
+                cleanEmail
+                  .split('@')[0]
+                  ?.replace(/[^a-z0-9._-]/gi, '')
+                  .toLowerCase() || 'user';
+              let candidate = baseUsername.length >= 3 ? baseUsername : `usr.${baseUsername}`;
+              let suffix = 1;
+              while (accountsRef.current.some((a) => a.user.username === candidate)) {
+                candidate = `${baseUsername}${suffix++}`;
+              }
+
+              const role = isAppRole(invite.role) ? invite.role : pending.role;
+              const newAccount: StoredAccount = {
+                password: '',
+                user: buildAccountUser({
+                  name: displayName,
+                  username: candidate,
+                  role,
+                  email: cleanEmail,
+                }),
+              };
+              const nextAccounts = [...accountsRef.current, newAccount];
+              accountsRef.current = nextAccounts;
+              setAccounts(nextAccounts);
+              saveAccounts(nextAccounts);
+              await limsService.upsertAccount({
+                username: candidate,
+                name: displayName,
+                email: cleanEmail,
+                role,
+                password: '',
+                ssoProvider: 'google',
+              });
+            }
+
+            await limsService.markAccountInviteUsed(pending.token);
+          }
+        }
+
         let pool = accountsRef.current;
         let matched = findAccountByEmail(pool, cleanEmail);
         if (!matched && limsService.isLive) {
@@ -157,7 +248,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await supabase?.auth.signOut();
           setUser(null);
           setSsoError(
-            `Your Google account (${cleanEmail}) is not linked to any LIMS account. Ask an administrator to link your Google email in Account management.`
+            `Your Google account (${cleanEmail}) is not linked to any LIMS account. Ask an administrator to send you an email invite.`
           );
           return;
         }
@@ -190,14 +281,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     void client.auth.getSession().then(({ data }) => {
       if (!active) return;
       if (data.session?.user?.email) {
-        void resolveGoogleSession(data.session.user.email);
+        const metaName = (data.session.user.user_metadata?.full_name ||
+          data.session.user.user_metadata?.name) as string | undefined;
+        void resolveGoogleSession(data.session.user.email, metaName);
       }
     });
 
     const { data: listener } = client.auth.onAuthStateChange((event, session) => {
       if (!active) return;
       if (event === 'SIGNED_IN' && session?.user?.email) {
-        void resolveGoogleSession(session.user.email);
+        const metaName = (session.user.user_metadata?.full_name ||
+          session.user.user_metadata?.name) as string | undefined;
+        void resolveGoogleSession(session.user.email, metaName);
       } else if (event === 'SIGNED_OUT') {
         setIsSsoLoading(false);
       }
@@ -236,7 +331,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
-  const loginWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+  const loginWithGoogle = async (options?: {
+    loginHint?: string;
+  }): Promise<{ success: boolean; error?: string }> => {
     if (!supabase || !isSupabaseConfigured) {
       return {
         success: false,
@@ -246,13 +343,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSsoError(null);
     setIsSsoLoading(true);
     try {
+      const queryParams: Record<string, string> = {
+        prompt: 'select_account',
+      };
+      if (options?.loginHint?.trim()) {
+        queryParams.login_hint = options.loginHint.trim().toLowerCase();
+      }
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: window.location.origin,
-          queryParams: {
-            prompt: 'select_account',
-          },
+          queryParams,
         },
       });
       if (error) {
@@ -457,6 +558,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return created;
   };
 
+  const acceptInviteAccount = async (input: {
+    token: string;
+    name: string;
+    username: string;
+    email: string;
+    password?: string;
+    role: AppRole;
+    useGoogleSso?: boolean;
+  }): Promise<{ success: boolean; error?: string }> => {
+    const invite = await limsService.fetchAccountInvite(input.token);
+    if (!invite) {
+      return { success: false, error: 'This invite link is invalid or could not be found.' };
+    }
+    if (invite.used_at) {
+      return { success: false, error: 'This invite link has already been used.' };
+    }
+    if (new Date(invite.expires_at).getTime() < Date.now()) {
+      return { success: false, error: 'This invite link has expired. Ask an administrator for a new invite.' };
+    }
+
+    const role = isAppRole(invite.role) ? invite.role : input.role;
+    localStorage.setItem(
+      STORAGE_KEY_PENDING_INVITE,
+      JSON.stringify({
+        token: input.token,
+        email: invite.email.trim().toLowerCase(),
+        name: input.name?.trim() || invite.name || undefined,
+        role,
+      })
+    );
+
+    return loginWithGoogle({ loginHint: invite.email });
+  };
+
   const loginAs = (persona: AuthUser) => {
     setUser(persona);
     setIsScreenLocked(false);
@@ -504,6 +639,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ssoError,
         clearSsoError,
         register,
+        acceptInviteAccount,
         loginAs,
         logout,
         lockScreen,

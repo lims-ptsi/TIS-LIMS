@@ -143,6 +143,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS app_accounts_email_lower_idx
   ON public.app_accounts (LOWER(email))
   WHERE email IS NOT NULL AND email <> '';
 
+-- 4d. Account Invites Table (email invite links for controlled account creation)
+CREATE TABLE IF NOT EXISTS public.account_invites (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    token TEXT UNIQUE NOT NULL,
+    email TEXT NOT NULL,
+    name TEXT,
+    role TEXT NOT NULL DEFAULT 'STAFF',
+    invited_by TEXT,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS account_invites_token_idx
+  ON public.account_invites (token);
+
 -- =========================================================================
 -- 5. ENABLE ACCESS POLICIES (Fix Row Level Security 42501 error)
 -- You can either disable RLS or add public/anon policies.
@@ -155,6 +171,7 @@ ALTER TABLE public.audit_logs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.examinations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.test_results DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.app_accounts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.account_invites DISABLE ROW LEVEL SECURITY;
 
 -- Option B: Grant full permissions to anon & authenticated roles
 GRANT ALL ON public.requisitions TO anon, authenticated, service_role;
@@ -163,6 +180,7 @@ GRANT ALL ON public.audit_logs TO anon, authenticated, service_role;
 GRANT ALL ON public.examinations TO anon, authenticated, service_role;
 GRANT ALL ON public.test_results TO anon, authenticated, service_role;
 GRANT ALL ON public.app_accounts TO anon, authenticated, service_role;
+GRANT ALL ON public.account_invites TO anon, authenticated, service_role;
 
 -- Notify completion
 SELECT 'Supabase LIMS Tables & Permissions Configured Successfully!' AS status;

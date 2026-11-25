@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from 'react';
-import { Pencil, Plus, Trash2, UserCog, Search } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Copy, Mail, Pencil, Plus, Search, Trash2, UserCog } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { APP_NAME } from '../brand/LabTisBrand';
 import { APP_ROLES, AppRole, roleLabel } from '../../data/roleAccess';
 import { LimsHeroHeader } from '../common/LimsHeroHeader';
 import { LimsWorkspace } from '../common/LimsWorkspace';
+import { limsService } from '../../services/limsService';
+import { resolvePublicVerifyOrigin } from '../../utils/officialResultVerification';
 
 type FormMode = 'create' | 'edit';
 
@@ -42,6 +44,105 @@ export const AccountManagementView: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteRole, setInviteRole] = useState<AppRole>('STAFF');
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteResult, setInviteResult] = useState<{ url: string; emailSent: boolean; emailNote?: string } | null>(null);
+  const [copiedInviteUrl, setCopiedInviteUrl] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState<
+    { id: string; token: string; email: string; name?: string | null; role: string; expires_at: string }[]
+  >([]);
+
+  const loadPendingInvites = async () => {
+    const list = await limsService.fetchPendingInvites();
+    setPendingInvites(list);
+  };
+
+  useEffect(() => {
+    void loadPendingInvites();
+  }, []);
+
+  const openInviteModal = () => {
+    setInviteEmail('');
+    setInviteName('');
+    setInviteRole('STAFF');
+    setInviteError(null);
+    setInviteResult(null);
+    setCopiedInviteUrl(false);
+    setInviteOpen(true);
+  };
+
+  const handleSendInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviteError(null);
+    const cleanEmail = inviteEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setInviteError('Enter a valid email address.');
+      return;
+    }
+    if (directoryAccounts.some((acc) => acc.user.email?.trim().toLowerCase() === cleanEmail)) {
+      setInviteError('An account with this email already exists.');
+      return;
+    }
+
+    setInviteSending(true);
+    try {
+      const tokenBytes = new Uint8Array(24);
+      crypto.getRandomValues(tokenBytes);
+      const token = Array.from(tokenBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+
+      const saved = await limsService.createAccountInvite({
+        token,
+        email: cleanEmail,
+        name: inviteName.trim() || undefined,
+        role: inviteRole,
+        invitedBy: user?.name || 'Laboratory Admin',
+        expiresAt,
+      });
+
+      if (!saved.success) {
+        setInviteError(saved.error || 'Could not create invite in database. Run supabase_setup.sql first.');
+        return;
+      }
+
+      const publicOrigin = resolvePublicVerifyOrigin(window.location.origin);
+      const inviteUrl = `${publicOrigin}/?invite=${token}`;
+      let emailSent = false;
+      let emailNote: string | undefined;
+
+      try {
+        const res = await fetch('/api/send-invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: cleanEmail,
+            inviteUrl,
+            roleLabel: roleLabel(inviteRole),
+            recipientName: inviteName.trim() || undefined,
+            invitedBy: user?.name || 'Laboratory Admin',
+          }),
+        });
+        if (res.ok) {
+          emailSent = true;
+        } else {
+          const data = await res.json().catch(() => ({}));
+          emailNote = data?.error || 'Email service not configured — copy and share the invite link below.';
+        }
+      } catch {
+        emailNote = 'Could not reach email service — copy and share the invite link below.';
+      }
+
+      setInviteResult({ url: inviteUrl, emailSent, emailNote });
+      void loadPendingInvites();
+    } finally {
+      setInviteSending(false);
+    }
+  };
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -170,14 +271,24 @@ export const AccountManagementView: React.FC = () => {
               </>
             }
             actions={
-              <button
-                type="button"
-                onClick={openCreate}
-                className="lims-btn-primary px-4 py-2 text-sm rounded-lg shadow-sm"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add account</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={openInviteModal}
+                  className="lims-btn-secondary px-3.5 py-2 text-sm rounded-lg"
+                >
+                  <Mail className="w-4 h-4" />
+                  <span>Invite via email</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="lims-btn-primary px-4 py-2 text-sm rounded-lg shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add account</span>
+                </button>
+              </div>
             }
           />
         }
@@ -268,6 +379,175 @@ export const AccountManagementView: React.FC = () => {
           </table>
         </div>
       </LimsWorkspace>
+
+      {pendingInvites.length > 0 ? (
+        <div className="lims-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-[var(--lims-navy)]">
+              Pending email invites ({pendingInvites.length})
+            </h2>
+          </div>
+          <div className="divide-y divide-slate-100 text-xs">
+            {pendingInvites.map((inv) => {
+              const url = `${resolvePublicVerifyOrigin(window.location.origin)}/?invite=${inv.token}`;
+              return (
+                <div key={inv.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="font-mono font-semibold text-slate-800">{inv.email}</div>
+                    <div className="text-[11px] text-slate-500">
+                      Role: {roleLabel(inv.role)} · Expires {new Date(inv.expires_at).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void navigator.clipboard.writeText(url)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-slate-700 text-[11px] font-semibold hover:border-[#0878e8]/40 cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      Copy link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await limsService.revokeAccountInvite(inv.id);
+                        void loadPendingInvites();
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-red-200 bg-red-50 text-red-700 text-[11px] font-semibold hover:bg-red-100 cursor-pointer"
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {inviteOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/40">
+          <div role="dialog" aria-modal="true" className="lims-card w-full max-w-md shadow-xl">
+            <div className="px-5 py-4 border-b border-[var(--lims-border)]">
+              <h2 className="text-lg font-semibold text-[var(--lims-navy)]">Invite user via email</h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Sends a one-time invite link (valid 48 hours) to create their account.
+              </p>
+            </div>
+            {inviteResult ? (
+              <div className="px-5 py-4 space-y-3 text-xs">
+                <div
+                  className={`p-3 rounded-lg border ${
+                    inviteResult.emailSent
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-amber-50 border-amber-200 text-amber-800'
+                  }`}
+                >
+                  {inviteResult.emailSent
+                    ? `Invite email sent to ${inviteEmail.trim()}.`
+                    : inviteResult.emailNote}
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide mb-1">
+                    Invite link
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={inviteResult.url}
+                      className="lims-input font-mono text-[11px] flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(inviteResult.url);
+                        setCopiedInviteUrl(true);
+                      }}
+                      className="lims-btn-secondary px-3 py-2 text-xs rounded-lg shrink-0"
+                    >
+                      {copiedInviteUrl ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setInviteOpen(false)}
+                    className="lims-btn-primary text-sm px-4 py-2 rounded-lg"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSendInvite} className="px-5 py-4 space-y-3">
+                <label className="block">
+                  <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
+                    Recipient email
+                  </span>
+                  <input
+                    type="email"
+                    required
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="name@gmail.com"
+                    className="lims-input mt-1"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
+                    Full name (optional)
+                  </span>
+                  <input
+                    type="text"
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                    placeholder="e.g. Ana Reyes"
+                    className="lims-input mt-1"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
+                    Desk role
+                  </span>
+                  <select
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value as AppRole)}
+                    className="lims-input mt-1"
+                  >
+                    {APP_ROLES.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {inviteError ? (
+                  <p className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                    {inviteError}
+                  </p>
+                ) : null}
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setInviteOpen(false)}
+                    className="lims-btn-secondary text-sm px-4 py-2 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={inviteSending}
+                    className="lims-btn-primary text-sm px-4 py-2 rounded-lg"
+                  >
+                    {inviteSending ? 'Sending…' : 'Send invite'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {formOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/40">
