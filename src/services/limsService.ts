@@ -100,6 +100,7 @@ function mapRequisitionRow(row: Record<string, any>): LabTestRequisition {
     clinicalNotes: row.clinical_notes || '',
     status: row.status || 'SUBMITTED',
     tatDeadline: row.tat_deadline || new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+    updatedAt: row.updated_at || row.created_at || undefined,
     resultsPickedUpAt: row.results_picked_up_at || null,
     resultsPickedUpBy: row.results_picked_up_by || null,
     resultsReadySmsSentAt: row.results_ready_sms_sent_at || null,
@@ -696,6 +697,78 @@ export const limsService = {
       return true;
     } catch (err) {
       console.error('[Supabase] deleteExamination exception:', err);
+      return false;
+    }
+  },
+
+  async fetchAccounts(): Promise<
+    { username: string; name: string; email?: string | null; role: string; password?: string | null; sso_provider?: string | null }[] | null
+  > {
+    if (!supabase || !isSupabaseConfigured) return null;
+    try {
+      const { data, error } = await supabase
+        .from('app_accounts')
+        .select('username, name, email, role, password, sso_provider')
+        .order('username', { ascending: true });
+      if (error) {
+        console.warn('[Supabase] fetchAccounts warning:', error.message);
+        return null;
+      }
+      return data || [];
+    } catch (err) {
+      console.warn('[Supabase] fetchAccounts exception:', err);
+      return null;
+    }
+  },
+
+  async upsertAccount(account: {
+    username: string;
+    name: string;
+    email?: string;
+    role: string;
+    password?: string;
+    ssoProvider?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    if (!supabase || !isSupabaseConfigured) return { success: true };
+    try {
+      const cleanEmail = account.email?.trim().toLowerCase() || null;
+      const { error } = await supabase.from('app_accounts').upsert(
+        [
+          {
+            username: account.username.trim().toLowerCase(),
+            name: account.name.trim(),
+            email: cleanEmail,
+            role: account.role,
+            password: account.password ?? '',
+            sso_provider: account.ssoProvider || (cleanEmail && !cleanEmail.endsWith('@ptsi.lab') ? 'google' : null),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+        { onConflict: 'username' }
+      );
+      if (error) {
+        console.warn('[Supabase] upsertAccount warning:', error.message);
+        return { success: false, error: error.message };
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error' };
+    }
+  },
+
+  async deleteAccount(username: string): Promise<boolean> {
+    if (!supabase || !isSupabaseConfigured) return true;
+    try {
+      const { error } = await supabase
+        .from('app_accounts')
+        .delete()
+        .eq('username', username.trim().toLowerCase());
+      if (error) {
+        console.warn('[Supabase] deleteAccount warning:', error.message);
+        return false;
+      }
+      return true;
+    } catch {
       return false;
     }
   },

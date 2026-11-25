@@ -69,6 +69,7 @@ export function permissionsForRole(role: AppRole): Permissions {
       canManageInstruments: true,
       canReviewAuditLogs: true,
       canSignOffCriticals: true,
+      canManageAccounts: true,
     };
   }
   if (role === 'LAB_STAFF') {
@@ -97,8 +98,8 @@ export interface NavTab {
 const NAV: { id: string; label: string; roles: AppRole[] }[] = [
   { id: 'home', label: 'Home', roles: ['STAFF', 'CASHIER', 'LAB_STAFF', 'ADMIN'] },
   { id: 'create-request', label: 'Create Lab Test Request', roles: ['STAFF', 'LAB_STAFF', 'ADMIN'] },
-  { id: 'lab-requests', label: 'Request queue', roles: ['LAB_STAFF', 'ADMIN'] },
-  { id: 'testing-queue', label: 'Testing queue', roles: ['LAB_STAFF', 'ADMIN'] },
+  { id: 'lab-requests', label: 'Lab intake', roles: ['LAB_STAFF', 'ADMIN'] },
+  { id: 'testing-queue', label: 'Enter results', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'pickup-management', label: 'Pickup management', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'all-requests', label: 'All requests', roles: ['LAB_STAFF', 'ADMIN'] },
   { id: 'analytics-reports', label: 'Analytics & reports', roles: ['LAB_STAFF', 'ADMIN'] },
@@ -110,6 +111,7 @@ const NAV: { id: string; label: string; roles: AppRole[] }[] = [
   { id: 'examinations', label: 'Examinations', roles: ['ADMIN'] },
   { id: 'result-templates', label: 'Result Templates', roles: ['ADMIN'] },
   { id: 'audit-trail', label: 'Audit Trail', roles: ['ADMIN'] },
+  { id: 'account-management', label: 'Account management', roles: ['ADMIN'] },
 ];
 
 export function tabsForRole(role: UserRoleType | string | undefined): NavTab[] {
@@ -137,6 +139,7 @@ export function canOpenTab(role: UserRoleType | string | undefined, tab: string)
       'qc-analytics',
       'inventory',
       'instruments',
+      'account-management',
     ].includes(tab);
   }
   return false;
@@ -148,9 +151,11 @@ export function buildAccountUser(input: {
   name: string;
   username: string;
   role: AppRole;
+  email?: string;
 }): AuthUser {
   const name = input.name.trim();
   const username = input.username.trim().toLowerCase();
+  const email = input.email?.trim().toLowerCase() || `${username}@ptsi.lab`;
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -162,7 +167,7 @@ export function buildAccountUser(input: {
     id: `usr-${username}`,
     name,
     title: roleLabel(role),
-    email: `${username}@ptsi.lab`,
+    email,
     username,
     role: roleLabel(role),
     roleType: role,

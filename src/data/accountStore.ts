@@ -35,18 +35,19 @@ export function loadAccounts(): StoredAccount[] {
     const byUsername = new Map<string, StoredAccount>();
     seeded.forEach((account) => byUsername.set(account.user.username, account));
     parsed.forEach((row) => {
-      if (!row?.user?.username || !row.password) return;
+      if (!row?.user?.username) return;
       if (!isAppRole(row.user.roleType)) return;
       const user = {
         ...buildAccountUser({
           name: row.user.name || row.user.username,
           username: row.user.username,
           role: row.user.roleType,
+          email: row.user.email,
         }),
         id: row.user.id || `usr-${row.user.username}`,
       };
       user.permissions = permissionsForRole(row.user.roleType);
-      byUsername.set(user.username, { user, password: String(row.password) });
+      byUsername.set(user.username, { user, password: row.password ? String(row.password) : '' });
     });
     return Array.from(byUsername.values());
   } catch {
@@ -56,4 +57,40 @@ export function loadAccounts(): StoredAccount[] {
 
 export function saveAccounts(accounts: StoredAccount[]): void {
   localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+}
+
+export function findAccountByEmail(accounts: StoredAccount[], email: string): StoredAccount | undefined {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return undefined;
+  return accounts.find((item) => item.user.email?.trim().toLowerCase() === normalized);
+}
+
+export function mergeRemoteAccounts(
+  local: StoredAccount[],
+  remote: { username: string; name: string; email?: string | null; role: string; password?: string | null }[]
+): StoredAccount[] {
+  const byUsername = new Map<string, StoredAccount>();
+  local.forEach((acc) => byUsername.set(acc.user.username.toLowerCase(), acc));
+
+  remote.forEach((row) => {
+    const username = (row.username || '').trim().toLowerCase();
+    if (!username || !isAppRole(row.role)) return;
+    const existing = byUsername.get(username);
+    const user = {
+      ...buildAccountUser({
+        name: row.name || username,
+        username,
+        role: row.role,
+        email: row.email || existing?.user.email,
+      }),
+      id: existing?.user.id || `usr-${username}`,
+    };
+    user.permissions = permissionsForRole(row.role);
+    byUsername.set(username, {
+      user,
+      password: row.password != null && row.password !== '' ? String(row.password) : existing?.password || '',
+    });
+  });
+
+  return Array.from(byUsername.values());
 }
