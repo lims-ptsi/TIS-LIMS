@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { DashboardHeroArtwork } from '../common/LimsDashboardArtwork';
 import { 
   FlaskConical, 
   Search, 
@@ -473,29 +474,35 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
     <div className="lims-page-shell text-slate-900">
       
       {/* 1. Header Row */}
-      <div className="lims-card p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-md bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs">
-            <FlaskConical className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 font-medium">Laboratory Master Setup</span>
-              <span className="text-[10px] bg-blue-50 text-[#0878e8] px-2 py-0.5 rounded font-mono font-bold border border-blue-200">
-                MASTER CATALOG &amp; CORPORATE TARIFFS
-              </span>
+      <section className="lims-card relative overflow-hidden border-[var(--lims-border)] bg-gradient-to-br from-white via-white to-sky-50/30">
+        <DashboardHeroArtwork />
+        <div className="relative z-[1] px-5 py-5 sm:px-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0 flex-1">
+            <img
+              src="/ptsilogo.png"
+              alt="PTSI Logo"
+              className="w-20 h-20 sm:w-24 sm:h-24 object-contain shrink-0"
+            />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#0878e8] bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
+                  Laboratory Master Setup
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-600 bg-white border border-[var(--lims-border)] px-2 py-0.5 rounded-full">
+                  Master Catalog &amp; Corporate Tariffs
+                </span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-bold text-[var(--lims-navy)] mt-2 tracking-tight">
+                Examinations Catalog &amp; Test Offerings
+              </h1>
+              <p className="text-sm text-slate-600 mt-1 max-w-2xl">
+                Configure product codes, test names, department categories, standard rates, corporate pricelist tariffs, and SLAs.
+              </p>
             </div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              Examinations Catalog &amp; Test Offerings
-            </h1>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Configure product codes, test names, department categories, standard rates, corporate pricelist tariffs, and SLAs.
-            </p>
           </div>
-        </div>
 
-        {/* Header Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+          {/* Header Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
           {onNavigateToTemplates && (
             <button
               type="button"
@@ -536,8 +543,9 @@ export const ExaminationsView: React.FC<ExaminationsViewProps> = ({
             <Plus className="w-4 h-4" />
             <span>Add Examination</span>
           </button>
+          </div>
         </div>
-      </div>
+      </section>
 
       {/* 2. Compact Metrics Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

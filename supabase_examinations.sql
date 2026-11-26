@@ -27,7 +27,14 @@ CREATE TABLE IF NOT EXISTS public.examinations (
 CREATE INDEX IF NOT EXISTS examinations_assigned_form_idx
   ON public.examinations (assigned_form);
 
-ALTER TABLE public.examinations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.examinations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "lims_examinations_all" ON public.examinations;
+CREATE POLICY "lims_examinations_all"
+  ON public.examinations
+  FOR ALL
+  TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
 GRANT ALL ON public.examinations TO anon, authenticated, service_role;
 
 SELECT 'examinations table ready' AS status;

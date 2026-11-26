@@ -1,5 +1,6 @@
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
+import { DashboardHeroArtwork } from './LimsDashboardArtwork';
 
 interface LimsPageHeaderProps {
   eyebrow?: string;
@@ -17,38 +18,42 @@ export const LimsPageHeader: React.FC<LimsPageHeaderProps> = ({
   eyebrow,
   title,
   description,
-  icon: Icon,
   badge,
   actions,
   className,
   variant = 'card',
 }) => (
   <header
-    className={`flex flex-col gap-4 p-4 sm:p-5 md:flex-row md:items-center md:justify-between ${
+    className={`relative overflow-hidden ${
       variant === 'embedded'
-        ? 'border-b border-[var(--lims-border)] bg-gradient-to-br from-white via-white to-sky-50/40'
-        : 'lims-card'
+        ? 'border-b border-[var(--lims-border)] bg-gradient-to-br from-white via-white to-sky-50/30'
+        : 'lims-card border-[var(--lims-border)] bg-gradient-to-br from-white via-white to-sky-50/30'
     }${className ? ` ${className}` : ''}`}
   >
-    <div className="flex items-start gap-3 min-w-0">
-      {Icon ? (
-        <span className="w-11 h-11 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-center text-[#0878e8] shrink-0">
-          <Icon className="w-5 h-5" strokeWidth={1.75} aria-hidden />
-        </span>
-      ) : null}
-      <div className="min-w-0">
-        {eyebrow ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{eyebrow}</span>
-            {badge}
-          </div>
-        ) : (
-          badge
-        )}
-        <h1 className="text-lg sm:text-xl font-bold text-[var(--lims-navy)] tracking-tight mt-1">{title}</h1>
-        {description ? <p className="text-sm text-slate-600 mt-1 max-w-3xl leading-snug">{description}</p> : null}
+    <DashboardHeroArtwork />
+    <div className="relative z-[1] px-5 py-5 sm:px-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex items-center gap-4 min-w-0 flex-1">
+        <img
+          src="/ptsilogo.png"
+          alt="PTSI Logo"
+          className="w-20 h-20 sm:w-24 sm:h-24 object-contain shrink-0"
+        />
+        <div className="min-w-0">
+          {eyebrow ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#0878e8] bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
+                {eyebrow}
+              </span>
+              {badge}
+            </div>
+          ) : (
+            badge
+          )}
+          <h1 className="text-xl sm:text-2xl font-bold text-[var(--lims-navy)] mt-2 tracking-tight">{title}</h1>
+          {description ? <p className="text-sm text-slate-600 mt-1 max-w-3xl leading-snug">{description}</p> : null}
+        </div>
       </div>
+      {actions ? <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div> : null}
     </div>
-    {actions ? <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div> : null}
   </header>
 );

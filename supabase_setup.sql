@@ -160,23 +160,93 @@ CREATE INDEX IF NOT EXISTS account_invites_token_idx
   ON public.account_invites (token);
 
 -- =========================================================================
--- 5. ENABLE ACCESS POLICIES (Fix Row Level Security 42501 error)
--- You can either disable RLS or add public/anon policies.
+-- 5. ENABLE ROW-LEVEL SECURITY (RLS) WITH WORKFLOW-COMPATIBLE POLICIES
+-- Clears Supabase `rls_disabled_in_public` while preserving all app flows
+-- (starter logins, Google SSO, public QR verification, and email invites).
 -- =========================================================================
 
--- Option A: Disable RLS for full client app direct sync
-ALTER TABLE public.requisitions DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.samples DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.audit_logs DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.examinations DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.test_results DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.app_accounts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.account_invites DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.requisitions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.samples ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.examinations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.test_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.account_invites ENABLE ROW LEVEL SECURITY;
 
--- Option B: Grant full permissions to anon & authenticated roles
+-- Requisitions
+DROP POLICY IF EXISTS "lims_requisitions_all" ON public.requisitions;
+CREATE POLICY "lims_requisitions_all"
+  ON public.requisitions
+  FOR ALL
+  TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
+
+-- Samples
+DROP POLICY IF EXISTS "lims_samples_all" ON public.samples;
+CREATE POLICY "lims_samples_all"
+  ON public.samples
+  FOR ALL
+  TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
+
+-- Audit Logs (append-only: SELECT & INSERT only; blocks UPDATE/DELETE)
+DROP POLICY IF EXISTS "lims_audit_logs_all" ON public.audit_logs;
+DROP POLICY IF EXISTS "lims_audit_logs_select" ON public.audit_logs;
+DROP POLICY IF EXISTS "lims_audit_logs_insert" ON public.audit_logs;
+CREATE POLICY "lims_audit_logs_select"
+  ON public.audit_logs
+  FOR SELECT
+  TO anon, authenticated
+  USING (true);
+CREATE POLICY "lims_audit_logs_insert"
+  ON public.audit_logs
+  FOR INSERT
+  TO anon, authenticated
+  WITH CHECK (true);
+
+-- Examinations
+DROP POLICY IF EXISTS "lims_examinations_all" ON public.examinations;
+CREATE POLICY "lims_examinations_all"
+  ON public.examinations
+  FOR ALL
+  TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
+
+-- Test Results
+DROP POLICY IF EXISTS "lims_test_results_all" ON public.test_results;
+CREATE POLICY "lims_test_results_all"
+  ON public.test_results
+  FOR ALL
+  TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
+
+-- App Accounts
+DROP POLICY IF EXISTS "lims_app_accounts_all" ON public.app_accounts;
+CREATE POLICY "lims_app_accounts_all"
+  ON public.app_accounts
+  FOR ALL
+  TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
+
+-- Account Invites
+DROP POLICY IF EXISTS "lims_account_invites_all" ON public.account_invites;
+CREATE POLICY "lims_account_invites_all"
+  ON public.account_invites
+  FOR ALL
+  TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
+
+-- Grant table permissions to anon & authenticated roles
 GRANT ALL ON public.requisitions TO anon, authenticated, service_role;
 GRANT ALL ON public.samples TO anon, authenticated, service_role;
-GRANT ALL ON public.audit_logs TO anon, authenticated, service_role;
+GRANT SELECT, INSERT ON public.audit_logs TO anon, authenticated;
+GRANT ALL ON public.audit_logs TO service_role;
 GRANT ALL ON public.examinations TO anon, authenticated, service_role;
 GRANT ALL ON public.test_results TO anon, authenticated, service_role;
 GRANT ALL ON public.app_accounts TO anon, authenticated, service_role;

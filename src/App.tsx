@@ -774,7 +774,10 @@ function MainLimsContent() {
     }
 
     try {
-      setRequisitions((prev) => prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
+      const updatedWithStamp = { ...updated, updatedAt: new Date().toISOString() };
+      setRequisitions((prev) =>
+        prev.map((item) => (item.id === updated.id ? { ...item, ...updatedWithStamp } : item))
+      );
       handleAppendAuditLog({
         tableName: 'requisitions',
         recordId: updated.id,
@@ -814,8 +817,13 @@ function MainLimsContent() {
     const targetReqNum = foundReq?.requisitionNumber;
 
     // 1. Update requisition in state
+    const updatedAt = new Date().toISOString();
     setRequisitions((prev) =>
-      prev.map((r) => (r.id === reqId || (targetReqNum && r.requisitionNumber === targetReqNum) ? { ...r, patientCategory: category } : r))
+      prev.map((r) =>
+        r.id === reqId || (targetReqNum && r.requisitionNumber === targetReqNum)
+          ? { ...r, patientCategory: category, updatedAt }
+          : r
+      )
     );
 
     const patientName = foundReq ? foundReq.patientOrSubjectName : 'Patient';
@@ -861,10 +869,11 @@ function MainLimsContent() {
     const targetReqNum = reqNumber || foundReq?.requisitionNumber;
 
     // 1. Update requisitions state
+    const updatedAt = new Date().toISOString();
     setRequisitions((prev) =>
       prev.map((r) =>
         r.id === reqId || (targetReqNum && r.requisitionNumber === targetReqNum)
-          ? { ...r, orNumber }
+          ? { ...r, orNumber, updatedAt }
           : r
       )
     );
@@ -939,6 +948,7 @@ function MainLimsContent() {
       ...req,
       resultsPickedUpAt: pickedUp ? new Date().toISOString() : null,
       resultsPickedUpBy: pickedUp ? user.name : null,
+      updatedAt: new Date().toISOString(),
     };
 
     setRequisitions((prev) => prev.map((r) => (r.id === req.id ? updated : r)));
@@ -1019,6 +1029,7 @@ function MainLimsContent() {
       ...req,
       resultsReadySmsSentAt: result.smsSent ? now : req.resultsReadySmsSentAt ?? null,
       resultsReadyEmailSentAt: result.emailSent ? now : req.resultsReadyEmailSentAt ?? null,
+      updatedAt: now,
     };
     setRequisitions((prev) => prev.map((r) => (r.id === req.id ? updated : r)));
 

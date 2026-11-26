@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import { DashboardHeroArtwork } from './LimsDashboardArtwork';
 
 interface LimsHeroHeaderProps {
-  icon: LucideIcon;
+  icon?: LucideIcon;
   title: string;
   description?: string;
   /** Small pills above the title (e.g. module + step). */
@@ -16,7 +16,6 @@ interface LimsHeroHeaderProps {
 
 /** Welcome-style hero band (matches Home dashboard greeting card). */
 export const LimsHeroHeader: React.FC<LimsHeroHeaderProps> = ({
-  icon: Icon,
   title,
   description,
   badges,
@@ -31,10 +30,12 @@ export const LimsHeroHeader: React.FC<LimsHeroHeaderProps> = ({
   >
     <DashboardHeroArtwork />
     <div className="relative z-[1] px-5 py-5 sm:px-6 flex flex-col gap-4 lg:flex-row lg:items-center">
-      <div className="flex items-start gap-4 min-w-0 flex-1">
-        <div className="w-14 h-14 rounded-full bg-[#0878e8] text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-200/50">
-          <Icon className="w-7 h-7" strokeWidth={1.75} aria-hidden />
-        </div>
+      <div className="flex items-center gap-4 min-w-0 flex-1">
+        <img
+          src="/ptsilogo.png"
+          alt="PTSI Logo"
+          className="w-20 h-20 sm:w-24 sm:h-24 object-contain shrink-0"
+        />
         <div className="min-w-0 flex-1">
           {badges ? <div className="flex flex-wrap items-center gap-2">{badges}</div> : null}
           <h1 className="text-xl sm:text-2xl font-bold text-[var(--lims-navy)] mt-2 tracking-tight">{title}</h1>

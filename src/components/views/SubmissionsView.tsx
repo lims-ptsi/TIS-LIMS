@@ -716,34 +716,19 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
   };
 
   const sortDeskRequests = (list: LabTestRequisition[]) => {
-    if (isTestingQueue || isPickupManagement) {
-      const includeRelease = isPickupManagement;
-      return [...list].sort(
-        (a, b) =>
-          activityMillis(
-            latestUpdateStamp(b, resultUpdatedAt, latestReceivedAt(b), {
-              includeReleaseActivity: includeRelease,
-            })
-          ) -
-          activityMillis(
-            latestUpdateStamp(a, resultUpdatedAt, latestReceivedAt(a), {
-              includeReleaseActivity: includeRelease,
-            })
-          )
-      );
-    }
-    if (!isLabRequests && !isAllRequests) {
-      return [...list].sort((a, b) => (b.requestDate || '').localeCompare(a.requestDate || ''));
-    }
-    const rank = (r: LabTestRequisition) => {
-      if (needsLaboratoryExamSelection(r)) return 0;
-      if (waitingAtCashier(r)) return 2;
-      if (r.status === 'SUBMITTED' && readyForLaboratory(r)) return 1;
-      return 3;
-    };
+    const includeRelease = isPickupManagement;
     return [...list].sort((a, b) => {
-      const rankDiff = rank(a) - rank(b);
-      if (rankDiff !== 0) return rankDiff;
+      const bTime = activityMillis(
+        latestUpdateStamp(b, resultUpdatedAt, latestReceivedAt(b), {
+          includeReleaseActivity: includeRelease,
+        })
+      );
+      const aTime = activityMillis(
+        latestUpdateStamp(a, resultUpdatedAt, latestReceivedAt(a), {
+          includeReleaseActivity: includeRelease,
+        })
+      );
+      if (bTime !== aTime) return bTime - aTime;
       return (b.requestDate || '').localeCompare(a.requestDate || '');
     });
   };

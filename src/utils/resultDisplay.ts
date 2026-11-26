@@ -44,14 +44,20 @@ export function isResultFormRowExamined(
   return false;
 }
 
+const EQUIVALENT_EXAM_CODE_GROUPS: readonly Set<string>[] = [
+  new Set(['6002', '1023', '1264']), // Creatinine (standard 6002, legacy 1023, corporate HIS 1264)
+];
+
 /** Hide form rows tied to exams not on this panel / tab. */
 export function resultFormRowAppliesToExamCodes(
   row: ResultFormAnalyteRow,
   examCodes: Iterable<string>
 ): boolean {
   if (!row.examCode) return true;
+  const rowAliases = EQUIVALENT_EXAM_CODE_GROUPS.find((g) => g.has(row.examCode!));
   for (const code of examCodes) {
     if (code === row.examCode) return true;
+    if (rowAliases?.has(code)) return true;
   }
   return false;
 }

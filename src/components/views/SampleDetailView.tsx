@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -738,6 +738,7 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
   const [saveToast, setSaveToast] = useState<string | null>(null);
   // Must be declared before any conditional return (rules-of-hooks)
   const [localExamResults, setLocalExamResults] = useState<Record<string, ExamResultGroup>>({});
+  const [activePanelKey, setActivePanelKey] = useState<string>('');
   /** When true, hide test rows with no entered result (show examined tests only). */
   const [examinedResultsOnly, setExaminedResultsOnly] = useState(false);
   const dirtyRef = useRef(false);
@@ -951,6 +952,19 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
     setLocalExamResults(initialGroups);
   }, [sample, requisition, storedResults, storedMedTech, currentUserName]);
 
+  const latestAutosaveRef = useRef<{
+    reqId: string;
+    results: Record<string, ExamResultGroup>;
+    payload: {
+      labTechName?: string;
+      rmtName: string;
+      rmtLicense: string;
+      pathologistName: string;
+      pathologistLicense?: string;
+      remarks: string;
+    };
+  } | null>(null);
+
   useEffect(() => {
     if (!sample || !dirtyRef.current || finalizingRef.current) return;
     if (Object.keys(localExamResults).length === 0) return;
@@ -968,16 +982,26 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
       pathologistLicense: summaryEx.pathologistLicense,
       remarks: '',
     };
+    latestAutosaveRef.current = { reqId: effectiveReqId, results: localExamResults, payload };
     const timer = window.setTimeout(() => {
+      dirtyRef.current = false;
       onSaveRef.current?.(effectiveReqId, localExamResults, false, payload, { silent: true });
     }, 700);
     return () => {
       window.clearTimeout(timer);
-      if (dirtyRef.current) {
-        onSaveRef.current?.(effectiveReqId, localExamResults, false, payload, { silent: true });
-      }
     };
   }, [localExamResults, sample, requisition, currentUserName]);
+
+  // Flush pending edits only when leaving the view (unmount)
+  useEffect(() => {
+    return () => {
+      if (dirtyRef.current && !finalizingRef.current && latestAutosaveRef.current) {
+        const { reqId, results, payload } = latestAutosaveRef.current;
+        dirtyRef.current = false;
+        onSaveRef.current?.(reqId, results, false, payload, { silent: true });
+      }
+    };
+  }, []);
 
   if (!sample) {
     return (
@@ -2058,12 +2082,86 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
             </div>
           ) : null}
 
-          {/* Render Direct On-Page Editable Examination Tables */}
-          <div className="space-y-6">
+          {/* Render Direct On-Page Editable Examination Tables (One Form at a Time) */}
+          <div className="space-y-4">
             {resultPanels.length === 0 && sendOutExams.length === 0 ? (
               <p className="text-sm text-slate-600 py-6 text-center">No examinations are linked to this specimen.</p>
             ) : null}
-            {resultPanels.map((panel) => {
+            {(() => {
+              const resolvedActivePanelKey = resultPanels.some((p) => p.panelKey === activePanelKey)
+                ? activePanelKey
+                : resultPanels[0]?.panelKey || '';
+              const activeIndex = resultPanels.findIndex((p) => p.panelKey === resolvedActivePanelKey);
+              const visiblePanels =
+                resultPanels.length > 1
+                  ? resultPanels.filter((p) => p.panelKey === resolvedActivePanelKey)
+                  : resultPanels;
+
+              return (
+                <>
+                  {resultPanels.length > 1 && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-2.5 space-y-2 print:hidden">
+                      <div className="flex items-center justify-between gap-2 px-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          Result Forms ({activeIndex + 1} of {resultPanels.length})
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={activeIndex <= 0}
+                            onClick={() => {
+                              if (activeIndex > 0) setActivePanelKey(resultPanels[activeIndex - 1].panelKey);
+                            }}
+                            className="px-2.5 py-1 rounded-md border border-slate-200 bg-white text-[11px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            ← Prev
+                          </button>
+                          <button
+                            type="button"
+                            disabled={activeIndex < 0 || activeIndex >= resultPanels.length - 1}
+                            onClick={() => {
+                              if (activeIndex >= 0 && activeIndex < resultPanels.length - 1) {
+                                setActivePanelKey(resultPanels[activeIndex + 1].panelKey);
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-md border border-slate-200 bg-white text-[11px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {resultPanels.map((p, idx) => {
+                          const isActive = p.panelKey === resolvedActivePanelKey;
+                          const label = p.form?.shortName || p.members[0]?.examName || `Form ${idx + 1}`;
+                          const hasAnyEntry = p.members.some((m) => {
+                            const params = localExamResults[m.examCode]?.parameters || {};
+                            return Object.values(params).some((item) => hasEnteredResult(item?.value));
+                          });
+                          return (
+                            <button
+                              key={p.panelKey}
+                              type="button"
+                              onClick={() => setActivePanelKey(p.panelKey)}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                                isActive
+                                  ? 'bg-[#0878e8] text-white border-[#0878e8] shadow-xs'
+                                  : hasAnyEntry
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {hasAnyEntry ? (
+                                <Check className={`w-3 h-3 shrink-0 ${isActive ? 'text-white' : 'text-emerald-600'}`} />
+                              ) : null}
+                              <span>{label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {visiblePanels.map((panel) => {
               const primary = panel.members[0];
               if (!primary) return null;
               const tmpl = primary.template;
@@ -2165,9 +2263,31 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                         </span>
                       ) : null}
                       {panel.members.length > 1 ? (
-                        <span className="text-[10px] text-slate-500 truncate">
-                          {panel.members.map((m) => m.examName).join(' Â· ')}
-                        </span>
+                        <div className="w-full flex flex-wrap items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-200/70">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mr-0.5">
+                            Requested ({panel.members.length}):
+                          </span>
+                          {panel.members.map((m) => {
+                            const hasEntry = (m.template.parameters || []).some((p) =>
+                              hasEnteredResult(readParam(p.id))
+                            );
+                            return (
+                              <span
+                                key={`${m.examCode}-${m.examName}`}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
+                                  hasEntry
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                    : 'bg-white text-slate-700 border-slate-200'
+                                }`}
+                              >
+                                {hasEntry ? (
+                                  <Check className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                                ) : null}
+                                <span>{m.examName}</span>
+                              </span>
+                            );
+                          })}
+                        </div>
                       ) : null}
                     </div>
                   </div>
@@ -2735,6 +2855,9 @@ export const SampleDetailView: React.FC<SampleDetailViewProps> = ({
                 </div>
               );
             })}
+                </>
+              );
+            })()}
           </div>
 
           {resultPanels.length > 0 ? (

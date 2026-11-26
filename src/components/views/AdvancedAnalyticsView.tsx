@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ArrowRight,
   BarChart3,
@@ -271,9 +271,11 @@ export const AdvancedAnalyticsView: React.FC<AdvancedAnalyticsViewProps> = ({
       <section className="lims-card relative overflow-hidden border-[var(--lims-border)] bg-gradient-to-br from-white via-white to-sky-50/30 print:hidden">
         <DashboardHeroArtwork />
         <div className="relative z-[1] px-5 py-5 sm:px-6 flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-[#0878e8] text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-200/50">
-            <BarChart3 className="w-7 h-7" strokeWidth={1.75} aria-hidden />
-          </div>
+          <img
+            src="/ptsilogo.png"
+            alt="PTSI Logo"
+            className="w-20 h-20 sm:w-24 sm:h-24 object-contain shrink-0"
+          />
           <div className="min-w-0 flex-1">
             <span className="text-[10px] font-bold uppercase tracking-wider text-[#0878e8] bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
               Laboratory reporting

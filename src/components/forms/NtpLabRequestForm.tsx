@@ -276,7 +276,7 @@ const NTP_READING3_RIF_RED = new Set<string>([
 ]);
 
 function reading1ShowsRifDropdown(reading1: string): boolean {
-  return reading1 === 'MTB DETECTED' || reading1 === 'MTB TRACE DETECTED';
+  return reading1 === 'MTB DETECTED';
 }
 
 export function needsNtpResultRemarks(reading1: string, rifReading3: string): boolean {
@@ -350,9 +350,8 @@ export function formatNtpMolecularOfficialLine(r1: string, r2: string, r3: strin
   const reading2 = r2.trim();
   const rif = r3.trim();
   if (!reading1 && !reading2 && !rif) return '';
-  if (reading1 === 'MTB NOT DETECTED' || reading1 === 'ERROR') return reading1;
-  if (reading1 === 'MTB TRACE DETECTED') {
-    return rif ? `MTB DETECTED TRACE; ${rifReadingToOfficialSemicolon(rif)}` : reading1;
+  if (reading1 === 'MTB NOT DETECTED' || reading1 === 'MTB TRACE DETECTED' || reading1 === 'ERROR') {
+    return reading1;
   }
   if (reading1 === 'MTB DETECTED') {
     const level = reading2 ? ` ${reading2}` : '';

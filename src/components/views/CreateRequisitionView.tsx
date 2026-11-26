@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   FileText, 
   User, 
@@ -244,16 +245,18 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
 
   // Filtered examination items based on patientCategory
   const isCorporate = patientCategory === 'Corporate';
+  const [excludeSendOut, setExcludeSendOut] = useState(false);
 
   const activeCatalog = useMemo(() => {
     return examinationCatalog.filter((item) => {
       if (item.isActive === false) return false;
+      if (excludeSendOut && item.assignedForm === 'Send Out') return false;
       if (isCorporate) {
         return isCorporateSchemeExam(item);
       }
       return isStandardSchemeExam(item);
     });
-  }, [examinationCatalog, isCorporate]);
+  }, [examinationCatalog, isCorporate, excludeSendOut]);
 
   const currentCategoryTabs = useMemo(() => {
     return isCorporate ? CORPORATE_CATEGORIES : EXAMINATION_CATEGORIES;
@@ -1524,8 +1527,9 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
       {/* ======================================================== */}
       {/* POP-UP MODAL: SELECT EXAMINATIONS CATALOG                */}
       {/* ======================================================== */}
-      {isExamModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-hidden animate-fadeIn">
+      {isExamModalOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-hidden animate-fadeIn">
           <div className="lims-card rounded-xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-slate-900">
             
             {/* Modal Header */}
@@ -1594,7 +1598,21 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
                 </div>
 
                 {/* Quick Actions */}
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setExcludeSendOut((prev) => !prev)}
+                    aria-pressed={excludeSendOut}
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded border transition-colors cursor-pointer ${
+                      excludeSendOut
+                        ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                    }`}
+                    title="Filter out Send Out examinations"
+                  >
+                    <Check className={`w-3 h-3 ${excludeSendOut ? 'opacity-100' : 'opacity-40'}`} />
+                    <span>Not Send Out Only</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -1752,8 +1770,9 @@ export const CreateRequisitionView: React.FC<CreateRequisitionViewProps> = ({
             </div>
 
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
 
     </div>
   );

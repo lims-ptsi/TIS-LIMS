@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { DashboardHeroArtwork } from '../common/LimsDashboardArtwork';
 import { 
   FlaskConical, 
   Search, 
@@ -492,27 +493,35 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
     <div className="lims-page-shell text-slate-900 animate-in fade-in duration-200">
       
       {/* 1. Page Header & Master Action Bar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">
-              Diagnostic Administration &amp; Master LIMS Engine
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono bg-blue-50 text-[#0878e8] border border-blue-200">
-              Analyte Studio
-            </span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-slate-100 text-slate-600 border border-slate-200">
-              {allExaminations.length} Catalog Tests
-            </span>
+      <section className="lims-card relative overflow-hidden border-[var(--lims-border)] bg-gradient-to-br from-white via-white to-sky-50/30">
+        <DashboardHeroArtwork />
+        <div className="relative z-[1] px-5 py-5 sm:px-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0 flex-1">
+            <img
+              src="/ptsilogo.png"
+              alt="PTSI Logo"
+              className="w-20 h-20 sm:w-24 sm:h-24 object-contain shrink-0"
+            />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#0878e8] bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
+                  Diagnostic Administration
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-600 bg-white border border-[var(--lims-border)] px-2 py-0.5 rounded-full">
+                  Analyte Studio
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-[#0878e8] border border-sky-100">
+                  {allExaminations.length} Catalog Tests
+                </span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-bold text-[var(--lims-navy)] mt-2 tracking-tight">
+                Examination Result Templates &amp; Parameters
+              </h1>
+              <p className="text-sm text-slate-600 mt-1 max-w-2xl">
+                Configure laboratory analyte parameters, biological reference limits, qualitative dropdowns, critical panic thresholds, and dynamic calculated formulas per examination.
+              </p>
+            </div>
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5 mt-1">
-            <Sliders className="w-6 h-6 text-[#0878e8]" />
-            <span>Examination Result Templates &amp; Parameters</span>
-          </h1>
-          <p className="text-xs text-slate-500 mt-1 max-w-2xl">
-            Configure laboratory analyte parameters, biological reference limits, qualitative dropdowns, critical panic thresholds, and dynamic calculated formulas per examination.
-          </p>
-        </div>
 
         {/* Global Action Toolbar */}
         <div className="flex items-center gap-2.5 flex-wrap">
@@ -562,8 +571,9 @@ export const ResultTemplatesView: React.FC<ResultTemplatesViewProps> = ({
             <RotateCcw className="w-3.5 h-3.5 text-rose-500" />
             <span>Reset All Defaults</span>
           </button>
+          </div>
         </div>
-      </div>
+      </section>
 
       {/* Save Success Toast Banner */}
       {saveSuccessToast && (

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { DashboardHeroArtwork } from '../common/LimsDashboardArtwork';
 import { 
   ShieldCheck, 
   ShieldAlert, 
@@ -245,30 +246,34 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
       />
 
       {/* 2. Top Banner & Action Controls */}
-      <div className="bg-white border border-[#d8dde6] rounded-lg p-5 shadow-sm">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-12 h-12 rounded-lg bg-[#eef4ff] border border-[#adc9fa] flex items-center justify-center text-[#0878e8] shadow-xs flex-shrink-0">
-              <ShieldCheck className="w-7 h-7" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  Compliance & Regulatory Security
-                </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  SHA-256 Hash Chained Active
-                </span>
+      <section className="lims-card relative overflow-hidden border-[var(--lims-border)] bg-gradient-to-br from-white via-white to-sky-50/30">
+        <DashboardHeroArtwork />
+        <div className="relative z-[1] px-5 py-5 sm:px-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-center gap-4 min-w-0 flex-1">
+              <img
+                src="/ptsilogo.png"
+                alt="PTSI Logo"
+                className="w-20 h-20 sm:w-24 sm:h-24 object-contain shrink-0"
+              />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#0878e8] bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
+                    Compliance &amp; Regulatory Security
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    SHA-256 Hash Chained Active
+                  </span>
+                </div>
+                <h1 className="text-xl sm:text-2xl font-bold text-[var(--lims-navy)] mt-2 tracking-tight">
+                  21 CFR Part 11 &amp; ISO 15189 Immutable Audit Trail
+                </h1>
+                <p className="text-sm text-slate-600 mt-1 max-w-2xl">
+                  Tamper-evident, chronological electronic record of all intake requisitions, accessioning, analytical results, signatures, and payments.
+                </p>
               </div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                21 CFR Part 11 & ISO 15189 Immutable Audit Trail
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Tamper-evident, chronological electronic record of all intake requisitions, accessioning, analytical results, signatures, and payments.
-              </p>
             </div>
-          </div>
 
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2.5">
@@ -345,8 +350,9 @@ export const AuditTrailTableView: React.FC<AuditTrailTableViewProps> = ({
             <div className="text-xl font-bold text-slate-900 mt-0.5">{distinctUsersCount}</div>
             <div className="text-[10px] text-slate-400 mt-0.5">Authorized Signers</div>
           </div>
+          </div>
         </div>
-      </div>
+      </section>
 
       {/* 4. Filter & Search Controls */}
       <div className="bg-white border border-[#d8dde6] rounded-lg p-4 shadow-sm space-y-3">
