@@ -57,15 +57,7 @@ const TAB_ICONS: Record<string, LucideIcon> = {
   instruments: Cpu,
 };
 
-const LAB_EXTRA_TABS: NavTab[] = [
-  { id: 'batches', label: 'Batches' },
-  { id: 'plates', label: 'Plates' },
-  { id: 'boxes', label: 'Storage boxes' },
-  { id: 'protocols', label: 'Protocols' },
-  { id: 'qc-analytics', label: 'QC analytics' },
-  { id: 'inventory', label: 'Inventory' },
-  { id: 'instruments', label: 'Instruments' },
-];
+const LAB_EXTRA_TABS: NavTab[] = [];
 
 function sidebarTabsForRole(role: string | undefined): NavTab[] {
   if (!isAppRole(role)) return [];
@@ -79,8 +71,6 @@ function sidebarTabsForRole(role: string | undefined): NavTab[] {
 function resolveActiveTab(currentTab: string): string {
   if (currentTab === 'sample-detail') return 'patient-records';
   if (currentTab === 'submissions') return 'lab-requests';
-  if (currentTab === 'projects') return 'batches';
-  if (currentTab === 'libraries') return 'plates';
   return currentTab;
 }
 

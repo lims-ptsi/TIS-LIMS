@@ -16,16 +16,9 @@ import { HomeDashboardView } from './components/views/HomeDashboardView';
 import { AdvancedAnalyticsView } from './components/views/AdvancedAnalyticsView';
 import { SamplesListView } from './components/views/SamplesListView';
 import { SampleDetailView } from './components/views/SampleDetailView';
-import { BatchDetailView } from './components/views/BatchDetailView';
-import { PlatesView } from './components/views/PlatesView';
-import { BoxesView } from './components/views/BoxesView';
-import { ProtocolsView } from './components/views/ProtocolsView';
-import { QCAnalyticsView } from './components/views/QCAnalyticsView';
-import { InventoryTableView } from './components/views/InventoryTableView';
 import { CoAReportsView } from './components/views/CoAReportsView';
 import { AuditTrailTableView } from './components/views/AuditTrailTableView';
 import { AccountManagementView } from './components/views/AccountManagementView';
-import { InstrumentsView } from './components/views/InstrumentsView';
 import { SubmissionsView } from './components/views/SubmissionsView';
 import { CreateRequisitionView } from './components/views/CreateRequisitionView';
 import { ExaminationsView } from './components/views/ExaminationsView';
@@ -2563,89 +2556,6 @@ function MainLimsContent() {
           );
         })()}
 
-        {/* Batch Detail View (Screenshot 3: Batch BT000000 with Donut Chart) */}
-        {(currentTab === 'batches' || currentTab === 'projects') && (
-          <BatchDetailView
-            batchId="BT000000"
-            batchName="TWA Batch"
-            onEditBatch={() => {
-              addToast({
-                type: 'info',
-                title: 'BATCH EDITOR',
-                message: 'Batch parameter editor is not available in this build yet.',
-                duration: 4000,
-              });
-            }}
-            onDeleteBatch={() => {
-              addToast({
-                type: 'warning',
-                title: 'BATCH DELETE BLOCKED',
-                message: 'Batch delete is disabled in the demo environment.',
-                duration: 4000,
-              });
-            }}
-            onCloneBatch={() => {
-              addToast({
-                type: 'success',
-                title: 'BATCH CLONED',
-                message: 'Batch BT000000 cloned to BT000001 (local demo).',
-                duration: 4000,
-              });
-            }}
-            onNavigateToSample={(id) => {
-              const found = samples.find((s) => s.id === id);
-              if (found) {
-                openSampleDetail(found, { returnTab: 'batches' });
-              }
-            }}
-          />
-        )}
-
-        {/* Plates 96-Well SBS View */}
-        {(currentTab === 'plates' || currentTab === 'libraries') && (
-          <PlatesView
-            samples={samples}
-            onExecuteBatch={() => setCurrentTab('batches')}
-          />
-        )}
-
-        {/* Boxes Storage Grid View */}
-        {currentTab === 'boxes' && (
-          <BoxesView
-            samples={samples}
-            initialBoxId={activeBoxId}
-            initialWell={activeBoxWell}
-            onSelectSample={(sample) => {
-              openSampleDetail(sample, { returnTab: 'boxes' });
-            }}
-            onBackToSamples={() => setCurrentTab('samples')}
-          />
-        )}
-
-        {/* Protocols & Testing Engine */}
-        {currentTab === 'protocols' && (
-          <ProtocolsView
-            testDefinitions={testDefinitions}
-          />
-        )}
-
-        {/* QC Analytics & Levey-Jennings */}
-        {currentTab === 'qc-analytics' && (
-          <QCAnalyticsView
-            qcRuns={qcRuns}
-            onAddQCRun={(run) => setQcRuns((prev) => [...prev, run])}
-          />
-        )}
-
-        {/* Inventory View */}
-        {currentTab === 'inventory' && (
-          <InventoryTableView
-            reagents={reagents}
-            onDepleteReagent={handleDepleteReagent}
-            onToggleLockReagent={handleToggleLockReagent}
-          />
-        )}
-
         {/* Certificate of Analysis Deliverables */}
         {currentTab === 'coa-reports' && (
           <CoAReportsView
@@ -2665,13 +2575,6 @@ function MainLimsContent() {
         )}
 
         {currentTab === 'account-management' && <AccountManagementView />}
-
-        {/* Instruments & Hardware IoT View */}
-        {currentTab === 'instruments' && (
-          <InstrumentsView
-            instruments={INITIAL_INSTRUMENTS}
-          />
-        )}
         </LimsViewFrame>
       </main>
 

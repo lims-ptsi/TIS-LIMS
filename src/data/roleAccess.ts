@@ -125,22 +125,11 @@ export function defaultTabForRole(_role: UserRoleType | string | undefined): str
 
 export function canOpenTab(role: UserRoleType | string | undefined, tab: string): boolean {
   if (!isAppRole(role)) return false;
-  if (tab === 'sample-detail' || tab === 'boxes') return permissionsForRole(role).canViewSamples === true;
+  if (tab === 'sample-detail') return permissionsForRole(role).canViewSamples === true;
   if (tabsForRole(role).some((item) => item.id === tab)) return true;
   if ((role === 'ADMIN' || role === 'LAB_STAFF') && tab === 'submissions') return true;
   if (role === 'ADMIN') {
-    return [
-      'batches',
-      'projects',
-      'plates',
-      'libraries',
-      'boxes',
-      'protocols',
-      'qc-analytics',
-      'inventory',
-      'instruments',
-      'account-management',
-    ].includes(tab);
+    return tab === 'account-management';
   }
   return false;
 }
