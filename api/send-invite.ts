@@ -2,10 +2,13 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import nodemailer from 'nodemailer';
 
 interface SendInvitePayload {
+  kind?: 'invite' | 'activated';
   to: string;
-  inviteUrl: string;
+  inviteUrl?: string;
+  loginUrl?: string;
   roleLabel: string;
   recipientName?: string;
+  username?: string;
   invitedBy?: string;
 }
 
@@ -34,7 +37,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const payload = req.body as SendInvitePayload | undefined;
-  if (!payload?.to?.trim() || !payload.inviteUrl?.trim() || !payload.roleLabel?.trim()) {
+  const kind = payload?.kind === 'activated' ? 'activated' : 'invite';
+  if (!payload?.to?.trim() || !payload.roleLabel?.trim()) {
+    return res.status(400).json({ error: 'Invalid email payload' });
+  }
+  if (kind === 'invite' && !payload.inviteUrl?.trim()) {
     return res.status(400).json({ error: 'Invalid invite payload' });
   }
 
@@ -48,8 +55,97 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const fromUser = process.env.GMAIL_USER!.trim();
   const fromName = process.env.GMAIL_FROM_NAME?.trim() || 'Lab-TIS Clinical Laboratory';
   const greetingName = payload.recipientName?.trim() || 'Team Member';
-  const safeUrl = escapeHtml(payload.inviteUrl.trim());
   const safeRole = escapeHtml(payload.roleLabel.trim());
+
+  if (kind === 'activated') {
+    const loginUrl = (payload.loginUrl?.trim() || 'https://lab-tis.vercel.app').replace(/\/$/, '');
+    const safeLoginUrl = escapeHtml(loginUrl);
+    const safeUsername = payload.username?.trim() ? escapeHtml(payload.username.trim()) : '';
+
+    const text = [
+      `Hello ${greetingName},`,
+      '',
+      `Your Lab-TIS account has been successfully created and activated (${payload.roleLabel}).`,
+      payload.username?.trim() ? `Username: ${payload.username.trim()}` : '',
+      '',
+      `Sign in anytime at ${loginUrl} using "Sign in with Google".`,
+      '',
+      `— ${fromName}`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const html = `
+      <div style="margin: 0; padding: 32px 16px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #1e293b;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border: 1px solid #dbe4f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);">
+          <tr>
+            <td style="background: linear-gradient(135deg, #0a2240 0%, #16a36a 100%); padding: 24px 28px; color: #ffffff;">
+              <div style="font-size: 20px; font-weight: 700;">
+                Lab-TIS Account Activated
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 28px;">
+              <p style="margin: 0 0 14px; font-size: 15px; font-weight: 600; color: #0f172a;">
+                Hello ${escapeHtml(greetingName)},
+              </p>
+              <p style="margin: 0 0 18px; font-size: 14px; line-height: 1.6; color: #334155;">
+                Your <strong>Lab-TIS</strong> account is now active and ready to use.
+              </p>
+              <div style="margin: 0 0 22px; padding: 12px 16px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">
+                <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #15803d;">
+                  Desk Role
+                </div>
+                <div style="font-size: 15px; font-weight: 700; color: #0f172a; margin-top: 2px;">
+                  ${safeRole}
+                </div>
+                ${
+                  safeUsername
+                    ? `<div style="font-size: 12px; color: #475569; margin-top: 6px;">Username: <strong style="font-family: monospace;">${safeUsername}</strong></div>`
+                    : ''
+                }
+              </div>
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 0 18px;">
+                <tr>
+                  <td style="border-radius: 8px; background-color: #0176d3;">
+                    <a href="${safeLoginUrl}" style="display: inline-block; padding: 12px 24px; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600;">
+                      Open Lab-TIS
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin: 0; font-size: 12px; color: #64748b;">
+                Sign in anytime using <strong>Sign in with Google</strong> (${escapeHtml(payload.to.trim())}).
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 16px 28px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b;">
+              ${escapeHtml(fromName)} · Laboratory Information Management System
+            </td>
+          </tr>
+        </table>
+      </div>
+    `;
+
+    try {
+      await transport.sendMail({
+        from: `"${fromName}" <${fromUser}>`,
+        to: payload.to.trim(),
+        subject: `Lab-TIS Account Activated (${payload.roleLabel})`,
+        text,
+        html,
+      });
+      return res.status(200).json({ ok: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to send activation email';
+      console.error('[send-invite:activated]', message);
+      return res.status(502).json({ error: message });
+    }
+  }
+
+  const safeUrl = escapeHtml(payload.inviteUrl!.trim());
 
   const text = [
     `Hello ${greetingName},`,
@@ -57,7 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `TIS has invited you to create your Lab-TIS account with the desk role: ${payload.roleLabel}.`,
     '',
     'Open this link to set up your account (valid for 48 hours):',
-    payload.inviteUrl.trim(),
+    payload.inviteUrl!.trim(),
     '',
     'You can complete setup with a password or link your Google account.',
     '',

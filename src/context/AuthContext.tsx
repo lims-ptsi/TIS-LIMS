@@ -8,9 +8,35 @@ import {
   saveAccounts,
   StoredAccount,
 } from '../data/accountStore';
-import { AppRole, buildAccountUser, isAppRole, permissionsForRole } from '../data/roleAccess';
+import { AppRole, buildAccountUser, isAppRole, permissionsForRole, roleLabel } from '../data/roleAccess';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { limsService } from '../services/limsService';
+import { resolvePublicVerifyOrigin } from '../utils/officialResultVerification';
+
+function notifyAccountActivatedEmail(input: {
+  to?: string;
+  name: string;
+  username: string;
+  role: AppRole;
+}) {
+  const email = input.to?.trim().toLowerCase();
+  if (!email || email.endsWith('@ptsi.lab')) return;
+  const loginUrl = resolvePublicVerifyOrigin(window.location.origin);
+  void fetch('/api/send-invite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      kind: 'activated',
+      to: email,
+      recipientName: input.name,
+      username: input.username,
+      roleLabel: roleLabel(input.role),
+      loginUrl,
+    }),
+  }).catch(() => {
+    // non-blocking
+  });
+}
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -231,6 +257,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 password: '',
                 ssoProvider: 'google',
               });
+              notifyAccountActivatedEmail({
+                to: cleanEmail,
+                name: displayName,
+                username: candidate,
+                role,
+              });
             }
 
             await limsService.markAccountInviteUsed(pending.token);
@@ -423,6 +455,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       role: input.role,
       password,
     });
+    if (email) {
+      notifyAccountActivatedEmail({
+        to: email,
+        name,
+        username,
+        role: input.role,
+      });
+    }
     if (options.signInAfter) {
       setUser(account.user);
       setIsScreenLocked(false);

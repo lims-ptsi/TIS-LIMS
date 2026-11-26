@@ -123,10 +123,13 @@ function sendInviteDevApi(env: Record<string, string>): Plugin {
           void (async () => {
             res.setHeader('Content-Type', 'application/json')
             let parsed: {
+              kind?: 'invite' | 'activated'
               to?: string
               inviteUrl?: string
+              loginUrl?: string
               roleLabel?: string
               recipientName?: string
+              username?: string
               invitedBy?: string
             } = {}
             try {
@@ -137,7 +140,13 @@ function sendInviteDevApi(env: Record<string, string>): Plugin {
               return
             }
 
-            if (!parsed.to?.trim() || !parsed.inviteUrl?.trim() || !parsed.roleLabel?.trim()) {
+            const kind = parsed.kind === 'activated' ? 'activated' : 'invite'
+            if (!parsed.to?.trim() || !parsed.roleLabel?.trim()) {
+              res.statusCode = 400
+              res.end(JSON.stringify({ error: 'Invalid email payload' }))
+              return
+            }
+            if (kind === 'invite' && !parsed.inviteUrl?.trim()) {
               res.statusCode = 400
               res.end(JSON.stringify({ error: 'Invalid invite payload' }))
               return
@@ -163,15 +172,107 @@ function sendInviteDevApi(env: Record<string, string>): Plugin {
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
-            const safeUrl = escapeHtml(parsed.inviteUrl.trim())
             const safeRole = escapeHtml(parsed.roleLabel.trim())
+
+            if (kind === 'activated') {
+              const loginUrl = (parsed.loginUrl?.trim() || 'https://lab-tis.vercel.app').replace(/\/$/, '')
+              const safeLoginUrl = escapeHtml(loginUrl)
+              const safeUsername = parsed.username?.trim() ? escapeHtml(parsed.username.trim()) : ''
+              const text = [
+                `Hello ${greetingName},`,
+                '',
+                `Your Lab-TIS account has been successfully created and activated (${parsed.roleLabel}).`,
+                parsed.username?.trim() ? `Username: ${parsed.username.trim()}` : '',
+                '',
+                `Sign in anytime at ${loginUrl} using "Sign in with Google".`,
+                '',
+                `— ${fromName}`,
+              ]
+                .filter(Boolean)
+                .join('\n')
+              const html = `
+                <div style="margin: 0; padding: 32px 16px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #1e293b;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border: 1px solid #dbe4f0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);">
+                    <tr>
+                      <td style="background: linear-gradient(135deg, #0a2240 0%, #16a36a 100%); padding: 24px 28px; color: #ffffff;">
+                        <div style="font-size: 20px; font-weight: 700;">
+                          Lab-TIS Account Activated
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 28px;">
+                        <p style="margin: 0 0 14px; font-size: 15px; font-weight: 600; color: #0f172a;">
+                          Hello ${escapeHtml(greetingName)},
+                        </p>
+                        <p style="margin: 0 0 18px; font-size: 14px; line-height: 1.6; color: #334155;">
+                          Your <strong>Lab-TIS</strong> account is now active and ready to use.
+                        </p>
+                        <div style="margin: 0 0 22px; padding: 12px 16px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">
+                          <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #15803d;">
+                            Desk Role
+                          </div>
+                          <div style="font-size: 15px; font-weight: 700; color: #0f172a; margin-top: 2px;">
+                            ${safeRole}
+                          </div>
+                          ${
+                            safeUsername
+                              ? `<div style="font-size: 12px; color: #475569; margin-top: 6px;">Username: <strong style="font-family: monospace;">${safeUsername}</strong></div>`
+                              : ''
+                          }
+                        </div>
+                        <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 0 18px;">
+                          <tr>
+                            <td style="border-radius: 8px; background-color: #0176d3;">
+                              <a href="${safeLoginUrl}" style="display: inline-block; padding: 12px 24px; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600;">
+                                Open Lab-TIS
+                              </a>
+                            </td>
+                          </tr>
+                        </table>
+                        <p style="margin: 0; font-size: 12px; color: #64748b;">
+                          Sign in anytime using <strong>Sign in with Google</strong> (${escapeHtml(parsed.to.trim())}).
+                        </p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 16px 28px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b;">
+                        ${escapeHtml(fromName)} · Laboratory Information Management System
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+              `
+              try {
+                const transport = nodemailer.createTransport({
+                  service: 'gmail',
+                  auth: { user, pass },
+                })
+                await transport.sendMail({
+                  from: `"${fromName}" <${user}>`,
+                  to: parsed.to.trim(),
+                  subject: `Lab-TIS Account Activated (${parsed.roleLabel})`,
+                  text,
+                  html,
+                })
+                res.statusCode = 200
+                res.end(JSON.stringify({ ok: true }))
+              } catch (err) {
+                const message = err instanceof Error ? err.message : 'Failed to send activation email'
+                res.statusCode = 502
+                res.end(JSON.stringify({ error: message }))
+              }
+              return
+            }
+
+            const safeUrl = escapeHtml(parsed.inviteUrl!.trim())
             const text = [
               `Hello ${greetingName},`,
               '',
               `TIS has invited you to create your Lab-TIS account with the desk role: ${parsed.roleLabel}.`,
               '',
               'Open this link to set up your account (valid for 48 hours):',
-              parsed.inviteUrl.trim(),
+              parsed.inviteUrl!.trim(),
               '',
               'You can complete setup with a password or link your Google account.',
               '',
